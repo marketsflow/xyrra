@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="400" height="800" viewBox="0 0 400 800" fill="none">
+  <rect x="20" y="32" width="360" height="736" rx="40" fill="#0a0a0a" stroke="#00FF88" stroke-width="2" opacity="0.9"/>
+  <rect x="150" y="64" width="100" height="24" rx="8" fill="#111"/>
+  <rect x="64" y="200" width="72" height="72" rx="16" fill="#0f3d26" stroke="#00FF88" stroke-width="1.2"/>
+  <text x="100" y="240" text-anchor="middle" fill="#00FF88" font-family="system-ui,sans-serif" font-size="20" font-weight="800">X</text>
+  <text x="200" y="250" text-anchor="middle" fill="#e5e7eb" font-family="system-ui,sans-serif" font-size="12" font-weight="600">Xyrra AI</text>
+  <text x="200" y="400" text-anchor="middle" fill="#52525b" font-family="system-ui,sans-serif" font-size="12">iOS home (placeholder)</text>
+  <text x="200" y="700" text-anchor="middle" fill="#3f3f46" font-family="system-ui,sans-serif" font-size="12">CTA  replace with real shot</text>
+</svg>
