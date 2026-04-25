@@ -87,12 +87,21 @@ if (contactForm && contactStatus) {
         body: JSON.stringify({ name, email, subject, message }),
       });
 
-      let data: { success?: boolean; message?: string };
-      try {
-        data = (await res.json()) as { success?: boolean; message?: string };
-      } catch {
-        setStatus("error", "The server response could not be read. Please try again.");
-        return;
+      const raw = await res.text();
+      let data: { success?: boolean; message?: string } = {};
+      if (raw.trim()) {
+        try {
+          data = JSON.parse(raw) as { success?: boolean; message?: string };
+        } catch {
+          const looksLikeHtml = /^\s*</.test(raw);
+          setStatus(
+            "error",
+            res.status === 404 || looksLikeHtml
+              ? "The contact form could not reach the mail API (the server returned a page instead of JSON). Deploy this project to Vercel with the /api folder, or set VITE_CONTACT_API_URL to a working /api/contact endpoint, and configure RESEND_API_KEY and RESEND_TO_EMAIL in the host environment."
+              : "The server response could not be read. Please try again."
+          );
+          return;
+        }
       }
 
       if (res.ok && data.success) {
