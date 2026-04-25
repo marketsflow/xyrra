@@ -1,9 +1,8 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { sendContactEmail } from "../server/resendContactHandler";
 
-/** Node runtime: Resend + Buffer; do not use Edge */
+/** Node runtime (Buffer, native fetch). `api/*` defaults to Node on Vercel — do not use Edge. */
 export const config = {
-  runtime: "nodejs" as const,
   maxDuration: 30,
 };
 
