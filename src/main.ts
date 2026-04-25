@@ -88,17 +88,21 @@ if (contactForm && contactStatus) {
       });
 
       const raw = await res.text();
+      const trimmed = raw.trim();
       let data: { success?: boolean; message?: string } = {};
-      if (raw.trim()) {
+      if (trimmed.length > 0) {
         try {
-          data = JSON.parse(raw) as { success?: boolean; message?: string };
+          // Proxies/CDNs may prepend whitespace or a BOM; JSON.parse() rejects leading space
+          data = JSON.parse(trimmed) as { success?: boolean; message?: string };
         } catch {
-          const looksLikeHtml = /^\s*</.test(raw);
+          const looksLikeHtml = /^\s*</.test(trimmed);
+          const ct = (res.headers.get("content-type") || "").toLowerCase();
+          const probablyNotJson = looksLikeHtml || ct.includes("text/html");
           setStatus(
             "error",
-            res.status === 404 || looksLikeHtml
-              ? "The contact form could not reach the mail API (the server returned a page instead of JSON). Deploy this project to Vercel with the /api folder, or set VITE_CONTACT_API_URL to a working /api/contact endpoint, and configure RESEND_API_KEY and RESEND_TO_EMAIL in the host environment."
-              : "The server response could not be read. Please try again."
+            res.status === 404 || probablyNotJson
+              ? "The contact form could not reach the mail API (the server returned a page instead of JSON). Deploy this project on Vercel with the api/ folder enabled, set RESEND_API_KEY and RESEND_TO_EMAIL in project settings, and redeploy — or point VITE_CONTACT_API_URL at a working JSON /api/contact endpoint."
+              : `The server response was not valid JSON (HTTP ${res.status}). Please try again or contact support if this continues.`
           );
           return;
         }
