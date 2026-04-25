@@ -85,26 +85,31 @@ export async function sendContactEmail(
   }
 
   const from = env.RESEND_FROM_EMAIL?.trim() || "Xyrra <onboarding@resend.dev>";
-  const resend = new Resend(key);
-  const { data, error } = await resend.emails.send({
-    from,
-    to: [to],
-    subject: `[Xyrra contact] ${subject}`,
-    replyTo: email,
-    text: `Name: ${name}\nEmail: ${email}\n\n${message}`,
-    html: `<p><strong>Name:</strong> ${escapeHtml(name)}</p>
+  try {
+    const resend = new Resend(key);
+    const { data, error } = await resend.emails.send({
+      from,
+      to: [to],
+      subject: `[Xyrra contact] ${subject}`,
+      replyTo: email,
+      text: `Name: ${name}\nEmail: ${email}\n\n${message}`,
+      html: `<p><strong>Name:</strong> ${escapeHtml(name)}</p>
 <p><strong>Email:</strong> <a href="mailto:${escapeHtml(email)}">${escapeHtml(email)}</a></p>
 <p><strong>Subject:</strong> ${escapeHtml(subject)}</p>
 <p><strong>Message:</strong></p>
 <p style="white-space:pre-wrap">${escapeHtml(message)}</p>`,
-  });
+    });
 
-  if (error) {
-    return {
-      success: false,
-      message: error.message || "Resend could not send the message.",
-      status: 502,
-    };
+    if (error) {
+      return {
+        success: false,
+        message: error.message || "Resend could not send the message.",
+        status: 502,
+      };
+    }
+    return { success: true, id: data?.id };
+  } catch (e) {
+    const errMsg = e instanceof Error ? e.message : "Resend could not send the message.";
+    return { success: false, message: errMsg, status: 502 };
   }
-  return { success: true, id: data?.id };
 }
