@@ -2,7 +2,7 @@ import { defineConfig, loadEnv, type Plugin } from "vite";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { sendContactEmail } from "./server/resendContactHandler";
+import { sendContactEmail } from "./api/lib/sendContactEmail";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 

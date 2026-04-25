@@ -121,10 +121,10 @@ export async function sendContactEmail(payload: unknown, env: ResendEnv): Promis
     });
 
     const rawText = await res.text();
-    let parsed: unknown;
+    let bodyParsed: unknown;
     if (rawText) {
       try {
-        parsed = JSON.parse(rawText) as unknown;
+        bodyParsed = JSON.parse(rawText) as unknown;
       } catch {
         if (!res.ok) {
           return {
@@ -133,26 +133,26 @@ export async function sendContactEmail(payload: unknown, env: ResendEnv): Promis
             status: 502,
           };
         }
-        parsed = {};
+        bodyParsed = {};
       }
     } else {
-      parsed = {};
+      bodyParsed = {};
     }
 
     if (!res.ok) {
       return {
         success: false,
-        message: resendErrorMessage(parsed, res.status),
+        message: resendErrorMessage(bodyParsed, res.status),
         status: 502,
       };
     }
 
     const id =
-      parsed &&
-      typeof parsed === "object" &&
-      "id" in parsed &&
-      typeof (parsed as { id: unknown }).id === "string"
-        ? (parsed as { id: string }).id
+      bodyParsed &&
+      typeof bodyParsed === "object" &&
+      "id" in bodyParsed &&
+      typeof (bodyParsed as { id: unknown }).id === "string"
+        ? (bodyParsed as { id: string }).id
         : undefined;
     return { success: true, id };
   } catch (e) {
