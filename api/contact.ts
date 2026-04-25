@@ -1,60 +1,87 @@
+import type { IncomingMessage, ServerResponse } from "node:http";
 import { sendContactEmail } from "../server/resendContactHandler";
 
-/** Force Node: Resend + Buffer body parsing; Edge has no Buffer */
+/** Node runtime: Resend + Buffer; do not use Edge */
 export const config = {
   runtime: "nodejs" as const,
   maxDuration: 30,
 };
 
-type ApiResponse = {
-  status: (n: number) => ApiResponse;
-  setHeader: (name: string, value: string) => void;
-  end: (chunk: string) => void;
-  headersSent?: boolean;
-};
-
-type ApiRequest = { method?: string; body?: unknown };
+type ReqWithBody = IncomingMessage & { body?: unknown };
 
 function safeIsBuffer(b: unknown): b is Buffer {
   return (
-    typeof Buffer !== "undefined" && typeof (Buffer as { isBuffer?: (x: unknown) => boolean }).isBuffer === "function" && Buffer.isBuffer(b)
+    typeof Buffer !== "undefined" &&
+    typeof (Buffer as { isBuffer?: (x: unknown) => boolean }).isBuffer === "function" &&
+    Buffer.isBuffer(b)
   );
 }
 
-function getJsonBody(req: ApiRequest): unknown {
-  const b = req.body;
-  if (b === undefined || b === null) return undefined;
-  if (typeof b === "string") {
+function getJsonBodyField(body: unknown): unknown {
+  if (body === undefined || body === null) return undefined;
+  if (typeof body === "string") {
     try {
-      return JSON.parse(b.trim());
+      return JSON.parse(body.trim());
     } catch {
       return undefined;
     }
   }
-  if (safeIsBuffer(b)) {
+  if (safeIsBuffer(body)) {
     try {
-      const t = b.toString("utf8").trim();
+      const t = body.toString("utf8").trim();
       return t ? JSON.parse(t) : undefined;
     } catch {
       return undefined;
     }
   }
-  if (typeof b === "object") return b;
+  if (typeof body === "object") return body;
   return undefined;
 }
 
-function sendJson(res: ApiResponse, code: number, body: object): void {
+/** Raw Node ServerResponse: use statusCode + end — Vercel’s res.status() is not the native http API. */
+function sendJson(res: ServerResponse, code: number, body: object): void {
   if (res.headersSent) return;
-  const s = JSON.stringify(body);
+  res.statusCode = code;
   res.setHeader("Content-Type", "application/json; charset=utf-8");
-  res.status(code).end(s);
+  res.end(JSON.stringify(body));
+}
+
+function readStreamToString(req: IncomingMessage): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const parts: Buffer[] = [];
+    req.on("data", (chunk: string | Buffer) => {
+      parts.push(typeof chunk === "string" ? Buffer.from(chunk) : chunk);
+    });
+    req.on("end", () => resolve(Buffer.concat(parts).toString("utf8")));
+    req.on("error", reject);
+  });
+}
+
+async function getRequestJson(req: ReqWithBody): Promise<unknown> {
+  const fromField = getJsonBodyField(req.body);
+  if (fromField !== undefined) return fromField;
+
+  const contentType = (req.headers["content-type"] || "").toLowerCase();
+  if (req.method !== "POST" || !contentType.includes("application/json")) {
+    return undefined;
+  }
+  // If the host already read the body into req.body, the stream may be ended — don’t hang waiting for "end"
+  if (req.readableEnded) return undefined;
+
+  const raw = (await readStreamToString(req)).trim();
+  if (!raw) return undefined;
+  try {
+    return JSON.parse(raw) as unknown;
+  } catch {
+    return undefined;
+  }
 }
 
 /**
  * Vercel serverless: POST /api/contact
  * Set RESEND_API_KEY, RESEND_TO_EMAIL, and optionally RESEND_FROM_EMAIL in project env.
  */
-export default async function handler(req: ApiRequest, res: ApiResponse): Promise<void> {
+export default async function handler(req: ReqWithBody, res: ServerResponse): Promise<void> {
   try {
     if (req.method !== "POST") {
       sendJson(res, 405, { success: false, message: "Method not allowed" });
@@ -67,7 +94,8 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
       RESEND_TO_EMAIL: process.env.RESEND_TO_EMAIL,
     };
 
-    const result = await sendContactEmail(getJsonBody(req), env);
+    const payload = await getRequestJson(req);
+    const result = await sendContactEmail(payload, env);
 
     if (result.success) {
       sendJson(res, 200, { success: true, id: result.id });
@@ -76,6 +104,14 @@ export default async function handler(req: ApiRequest, res: ApiResponse): Promis
     sendJson(res, result.status ?? 500, { success: false, message: result.message });
   } catch (e) {
     const msg = e instanceof Error ? e.message : "Internal error";
-    sendJson(res, 500, { success: false, message: msg });
+    try {
+      sendJson(res, 500, { success: false, message: msg });
+    } catch {
+      if (!res.headersSent) {
+        res.statusCode = 500;
+        res.setHeader("Content-Type", "application/json; charset=utf-8");
+        res.end(JSON.stringify({ success: false, message: "Internal error" }));
+      }
+    }
   }
 }
