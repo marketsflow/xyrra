@@ -1,0 +1,8 @@
+# https://www.robotstxt.org/robotstxt.html
+User-agent: *
+Allow: /
+
+# Host hint (used by Yandex; optional elsewhere)
+# Host: https://xyrra.ai
+
+Sitemap: https://xyrra.ai/sitemap.xml
