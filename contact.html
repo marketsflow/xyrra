@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Contact the Xyrra team — send a message with your name, email, subject, and we will get back to you."
+    />
+    <title>Contact us — Xyrra AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div class="page page--contact">
+      <header class="header">
+        <a class="brand" href="/" aria-label="Xyrra home">
+          <img
+            class="brand__img"
+            src="/images/logo-xyrra.png"
+            width="120"
+            height="32"
+            alt=""
+          />
+        </a>
+        <nav class="header__nav" id="site-nav" data-open="false" aria-label="Primary">
+          <a class="header__nlink" href="/"
+            ><span class="header__nicon" aria-hidden="true"
+              ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                /></svg></span
+            >Home</a
+          >
+          <a class="header__nlink" href="about-us.html"
+            ><span class="header__nicon" aria-hidden="true"
+              ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M4 4h4v4H4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4z"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                /></svg></span
+            >About Us</a
+          >
+          <a class="header__nlink" href="feature.html"
+            ><span class="header__nicon" aria-hidden="true"
+              ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M12 3.5L8 11h3l-1 6.5 8-8.5h-3.5L16 3.5h-4Z"
+                  stroke="currentColor"
+                  stroke-width="1.3"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M5.5 15.2L3 20.2l4.8-1.2 2-3.1"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                /></svg></span
+            >AI Features</a
+          >
+          <a class="header__nlink" href="faq.html"
+            ><span class="header__nicon" aria-hidden="true"
+              ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5" />
+                <path
+                  d="M9.5 9.2a2.5 2.5 0 115 0c0 1-1 1.5-1.5 2l-.2.1c-.2.1-.3.4-.3.7V15"
+                  stroke="currentColor"
+                  stroke-width="1.3"
+                />
+                <circle cx="12" cy="17" r="1" fill="currentColor" /></svg></span
+            >FAQ</a
+          >
+          <a class="header__nav-cta header__nav-cta--active" href="contact.html" aria-current="page">Contact Us</a>
+        </nav>
+        <a class="header__cta header__cta--active" href="contact.html" aria-current="page"
+          >Contact Us<span class="header__cta-ico" aria-hidden="true"
+            ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M7 17L17 7M7 7h10v10"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              /></svg></span
+        ></a>
+        <button
+          type="button"
+          class="header__menu"
+          id="nav-toggle"
+          aria-expanded="false"
+          aria-controls="site-nav"
+          aria-label="Open menu"
+        >
+          <span></span>
+          <span></span>
+        </button>
+      </header>
+
+      <main id="top" class="main">
+        <section class="about-hero" aria-labelledby="contact-hero-title">
+          <div class="about-hero__bg" aria-hidden="true">
+            <div class="about-hero__wave about-hero__wave--1"></div>
+            <div class="about-hero__wave about-hero__wave--2"></div>
+            <div class="about-hero__glow about-hero__glow--l"></div>
+            <div class="about-hero__glow about-hero__glow--r"></div>
+          </div>
+          <h1 class="about-hero__title" id="contact-hero-title">
+            Contact <span class="about-hero__em">us</span>
+          </h1>
+        </section>
+
+        <section class="contact-page" id="contact" aria-label="Contact form">
+          <div class="contact-page__inner">
+            <p class="contact-page__lede">Send a message and we will get back to you as soon as we can.</p>
+            <p
+              id="contact-form-status"
+              class="contact-form__status"
+              role="status"
+              aria-live="polite"
+              hidden
+            ></p>
+            <form class="contact-form" id="contact-form" name="contact" method="post" action="#">
+              <p class="contact-honeypot" aria-hidden="true">
+                <label for="contact-website">Website</label>
+                <input type="text" id="contact-website" name="botcheck" tabindex="-1" autocomplete="off" />
+              </p>
+              <div class="contact-field">
+                <label class="contact-field__label" for="contact-name">Name</label>
+                <input
+                  class="contact-field__input"
+                  id="contact-name"
+                  name="name"
+                  type="text"
+                  required
+                  autocomplete="name"
+                  placeholder="Your name"
+                />
+              </div>
+              <div class="contact-field">
+                <label class="contact-field__label" for="contact-email">Email</label>
+                <input
+                  class="contact-field__input"
+                  id="contact-email"
+                  name="email"
+                  type="email"
+                  required
+                  autocomplete="email"
+                  inputmode="email"
+                  placeholder="you@example.com"
+                />
+              </div>
+              <div class="contact-field">
+                <label class="contact-field__label" for="contact-subject">Subject</label>
+                <input
+                  class="contact-field__input"
+                  id="contact-subject"
+                  name="subject"
+                  type="text"
+                  required
+                  placeholder="What is this about?"
+                />
+              </div>
+              <div class="contact-field">
+                <label class="contact-field__label" for="contact-message">Message</label>
+                <textarea
+                  class="contact-field__input contact-field__input--textarea"
+                  id="contact-message"
+                  name="message"
+                  required
+                  rows="6"
+                  placeholder="Your message"
+                ></textarea>
+              </div>
+              <div class="contact-form__actions">
+                <button class="btn btn--primary" type="submit">Send message</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer" id="page-footer">
+        <div class="footer__top">
+          <div class="footer__brand-col">
+            <a class="footer__brand" href="/" aria-label="Xyrra home">
+              <img class="footer__logo" src="/images/logo-xyrra.png" width="100" height="28" alt="Xyrra" />
+            </a>
+            <div class="footer__social" aria-label="Social">
+              <a
+                class="footer__social-link"
+                href="https://twitter.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="X (Twitter)"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path
+                    d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
+                  />
+                </svg>
+              </a>
+            </div>
+          </div>
+          <nav class="footer__col" aria-label="Platform">
+            <h3 class="footer__col-title">Platform</h3>
+            <a href="/">Home</a>
+            <a href="about-us.html">About Us</a>
+            <a href="feature.html">AI Features</a>
+            <a href="faq.html">FAQ</a>
+            <a href="contact.html">Contact Us</a>
+          </nav>
+          <nav class="footer__col" aria-label="Legal">
+            <h3 class="footer__col-title">Legal</h3>
+            <a href="/private-policy">Privacy Policy</a>
+            <a href="/terms-and-conditions">Terms and Conditions</a>
+            <a href="/disclaimer">Disclaimer</a>
+          </nav>
+        </div>
+        <div class="footer__bottom" id="disclaimer">
+          <p class="footer__disclaimer-txt">
+            <strong>Disclaimer.</strong> Xyrra provides educational tools and simulation services only. Nothing on this site
+            constitutes financial advice, investment advice, or a recommendation to buy, sell, or hold any financial instrument
+            or cryptoasset. Xyrra is not regulated as a financial advisor.
+          </p>
+          <p class="footer__copy">© 2026 Xyrra. All rights reserved.</p>
+        </div>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
