@@ -13,6 +13,7 @@ export default defineConfig({
         main: resolve(__dirname, "index.html"),
         about: resolve(__dirname, "about-us.html"),
         feature: resolve(__dirname, "feature.html"),
+        faq: resolve(__dirname, "faq.html"),
       },
     },
   },

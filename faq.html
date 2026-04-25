@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="Frequently asked questions about Xyrra’s AI-powered educational platform for financial research, strategy exploration, and simulation."
+    />
+    <title>FAQ — Xyrra AI</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <div class="page page--faq">
+      <header class="header">
+        <a class="brand" href="/" aria-label="Xyrra home">
+          <img
+            class="brand__img"
+            src="/images/logo-xyrra.png"
+            width="120"
+            height="32"
+            alt=""
+          />
+        </a>
+        <nav class="header__nav" id="site-nav" data-open="false" aria-label="Primary">
+          <a class="header__nlink" href="/"
+            ><span class="header__nicon" aria-hidden="true"
+              ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M4 4h7v7H4V4zm9 0h7v7h-7V4zM4 13h7v7H4v-7zm9 0h7v7h-7v-7z"
+                  stroke="currentColor"
+                  stroke-width="1.5"
+                /></svg></span
+            >Home</a
+          >
+          <a class="header__nlink" href="about-us.html"
+            ><span class="header__nicon" aria-hidden="true"
+              ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M4 4h4v4H4V4zm6 0h4v4h-4V4zM4 10h4v4H4v-4zm6 0h4v4h-4v-4zM4 16h4v4H4v-4zm6 0h4v4h-4v-4z"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                /></svg></span
+            >About Us</a
+          >
+          <a class="header__nlink" href="feature.html"
+            ><span class="header__nicon" aria-hidden="true"
+              ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M12 3.5L8 11h3l-1 6.5 8-8.5h-3.5L16 3.5h-4Z"
+                  stroke="currentColor"
+                  stroke-width="1.3"
+                  stroke-linejoin="round"
+                />
+                <path
+                  d="M5.5 15.2L3 20.2l4.8-1.2 2-3.1"
+                  stroke="currentColor"
+                  stroke-width="1.2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                /></svg></span
+            >AI Features</a
+          >
+          <a class="header__nlink header__nlink--active" href="faq.html" aria-current="page"
+            ><span class="header__nicon" aria-hidden="true"
+              ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-width="1.5" />
+                <path
+                  d="M9.5 9.2a2.5 2.5 0 115 0c0 1-1 1.5-1.5 2l-.2.1c-.2.1-.3.4-.3.7V15"
+                  stroke="currentColor"
+                  stroke-width="1.3"
+                />
+                <circle cx="12" cy="17" r="1" fill="currentColor" /></svg></span
+            >FAQ</a
+          >
+          <a class="header__nav-cta" href="index.html#contact">Contact Us</a>
+        </nav>
+        <a class="header__cta" href="index.html#contact"
+          >Contact Us<span class="header__cta-ico" aria-hidden="true"
+            ><svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M7 17L17 7M7 7h10v10"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              /></svg></span
+        ></a>
+        <button
+          type="button"
+          class="header__menu"
+          id="nav-toggle"
+          aria-expanded="false"
+          aria-controls="site-nav"
+          aria-label="Open menu"
+        >
+          <span></span>
+          <span></span>
+        </button>
+      </header>
+
+      <main id="top" class="main">
+        <section class="about-hero" aria-labelledby="faq-hero-title">
+          <div class="about-hero__bg" aria-hidden="true">
+            <div class="about-hero__wave about-hero__wave--1"></div>
+            <div class="about-hero__wave about-hero__wave--2"></div>
+            <div class="about-hero__glow about-hero__glow--l"></div>
+            <div class="about-hero__glow about-hero__glow--r"></div>
+          </div>
+          <h1 class="about-hero__title" id="faq-hero-title">
+            Frequently asked <span class="about-hero__em">questions</span>
+          </h1>
+        </section>
+
+        <section class="faq-page" aria-label="Frequently asked questions">
+          <div class="faq-page__inner">
+            <article class="faq-block">
+              <h2>What is Xyrra?</h2>
+              <p>
+                Xyrra is a proprietary AI-powered educational platform designed to support financial research, strategy
+                exploration, and simulation. The platform analyses data across more than 1,600 stocks and cryptoassets to
+                generate over 100 AI-based strategy models, enabling users to explore and understand different financial
+                strategy concepts in a structured environment.
+              </p>
+              <p>
+                These AI-generated strategy models illustrate how quantitative approaches may behave under different market
+                conditions and economic cycles. Users can analyse trends, compare strategy models, and experiment with virtual
+                portfolio simulations to support learning and independent research.
+              </p>
+              <p>
+                Xyrra’s goal is to make financial strategy research and analysis more accessible through AI-driven tools, data
+                visualisation, and simulation features. The platform is designed to support education and experimentation,
+                helping users develop their understanding of financial markets and strategy modelling.
+              </p>
+            </article>
+            <article class="faq-block">
+              <h2>How does the Xyrra AI App support financial learning and strategy research?</h2>
+              <p>
+                Xyrra is an AI-powered educational platform designed to help users explore, research, and analyse financial
+                strategy models across stocks and cryptoassets. The platform provides access to AI-generated data, strategy
+                simulations, and analytical tools that support financial education and independent research.
+              </p>
+              <p>
+                Users can experiment with virtual portfolio models, examine how different strategy approaches behave under
+                varying market conditions, and deepen their understanding of financial markets through AI-driven analysis and
+                simulation.
+              </p>
+              <p>
+                <a
+                  class="faq-page__app-link"
+                  href="https://apps.apple.com/gb/app/xyrra-ai-stock-crypto/id6499525423"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >Download our app</a
+                >
+                to access Xyrra’s educational tools, strategy simulations, and research features.
+              </p>
+            </article>
+            <article class="faq-block">
+              <h2>Is Xyrra platform secure for me to use?</h2>
+              <p>
+                We use the highest industry standard security SSL encryption protocols to keep your data safe, and our
+                platform is regularly updated for the latest internet, technology hardware and software security standards.
+              </p>
+            </article>
+            <article class="faq-block">
+              <h2>How does Xyrra App work? Can anyone use it?</h2>
+              <p>
+                Xyrra is an AI-powered educational platform that uses advanced quantitative models to analyse financial
+                market data across stocks and cryptoassets. The platform generates AI-based strategy models, analytical tools,
+                and simulated data to help users explore and understand financial strategy concepts in a structured
+                environment.
+              </p>
+              <p>
+                Xyrra provides educational resources, data visualisations, and virtual portfolio simulation features designed
+                to support financial research, learning, and experimentation. These tools allow users to analyse market
+                trends, compare strategy models, and explore different approaches within a simulation environment.
+              </p>
+              <p>
+                The platform is designed to be accessible to anyone interested in learning about financial markets and
+                strategy modelling, regardless of prior experience.
+              </p>
+              <p>
+                <a
+                  class="faq-page__app-link"
+                  href="https://apps.apple.com/gb/app/xyrra-ai-stock-crypto/id6499525423"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >Download the app</a
+                >
+                to access Xyrra’s educational tools, research features, and simulation capabilities.
+              </p>
+            </article>
+            <article class="faq-block">
+              <h2>What sets Xyrra App apart?</h2>
+              <p>
+                Xyrra is an AI-powered educational platform designed to support financial research, strategy exploration, and
+                simulation. The platform applies advanced quantitative models to analyse market data across over 1,600 stocks
+                and cryptoassets, generating AI-based strategy models and analytical insights for educational purposes.
+              </p>
+              <p>
+                Xyrra provides users with access to structured data, visualisations, and virtual portfolio simulation tools
+                that enable exploration of different financial strategy concepts and market behaviours. The platform is
+                designed to make financial research and strategy analysis more accessible through AI-driven technology and an
+                intuitive user interface.
+              </p>
+              <p>
+                By combining AI-powered analysis with educational tools and simulation features, Xyrra enables users to explore
+                financial markets and strategy models in a controlled environment designed for learning and experimentation.
+              </p>
+            </article>
+            <article class="faq-block">
+              <h2>How do I get started?</h2>
+              <p>
+                Getting started is simple.
+                <a
+                  class="faq-page__app-link"
+                  href="https://apps.apple.com/gb/app/xyrra-ai-stock-crypto/id6499525423"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  >Download the mobile app</a
+                >, sign up to access Xyrra’s AI-powered educational tools, financial strategy simulations, and research
+                features. Explore strategy models, analyse market data, and experiment with virtual portfolios in a
+                simulation environment designed for learning and experimentation.
+              </p>
+            </article>
+            <article class="faq-block">
+              <h2>What types of strategies are available for me to learn from?</h2>
+              <p>
+                Xyrra provides access to a diverse range of AI-generated thematic strategy models across stocks and
+                cryptoassets. These models cover areas such as technology, healthcare, sustainability, and other market
+                sectors, enabling users to explore and analyse financial strategy concepts within a simulation environment.
+              </p>
+              <p>
+                These strategy models are provided for educational and research purposes, allowing users to examine how
+                different quantitative approaches may behave under varying market conditions.
+              </p>
+            </article>
+            <article class="faq-block">
+              <h2>Can I create a customized strategy?</h2>
+              <p>
+                Yes. Xyrra allows users to explore and experiment with strategy models using AI-powered tools and simulated
+                data. Users can modify parameters, compare different approaches, and create virtual strategy models based
+                on their own research and educational objectives.
+              </p>
+              <p>
+                With access to over 100 AI-generated strategy models through a monthly subscription, users can analyse and
+                experiment with different strategy concepts in a simulation environment designed for learning and research.
+              </p>
+            </article>
+            <article class="faq-block">
+              <h2>What kind of support do you offer?</h2>
+              <p>
+                Send us a message using the in-app messaging feature and we will respond to your questions or issues you
+                encounter while using the App. Need help setting up your account or with technical issues? We’ve got you
+                covered.
+              </p>
+            </article>
+            <article class="faq-block">
+              <h2>How do I cancel my subscription?</h2>
+              <p>
+                Simply visit your subscription settings on the App Store or Google Play Store and cancel your subscription. It
+                will stop automatically at the end of your current billing cycle.
+              </p>
+            </article>
+            <article class="faq-block">
+              <h2>What if I don’t know anything about trading or investing strategies?</h2>
+              <p>
+                Xyrra is designed to be accessible to users of all experience levels, including beginners. The platform
+                provides AI-powered educational tools, strategy simulations, and data visualisations to help users explore
+                and understand financial strategy concepts in a virtual environment.
+              </p>
+              <p>
+                Users can learn at their own pace by analysing strategy models, exploring market data, and experimenting
+                with simulated portfolio configurations. Xyrra also provides educational resources to support learning and
+                independent research.
+              </p>
+            </article>
+            <article class="faq-block">
+              <h2>Are there any fees besides the subscription cost?</h2>
+              <p>
+                The App monthly subscription fee covers access to all of the AI data and platform features. There are no
+                additional fees.
+              </p>
+            </article>
+          </div>
+        </section>
+      </main>
+
+      <footer class="footer" id="contact">
+        <div class="footer__top">
+          <div class="footer__brand-col">
+            <a class="footer__brand" href="/" aria-label="Xyrra home">
+              <img class="footer__logo" src="/images/logo-xyrra.png" width="100" height="28" alt="Xyrra" />
+            </a>
+            <p class="footer__tag">
+              Educational tools and simulation only — for research and learning, not financial advice.
+            </p>
+            <div class="footer__social" aria-label="Social">
+              <a
+                class="footer__social-link"
+                href="https://twitter.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="X (Twitter)"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path
+                    d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"
+                  />
+                </svg>
+              </a>
+              <a
+                class="footer__social-link"
+                href="https://instagram.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="Instagram"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <rect x="3" y="3" width="18" height="18" rx="5" stroke="currentColor" stroke-width="1.5" />
+                  <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="1.5" />
+                  <circle cx="17" cy="7" r="1.2" fill="currentColor" />
+                </svg>
+              </a>
+              <a
+                class="footer__social-link"
+                href="https://linkedin.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="LinkedIn"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path
+                    d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"
+                  />
+                </svg>
+              </a>
+              <a
+                class="footer__social-link"
+                href="https://youtube.com"
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label="YouTube"
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                  <path
+                    d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"
+                  />
+                </svg>
+              </a>
+            </div>
+          </div>
+          <nav class="footer__col" aria-label="Platform">
+            <h3 class="footer__col-title">Platform</h3>
+            <a href="/">Home</a>
+            <a href="about-us.html">About Us</a>
+            <a href="feature.html">AI Features</a>
+            <a href="faq.html">FAQ</a>
+            <a href="index.html#contact">Contact Us</a>
+          </nav>
+          <nav class="footer__col" aria-label="Legal">
+            <h3 class="footer__col-title">Legal</h3>
+            <a href="#">Privacy Policy</a>
+            <a href="#">Terms and Conditions</a>
+            <a href="#disclaimer">Disclaimer</a>
+          </nav>
+        </div>
+        <div class="footer__bottom" id="disclaimer">
+          <p class="footer__disclaimer-txt">
+            <strong>Disclaimer.</strong> Xyrra provides educational tools and simulation services only. Nothing on this site
+            constitutes financial advice, investment advice, or a recommendation to buy, sell, or hold any financial instrument
+            or cryptoasset. Xyrra is not regulated as a financial advisor.
+          </p>
+          <p class="footer__copy">© 2026 Xyrra. All rights reserved.</p>
+        </div>
+      </footer>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

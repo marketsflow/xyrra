@@ -1358,6 +1358,62 @@ a.footer__social-link:hover {
   background: #0b0b0b;
 }
 
+.page--faq {
+  background: #0b0b0b;
+  min-height: 100dvh;
+}
+
+.page--faq .main {
+  background: #0b0b0b;
+}
+
+.faq-page {
+  padding: 0 clamp(1.25rem, 4vw, 2.5rem) clamp(2.5rem, 6vw, 3.5rem);
+}
+
+.faq-page__inner {
+  max-width: 42rem;
+  margin: 0 auto;
+}
+
+.faq-block {
+  margin-bottom: clamp(2rem, 5vw, 2.75rem);
+}
+
+.faq-block:last-child {
+  margin-bottom: 0;
+}
+
+.faq-block h2 {
+  margin: 0 0 1rem;
+  font-family: var(--font);
+  font-size: clamp(1.1rem, 2.1vw, 1.3rem);
+  font-weight: 600;
+  line-height: 1.35;
+  color: #f5f5f5;
+}
+
+.faq-block p {
+  margin: 0 0 1rem;
+  font-size: 0.95rem;
+  line-height: 1.75;
+  color: var(--hero-text-muted);
+}
+
+.faq-block p:last-child {
+  margin-bottom: 0;
+}
+
+.faq-page__app-link {
+  color: var(--accent);
+  text-decoration: underline;
+  text-underline-offset: 0.2em;
+}
+
+.faq-page__app-link:hover {
+  color: #86efac;
+}
+
 .header__nlink--active {
   color: var(--accent) !important;
 }
