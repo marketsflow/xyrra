@@ -1,0 +1,103 @@
+/* Shared light legal pages — matches /ai-financial-strategies shell */
+
+.legal-hero {
+  padding: calc(var(--nh-header-h) + clamp(2.5rem, 6vh, 4rem)) clamp(1.25rem, 4vw, 3rem)
+    clamp(2rem, 4vh, 3rem);
+  border-bottom: 1px solid rgba(40, 48, 62, 0.06);
+  background:
+    radial-gradient(ellipse 70% 60% at 12% 0%, rgba(110, 200, 255, 0.12), transparent 55%),
+    var(--nh-bg);
+  text-align: center;
+}
+
+.legal-hero__inner {
+  max-width: 720px;
+  margin: 0 auto;
+}
+
+.legal-hero .nh-badge {
+  margin-bottom: 1rem;
+}
+
+.legal-hero h1 {
+  margin: 0;
+  font-family: var(--nh-font-display);
+  font-size: clamp(2.4rem, 4.5vw, 3.6rem);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  color: var(--nh-ink);
+}
+
+.legal-hero__lede {
+  margin: 0.9rem auto 0;
+  max-width: 32rem;
+  color: var(--nh-muted);
+  font-size: clamp(0.95rem, 1.2vw, 1.05rem);
+  line-height: 1.55;
+}
+
+.legal-doc {
+  padding: clamp(2.5rem, 6vh, 4rem) clamp(1.25rem, 4vw, 3rem) clamp(4rem, 10vh, 6rem);
+  background: var(--nh-bg);
+}
+
+.legal-doc__inner {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.legal-block {
+  padding: 1.75rem 0;
+  border-bottom: 1px solid rgba(40, 48, 62, 0.08);
+}
+
+.legal-block:first-child {
+  padding-top: 0;
+}
+
+.legal-block:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+
+.legal-block h2 {
+  margin: 0 0 0.85rem;
+  font-family: var(--nh-font-display);
+  font-size: clamp(1.35rem, 2.2vw, 1.65rem);
+  font-weight: 400;
+  letter-spacing: -0.015em;
+  color: var(--nh-ink);
+  line-height: 1.25;
+}
+
+.legal-block p {
+  margin: 0 0 0.85rem;
+  color: var(--nh-muted);
+  font-size: 0.95rem;
+  line-height: 1.65;
+}
+
+.legal-block p:last-child {
+  margin-bottom: 0;
+}
+
+.legal-block a {
+  color: var(--nh-ink);
+  font-weight: 500;
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
+}
+
+.legal-block a:hover {
+  color: #3d8fbf;
+}
+
+.legal-block__address {
+  color: var(--nh-ink) !important;
+  font-style: normal;
+  line-height: 1.7 !important;
+}
