@@ -3,6 +3,10 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "redirects": [
+    { "source": "/new", "destination": "/", "permanent": true },
+    { "source": "/new/", "destination": "/", "permanent": true }
+  ],
   "functions": {
     "api/contact.ts": {
       "memory": 256,

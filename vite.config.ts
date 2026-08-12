@@ -80,6 +80,11 @@ function cleanLegalPathPlugin(): Plugin {
       const raw = req.url ?? "";
       const path = raw.split("?")[0] ?? "";
       const search = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
+      if (path === "/new" || path === "/new/") {
+        res.writeHead(301, { Location: `/${search}` });
+        res.end();
+        return;
+      }
       if (path === "/terms-and-conditions.html") {
         res.writeHead(301, { Location: `/terms-and-conditions${search}` });
         res.end();
@@ -101,8 +106,6 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/private-policy/" + search;
       } else if (path === "/disclaimer") {
         (req as IncomingMessage & { url?: string }).url = "/disclaimer/" + search;
-      } else if (path === "/new") {
-        (req as IncomingMessage & { url?: string }).url = "/new/" + search;
       } else if (path === "/ai-financial-strategies") {
         (req as IncomingMessage & { url?: string }).url = "/ai-financial-strategies/" + search;
       }
@@ -132,7 +135,6 @@ export default defineConfig(({ mode }) => {
           terms: resolve(__dirname, "terms-and-conditions/index.html"),
           privatePolicy: resolve(__dirname, "private-policy/index.html"),
           disclaimer: resolve(__dirname, "disclaimer/index.html"),
-          newHome: resolve(__dirname, "new/index.html"),
           aiFinancialStrategies: resolve(__dirname, "ai-financial-strategies/index.html"),
         },
       },
