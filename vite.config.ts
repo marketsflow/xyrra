@@ -100,6 +100,26 @@ function cleanLegalPathPlugin(): Plugin {
         res.end();
         return;
       }
+      if (path === "/feature.html") {
+        res.writeHead(301, { Location: `/features${search}` });
+        res.end();
+        return;
+      }
+      if (path === "/faq.html") {
+        res.writeHead(301, { Location: `/faq${search}` });
+        res.end();
+        return;
+      }
+      if (path === "/about-us.html") {
+        res.writeHead(301, { Location: `/about-xyrra${search}` });
+        res.end();
+        return;
+      }
+      if (path === "/contact.html") {
+        res.writeHead(301, { Location: `/contact-us${search}` });
+        res.end();
+        return;
+      }
       if (path === "/terms-and-conditions") {
         (req as IncomingMessage & { url?: string }).url = "/terms-and-conditions/" + search;
       } else if (path === "/private-policy") {
@@ -108,6 +128,18 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/disclaimer/" + search;
       } else if (path === "/ai-financial-strategies") {
         (req as IncomingMessage & { url?: string }).url = "/ai-financial-strategies/" + search;
+      } else if (path === "/features") {
+        (req as IncomingMessage & { url?: string }).url = "/features/" + search;
+      } else if (path === "/faq") {
+        (req as IncomingMessage & { url?: string }).url = "/faq/" + search;
+      } else if (path === "/about-xyrra") {
+        (req as IncomingMessage & { url?: string }).url = "/about-xyrra/" + search;
+      } else if (path === "/contact-us") {
+        (req as IncomingMessage & { url?: string }).url = "/contact-us/" + search;
+      } else if (path === "/xyrra-pc") {
+        (req as IncomingMessage & { url?: string }).url = "/xyrra-pc/" + search;
+      } else if (path === "/xyrra-agent") {
+        (req as IncomingMessage & { url?: string }).url = "/xyrra-agent/" + search;
       }
       next();
     });
@@ -136,6 +168,12 @@ export default defineConfig(({ mode }) => {
           privatePolicy: resolve(__dirname, "private-policy/index.html"),
           disclaimer: resolve(__dirname, "disclaimer/index.html"),
           aiFinancialStrategies: resolve(__dirname, "ai-financial-strategies/index.html"),
+          features: resolve(__dirname, "features/index.html"),
+          faqPage: resolve(__dirname, "faq/index.html"),
+          aboutXyrra: resolve(__dirname, "about-xyrra/index.html"),
+          contactUs: resolve(__dirname, "contact-us/index.html"),
+          xyrraPc: resolve(__dirname, "xyrra-pc/index.html"),
+          xyrraAgent: resolve(__dirname, "xyrra-agent/index.html"),
         },
       },
     },

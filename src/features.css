@@ -1,0 +1,214 @@
+/* /features — feature.html content in /ai-financial-strategies design language */
+
+.feat-page .afs-hero__grid {
+  align-items: center;
+}
+
+.feat-split {
+  padding: clamp(4rem, 10vh, 6.5rem) clamp(1.5rem, 5vw, 4rem);
+  border-top: 1px solid rgba(40, 48, 62, 0.06);
+  background: var(--nh-bg);
+}
+
+.feat-split:nth-of-type(even) {
+  background:
+    radial-gradient(ellipse 55% 50% at 0% 50%, rgba(110, 200, 255, 0.08), transparent 55%),
+    var(--nh-bg);
+}
+
+.feat-split__inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(280px, 0.95fr);
+  gap: clamp(2rem, 5vw, 4rem);
+  align-items: center;
+  max-width: 1180px;
+  margin: 0 auto;
+}
+
+.feat-split--rev .feat-split__inner {
+  grid-template-columns: minmax(280px, 0.95fr) minmax(0, 1fr);
+}
+
+.feat-split--rev .feat-split__text {
+  order: 2;
+}
+
+.feat-split--rev .feat-split__visual {
+  order: 1;
+}
+
+.feat-split__icon {
+  width: 52px;
+  height: 52px;
+  display: grid;
+  place-items: center;
+  border-radius: 14px;
+  border: 1px solid rgba(110, 200, 255, 0.3);
+  background: rgba(110, 200, 255, 0.1);
+  color: #3d8fbf;
+  margin-bottom: 1.25rem;
+}
+
+.feat-split__title {
+  margin: 0;
+  font-family: var(--nh-font-display);
+  font-size: clamp(1.75rem, 3vw, 2.35rem);
+  font-weight: 400;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--nh-ink);
+}
+
+.feat-split__desc {
+  margin: 1rem 0 0;
+  color: var(--nh-muted);
+  font-size: clamp(0.92rem, 1.05vw, 1rem);
+  line-height: 1.65;
+}
+
+.feat-split__desc + .feat-split__desc {
+  margin-top: 0.85rem;
+}
+
+.feat-list {
+  margin: 1.35rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.65rem;
+}
+
+.feat-list li {
+  position: relative;
+  padding-left: 1.35rem;
+  color: var(--nh-muted);
+  font-size: 0.94rem;
+  line-height: 1.5;
+}
+
+.feat-list li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(110, 200, 255, 0.85);
+}
+
+.feat-phones {
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: 420px;
+}
+
+.feat-phones__halo {
+  position: absolute;
+  inset: 10% 5%;
+  background: radial-gradient(ellipse at center, rgba(110, 200, 255, 0.18), transparent 70%);
+  pointer-events: none;
+}
+
+.feat-phones__img {
+  position: relative;
+  z-index: 1;
+  display: block;
+  width: min(42%, 220px);
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 24px 48px rgba(20, 24, 32, 0.14));
+}
+
+.feat-phones__img--tilt {
+  width: min(48%, 260px);
+  margin-left: -12%;
+  transform: rotate(6deg);
+}
+
+.feat-phones--single .feat-phones__img {
+  width: min(72%, 320px);
+}
+
+.feat-cta-section .nh-preorder__inner {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(240px, 0.85fr);
+  gap: clamp(2rem, 4vw, 3.5rem);
+  align-items: center;
+  max-width: 1180px;
+  margin: 0 auto;
+  text-align: left;
+}
+
+.feat-cta-section .nh-preorder__eyebrow,
+.feat-cta-section h2,
+.feat-cta-section p {
+  text-align: left;
+}
+
+.feat-cta-section h2 em {
+  font-style: italic;
+}
+
+.feat-cta-section .afs-premium__actions {
+  justify-content: flex-start;
+}
+
+.feat-cta__device {
+  position: relative;
+  display: flex;
+  justify-content: center;
+}
+
+.feat-cta__device img {
+  display: block;
+  width: min(100%, 280px);
+  height: auto;
+  object-fit: contain;
+  filter: drop-shadow(0 24px 48px rgba(20, 24, 32, 0.16));
+}
+
+@media (max-width: 900px) {
+  .feat-split__inner,
+  .feat-split--rev .feat-split__inner,
+  .feat-cta-section .nh-preorder__inner {
+    grid-template-columns: 1fr;
+  }
+
+  .feat-split--rev .feat-split__text,
+  .feat-split--rev .feat-split__visual {
+    order: unset;
+  }
+
+  .feat-phones {
+    min-height: 340px;
+    margin-top: 0.5rem;
+  }
+
+  .feat-cta-section .nh-preorder__eyebrow,
+  .feat-cta-section h2,
+  .feat-cta-section p {
+    text-align: center;
+  }
+
+  .feat-cta-section .afs-premium__actions {
+    justify-content: center;
+  }
+
+  .feat-cta__device {
+    margin-top: 1rem;
+  }
+}
+
+@media (max-width: 640px) {
+  .feat-split,
+  .feat-cta-section {
+    padding-inline: 1.25rem;
+  }
+
+  .feat-phones__img--tilt {
+    margin-left: -8%;
+  }
+}
