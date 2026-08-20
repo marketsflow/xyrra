@@ -171,3 +171,123 @@ if (contactForm && contactStatus) {
     }
   });
 }
+
+const preorderForm = document.querySelector<HTMLFormElement>("#preorder-form");
+const preorderStatus = document.getElementById("preorder-form-status");
+if (preorderForm && preorderStatus) {
+  const submitBtn = preorderForm.querySelector<HTMLButtonElement>('button[type="submit"]');
+  const defaultBtnLabel = submitBtn?.textContent?.trim() || "Pre-Order Now";
+
+  const clearStatus = () => {
+    preorderStatus.textContent = "";
+    preorderStatus.hidden = true;
+    preorderStatus.className = "contact-form__status";
+  };
+
+  const setStatus = (kind: "success" | "error", text: string) => {
+    preorderStatus.hidden = false;
+    preorderStatus.className = `contact-form__status contact-form__status--${kind}`;
+    preorderStatus.textContent = text;
+    preorderStatus.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  };
+
+  preorderForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!preorderForm.checkValidity()) {
+      preorderForm.reportValidity();
+      return;
+    }
+
+    const bot = (preorderForm.querySelector<HTMLInputElement>('input[name="botcheck"]')?.value ?? "").trim();
+    if (bot) {
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.setAttribute("aria-busy", "true");
+      submitBtn.textContent = "Sending…";
+    }
+    preorderForm.setAttribute("aria-busy", "true");
+    clearStatus();
+
+    const name = (preorderForm.querySelector<HTMLInputElement>("#preorder-name")?.value ?? "").trim();
+    const email = (preorderForm.querySelector<HTMLInputElement>("#preorder-email")?.value ?? "").trim();
+    const country = (preorderForm.querySelector<HTMLInputElement>("#preorder-country")?.value ?? "").trim();
+    const quantity = (preorderForm.querySelector<HTMLSelectElement>("#preorder-quantity")?.value ?? "").trim();
+    const use = (preorderForm.querySelector<HTMLSelectElement>("#preorder-use")?.value ?? "").trim();
+    const notes = (preorderForm.querySelector<HTMLTextAreaElement>("#preorder-notes")?.value ?? "").trim();
+
+    const message = [
+      "Xyrra PC pre-order reservation",
+      "",
+      `Country: ${country}`,
+      `Quantity: ${quantity}`,
+      `Primary use: ${use}`,
+      notes ? `Notes:\n${notes}` : "Notes: (none)",
+    ].join("\n");
+
+    const url = contactApiUrl();
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email,
+          subject: "Xyrra PC Pre-Order",
+          message,
+        }),
+      });
+
+      const raw = await res.text();
+      const trimmed = raw.trim();
+      let data: { success?: boolean; message?: string } = {};
+      if (trimmed.length > 0) {
+        try {
+          data = JSON.parse(trimmed) as { success?: boolean; message?: string };
+        } catch {
+          const looksLikeHtml = /^\s*</.test(trimmed);
+          const ct = (res.headers.get("content-type") || "").toLowerCase();
+          const probablyNotJson = looksLikeHtml || ct.includes("text/html");
+          setStatus(
+            "error",
+            res.status === 404 || probablyNotJson
+              ? "The pre-order form could not reach the mail API. Deploy with the api/ folder enabled and RESEND env vars set, or run npm run dev locally."
+              : `The server response was not valid JSON (HTTP ${res.status}). Please try again.`
+          );
+          return;
+        }
+      }
+
+      if (res.ok && data.success) {
+        preorderForm.reset();
+        setStatus(
+          "success",
+          "Thanks — your Xyrra PC reservation is in. We’ll email you with allocation and next steps."
+        );
+      } else {
+        setStatus(
+          "error",
+          data.message ||
+            (res.status === 404
+              ? "Pre-order API not found. Run npm run dev locally or deploy with /api/contact."
+              : `Could not send your reservation (${res.status}).`)
+        );
+      }
+    } catch {
+      setStatus(
+        "error",
+        "Could not reach the server. Use the dev server (npm run dev) or a deployed site with /api/contact."
+      );
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.removeAttribute("aria-busy");
+        submitBtn.textContent = defaultBtnLabel;
+      }
+      preorderForm.removeAttribute("aria-busy");
+    }
+  });
+}

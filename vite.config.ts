@@ -141,6 +141,8 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/xyrra-pc/" + search;
       } else if (path === "/xyrra-agent") {
         (req as IncomingMessage & { url?: string }).url = "/xyrra-agent/" + search;
+      } else if (path === "/pre-order") {
+        (req as IncomingMessage & { url?: string }).url = "/pre-order/" + search;
       } else if (
         path === "/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine"
       ) {
@@ -180,6 +182,7 @@ export default defineConfig(({ mode }) => {
           contactUs: resolve(__dirname, "contact-us/index.html"),
           xyrraPc: resolve(__dirname, "xyrra-pc/index.html"),
           xyrraAgent: resolve(__dirname, "xyrra-agent/index.html"),
+          preOrder: resolve(__dirname, "pre-order/index.html"),
           articleAiHardware: resolve(
             __dirname,
             "article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine/index.html"
