@@ -3,6 +3,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { sendContactEmail } from "./api/contact";
+import { articleSeoPlugin } from "./vite/article-seo-plugin";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -140,6 +141,11 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/xyrra-pc/" + search;
       } else if (path === "/xyrra-agent") {
         (req as IncomingMessage & { url?: string }).url = "/xyrra-agent/" + search;
+      } else if (
+        path === "/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine"
+      ) {
+        (req as IncomingMessage & { url?: string }).url =
+          "/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine/" + search;
       }
       next();
     });
@@ -174,9 +180,13 @@ export default defineConfig(({ mode }) => {
           contactUs: resolve(__dirname, "contact-us/index.html"),
           xyrraPc: resolve(__dirname, "xyrra-pc/index.html"),
           xyrraAgent: resolve(__dirname, "xyrra-agent/index.html"),
+          articleAiHardware: resolve(
+            __dirname,
+            "article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine/index.html"
+          ),
         },
       },
     },
-    plugins: [cleanLegalPathPlugin(), resendApiPlugin(env)],
+    plugins: [cleanLegalPathPlugin(), resendApiPlugin(env), articleSeoPlugin()],
   };
 });

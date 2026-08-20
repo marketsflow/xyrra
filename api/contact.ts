@@ -110,7 +110,7 @@ export async function sendContactEmail(payload: unknown, env: ResendEnv): Promis
       body: JSON.stringify({
         from,
         to: [to],
-        subject: `[Xyrra contact] ${subject}`,
+        subject,
         reply_to: [email],
         text,
         html,
