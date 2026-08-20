@@ -291,3 +291,218 @@ if (preorderForm && preorderStatus) {
     }
   });
 }
+
+const AGENT_DL_STORAGE_KEY = "xyrra-agent-download-unlocked";
+
+type AgentDownloadUrls = {
+  mac: string;
+  win: string;
+  linux: string;
+};
+
+function agentDownloadUrls(): AgentDownloadUrls {
+  const read = (key: string) => {
+    const fromEnv = import.meta.env[key];
+    return typeof fromEnv === "string" ? fromEnv.trim() : "";
+  };
+  return {
+    mac: read("VITE_XYRRA_AGENT_DOWNLOAD_MAC"),
+    win: read("VITE_XYRRA_AGENT_DOWNLOAD_WIN"),
+    linux: read("VITE_XYRRA_AGENT_DOWNLOAD_LINUX"),
+  };
+}
+
+function showAgentDownloadPanel(platform: string, email: string) {
+  const formWrap = document.getElementById("agent-dl-form-wrap");
+  const downloadPanel = document.getElementById("agent-dl-download-panel");
+  const downloadsEl = document.getElementById("agent-dl-downloads");
+  const emailNote = document.getElementById("agent-dl-email-note");
+  const successLede = document.getElementById("agent-dl-success-lede");
+  if (!formWrap || !downloadPanel || !downloadsEl) return;
+
+  const urls = agentDownloadUrls();
+  const platforms: { id: keyof AgentDownloadUrls; label: string; url: string }[] = [
+    { id: "mac", label: "Download for macOS", url: urls.mac },
+    { id: "win", label: "Download for Windows", url: urls.win },
+    { id: "linux", label: "Download for Linux", url: urls.linux },
+  ];
+
+  downloadsEl.replaceChildren();
+  let hasAnyUrl = false;
+
+  for (const item of platforms) {
+    const isRecommended =
+      (platform === "macOS" && item.id === "mac") ||
+      (platform === "Windows" && item.id === "win") ||
+      (platform === "Linux" && item.id === "linux");
+
+    if (item.url) {
+      hasAnyUrl = true;
+      const link = document.createElement("a");
+      link.className = `nh-btn nh-btn--solid nh-btn--lg${isRecommended ? " nh-btn--recommended" : ""}`;
+      link.href = item.url;
+      link.textContent = item.label;
+      if (isRecommended) {
+        link.setAttribute("download", "");
+      }
+      downloadsEl.appendChild(link);
+    } else {
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = `nh-btn nh-btn--ghost nh-btn--lg${isRecommended ? " nh-btn--recommended" : ""}`;
+      btn.textContent = item.label;
+      btn.disabled = true;
+      btn.setAttribute("aria-disabled", "true");
+      downloadsEl.appendChild(btn);
+    }
+  }
+
+  if (successLede) {
+    successLede.textContent = hasAnyUrl
+      ? "Thanks — your download is ready. Pick your platform below."
+      : "Thanks — we received your details. We'll email your download link shortly.";
+  }
+
+  if (emailNote) {
+    emailNote.hidden = false;
+    emailNote.textContent = hasAnyUrl
+      ? `We also sent confirmation to ${email}.`
+      : `We'll send the installer to ${email} as soon as it's available for your platform.`;
+  }
+
+  formWrap.hidden = true;
+  formWrap.setAttribute("data-unlocked", "true");
+  downloadPanel.hidden = false;
+  downloadPanel.scrollIntoView({ behavior: "smooth", block: "nearest" });
+}
+
+const agentDlForm = document.querySelector<HTMLFormElement>("#agent-dl-form");
+const agentDlStatus = document.getElementById("agent-dl-form-status");
+if (agentDlForm && agentDlStatus) {
+  const submitBtn = agentDlForm.querySelector<HTMLButtonElement>('button[type="submit"]');
+  const defaultBtnLabel = submitBtn?.textContent?.trim() || "Continue to download";
+
+  const clearStatus = () => {
+    agentDlStatus.textContent = "";
+    agentDlStatus.hidden = true;
+    agentDlStatus.className = "contact-form__status";
+  };
+
+  const setStatus = (kind: "success" | "error", text: string) => {
+    agentDlStatus.hidden = false;
+    agentDlStatus.className = `contact-form__status contact-form__status--${kind}`;
+    agentDlStatus.textContent = text;
+    agentDlStatus.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  };
+
+  try {
+    const saved = sessionStorage.getItem(AGENT_DL_STORAGE_KEY);
+    if (saved) {
+      const parsed = JSON.parse(saved) as { platform?: string; email?: string };
+      if (parsed.platform && parsed.email) {
+        showAgentDownloadPanel(parsed.platform, parsed.email);
+      }
+    }
+  } catch {
+    sessionStorage.removeItem(AGENT_DL_STORAGE_KEY);
+  }
+
+  agentDlForm.addEventListener("submit", async (e) => {
+    e.preventDefault();
+    if (!agentDlForm.checkValidity()) {
+      agentDlForm.reportValidity();
+      return;
+    }
+
+    const bot = (agentDlForm.querySelector<HTMLInputElement>('input[name="botcheck"]')?.value ?? "").trim();
+    if (bot) {
+      return;
+    }
+
+    if (submitBtn) {
+      submitBtn.disabled = true;
+      submitBtn.setAttribute("aria-busy", "true");
+      submitBtn.textContent = "Sending…";
+    }
+    agentDlForm.setAttribute("aria-busy", "true");
+    clearStatus();
+
+    const name = (agentDlForm.querySelector<HTMLInputElement>("#agent-dl-name")?.value ?? "").trim();
+    const email = (agentDlForm.querySelector<HTMLInputElement>("#agent-dl-email")?.value ?? "").trim();
+    const company = (agentDlForm.querySelector<HTMLInputElement>("#agent-dl-company")?.value ?? "").trim();
+    const role = (agentDlForm.querySelector<HTMLSelectElement>("#agent-dl-role")?.value ?? "").trim();
+    const platform = (agentDlForm.querySelector<HTMLSelectElement>("#agent-dl-platform")?.value ?? "").trim();
+    const use = (agentDlForm.querySelector<HTMLSelectElement>("#agent-dl-use")?.value ?? "").trim();
+    const notes = (agentDlForm.querySelector<HTMLTextAreaElement>("#agent-dl-notes")?.value ?? "").trim();
+
+    const message = [
+      "Xyrra Agent download request",
+      "",
+      company ? `Company: ${company}` : "Company: (none)",
+      `Role: ${role}`,
+      `Platform: ${platform}`,
+      `Primary use: ${use}`,
+      notes ? `Notes:\n${notes}` : "Notes: (none)",
+    ].join("\n");
+
+    const url = contactApiUrl();
+
+    try {
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name,
+          email,
+          subject: "Xyrra Agent Download Request",
+          message,
+        }),
+      });
+
+      const raw = await res.text();
+      const trimmed = raw.trim();
+      let data: { success?: boolean; message?: string } = {};
+      if (trimmed.length > 0) {
+        try {
+          data = JSON.parse(trimmed) as { success?: boolean; message?: string };
+        } catch {
+          const looksLikeHtml = /^\s*</.test(trimmed);
+          const ct = (res.headers.get("content-type") || "").toLowerCase();
+          const probablyNotJson = looksLikeHtml || ct.includes("text/html");
+          setStatus(
+            "error",
+            res.status === 404 || probablyNotJson
+              ? "The download form could not reach the mail API. Deploy with the api/ folder enabled and RESEND env vars set, or run npm run dev locally."
+              : `The server response was not valid JSON (HTTP ${res.status}). Please try again.`
+          );
+          return;
+        }
+      }
+
+      if (res.ok && data.success) {
+        sessionStorage.setItem(AGENT_DL_STORAGE_KEY, JSON.stringify({ platform, email }));
+        showAgentDownloadPanel(platform, email);
+      } else {
+        setStatus(
+          "error",
+          data.message ||
+            (res.status === 404
+              ? "Download API not found. Run npm run dev locally or deploy with /api/contact."
+              : `Could not submit your details (${res.status}).`)
+        );
+      }
+    } catch {
+      setStatus(
+        "error",
+        "Could not reach the server. Use the dev server (npm run dev) or a deployed site with /api/contact."
+      );
+    } finally {
+      if (submitBtn) {
+        submitBtn.disabled = false;
+        submitBtn.removeAttribute("aria-busy");
+        submitBtn.textContent = defaultBtnLabel;
+      }
+      agentDlForm.removeAttribute("aria-busy");
+    }
+  });
+}

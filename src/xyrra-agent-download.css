@@ -1,0 +1,306 @@
+/* /xyrra-agent/download — lead form before Xyrra Agent download */
+
+.agent-dl-page {
+  background: #06080d;
+  color: #e8eef4;
+}
+
+.agent-dl-page .nh-header {
+  background: rgba(6, 8, 13, 0.72);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.agent-dl-page .nh-brand__img {
+  filter: brightness(0) invert(1);
+}
+
+.agent-dl-page .nh-nav a {
+  color: rgba(220, 230, 240, 0.72);
+}
+
+.agent-dl-page .nh-nav a:hover {
+  color: #ffffff;
+}
+
+.agent-dl-page .nh-menu span {
+  background: #ffffff;
+}
+
+.agent-dl-page .nh-footer {
+  border-top-color: rgba(255, 255, 255, 0.08);
+  color: rgba(180, 190, 200, 0.65);
+  background: #06080d;
+}
+
+.agent-dl-page .nh-footer a {
+  color: rgba(200, 210, 220, 0.72);
+}
+
+.agent-dl-page .nh-footer a:hover {
+  color: #ffffff;
+}
+
+@media (max-width: 900px) {
+  .agent-dl-page .nh-nav {
+    background: rgba(6, 8, 13, 0.98);
+    border-bottom-color: rgba(255, 255, 255, 0.08);
+  }
+
+  .agent-dl-page .nh-nav a {
+    color: rgba(220, 230, 240, 0.88);
+  }
+}
+
+.agent-dl-hero {
+  padding: calc(var(--nh-header-h) + clamp(1.75rem, 4vh, 3rem)) 0 clamp(3rem, 8vh, 5rem);
+  background:
+    radial-gradient(ellipse 70% 55% at 78% 42%, rgba(74, 159, 212, 0.18), transparent 58%),
+    radial-gradient(ellipse 45% 40% at 12% 80%, rgba(125, 255, 154, 0.08), transparent 55%),
+    linear-gradient(180deg, #06080d 0%, #0a0e16 55%, #06080d 100%);
+}
+
+.agent-dl-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
+  gap: clamp(2rem, 5vw, 4.5rem);
+  align-items: start;
+  max-width: 1180px;
+  margin: 0 auto;
+  padding: 0 clamp(1.25rem, 4vw, 3.5rem);
+}
+
+.agent-dl-badge {
+  display: inline-flex;
+  align-items: center;
+  margin: 0 0 1.1rem;
+  padding: 0.42rem 0.9rem;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 255, 154, 0.28);
+  background: rgba(28, 62, 38, 0.55);
+  color: #d7f5d8;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.agent-dl-title {
+  margin: 0;
+  font-family: var(--nh-font-display);
+  font-weight: 400;
+  font-size: clamp(2.35rem, 4.4vw, 3.6rem);
+  line-height: 1.02;
+  letter-spacing: -0.03em;
+  color: #ffffff;
+}
+
+.agent-dl-title em {
+  font-style: italic;
+  color: #8fd4ff;
+}
+
+.agent-dl-lede {
+  margin: 1.15rem 0 0;
+  max-width: 34rem;
+  color: rgba(200, 210, 220, 0.72);
+  font-size: clamp(0.94rem, 1.1vw, 1.05rem);
+  line-height: 1.6;
+}
+
+.agent-dl-product__visual {
+  margin: 1.5rem 0 0;
+  width: min(100%, 560px);
+  border-radius: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(130, 190, 255, 0.18);
+  box-shadow: 0 24px 64px rgba(0, 0, 0, 0.45);
+}
+
+.agent-dl-product__visual img {
+  display: block;
+  width: 100%;
+  height: auto;
+  object-fit: cover;
+}
+
+.agent-dl-highlights {
+  list-style: none;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem 1.1rem;
+}
+
+.agent-dl-highlights li {
+  margin: 0;
+  padding: 0.9rem 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.agent-dl-highlights strong {
+  display: block;
+  font-size: 0.88rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #ffffff;
+}
+
+.agent-dl-highlights span {
+  display: block;
+  margin-top: 0.28rem;
+  color: rgba(200, 210, 220, 0.68);
+  font-size: 0.78rem;
+  line-height: 1.45;
+}
+
+.agent-dl-specs-link {
+  margin: 1.25rem 0 0;
+}
+
+.agent-dl-specs-link a {
+  color: #8fd4ff;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.agent-dl-specs-link a:hover {
+  color: #ffffff;
+}
+
+.agent-dl-gate {
+  position: sticky;
+  top: calc(var(--nh-header-h) + 1rem);
+}
+
+.agent-dl-card {
+  max-width: none;
+  margin: 0;
+}
+
+.agent-dl-card__eyebrow {
+  margin: 0;
+  color: #7dff9a;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  text-align: center;
+}
+
+.agent-dl-card__title {
+  margin: 0.4rem 0 0.85rem;
+  font-family: var(--nh-font-display);
+  font-weight: 400;
+  font-size: clamp(1.55rem, 2.2vw, 1.85rem);
+  letter-spacing: -0.02em;
+  text-align: center;
+  color: var(--nh-ink);
+}
+
+.agent-dl-fields-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.85rem;
+}
+
+.agent-dl-page .contact-field__input {
+  appearance: none;
+  background-image: none;
+}
+
+.agent-dl-page select.contact-field__input {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23506070' stroke-width='2'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.85rem center;
+  padding-right: 2.4rem;
+}
+
+.agent-dl-page .contact-field__label span {
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+  color: rgba(60, 70, 85, 0.45);
+}
+
+.agent-dl-fineprint {
+  margin: 0.95rem 0 0;
+  color: var(--nh-muted);
+  font-size: 0.75rem;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.agent-dl-fineprint a {
+  color: rgba(40, 48, 62, 0.78);
+}
+
+.agent-dl-downloads {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.agent-dl-downloads .nh-btn {
+  width: 100%;
+}
+
+.agent-dl-downloads .nh-btn--recommended {
+  box-shadow: 0 10px 28px rgba(20, 24, 32, 0.18);
+}
+
+.agent-dl-downloads .nh-btn:disabled,
+.agent-dl-downloads .nh-btn[aria-disabled="true"] {
+  cursor: not-allowed;
+  opacity: 0.55;
+  transform: none;
+  box-shadow: none;
+}
+
+.agent-dl-back {
+  margin: 1rem 0 0;
+  text-align: center;
+}
+
+.agent-dl-back a {
+  color: var(--nh-ink);
+  font-size: 0.88rem;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.agent-dl-back a:hover {
+  color: #3d8fbf;
+}
+
+.agent-dl-success[hidden] {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .agent-dl-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .agent-dl-gate {
+    position: static;
+  }
+
+  .agent-dl-product__visual {
+    width: min(100%, 100%);
+  }
+
+  .agent-dl-highlights {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 560px) {
+  .agent-dl-fields-row {
+    grid-template-columns: 1fr;
+  }
+}
