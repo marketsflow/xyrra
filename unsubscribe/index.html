@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-6G0ZX6DKHR"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-6G0ZX6DKHR');
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="canonical" href="https://xyrra.ai/unsubscribe/" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#fefefe" />
+    <meta name="author" content="Xyrra" />
+    <meta
+      name="description"
+      content="Unsubscribe from Xyrra email campaigns. Enter your email address to stop receiving outreach messages."
+    />
+    <title>Unsubscribe | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <meta property="og:type" content="article" />
+    <meta property="og:site_name" content="Xyrra" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="https://xyrra.ai/unsubscribe/" />
+    <meta property="og:title" content="Unsubscribe | Xyrra" />
+    <meta
+      property="og:description"
+      content="Stop receiving Xyrra outreach emails by unsubscribing with your email address."
+    />
+    <meta property="og:image" content="https://xyrra.ai/favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/new.css" />
+    <link rel="stylesheet" href="/src/ai-financial-strategies.css" />
+    <link rel="stylesheet" href="/src/legal-page.css" />
+    <link rel="stylesheet" href="/src/contact-us.css" />
+  </head>
+  <body class="nh-body">
+    <div class="nh">
+      <header class="nh-header">
+        <a class="nh-brand" href="/" aria-label="Xyrra home">
+          <img
+            class="nh-brand__img"
+            src="/images/new/xyrra-logo.png"
+            alt=""
+            width="954"
+            height="115"
+            decoding="async"
+          />
+        </a>
+        <nav class="nh-nav" id="nh-nav" data-open="false" aria-label="Primary">
+          <a href="/ai-financial-strategies/#about">About</a>
+          <a href="/ai-financial-strategies/#features">Features</a>
+          <a href="/ai-financial-strategies/#download">Premium</a>
+          <a href="/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine/">Articles</a>
+          <a class="nh-btn nh-btn--solid nh-nav__cta" href="/contact.html">Contact Us</a>
+        </nav>
+        <a class="nh-btn nh-btn--solid nh-header__cta" href="/contact.html">Contact Us</a>
+        <button
+          type="button"
+          class="nh-menu"
+          id="nh-menu"
+          aria-expanded="false"
+          aria-controls="nh-nav"
+          aria-label="Open menu"
+        >
+          <span></span><span></span><span></span>
+        </button>
+      </header>
+
+      <main class="nh-main">
+        <section class="legal-hero" aria-labelledby="unsubscribe-hero-title">
+          <div class="legal-hero__inner">
+            <p class="nh-badge">Email preferences</p>
+            <h1 id="unsubscribe-hero-title">Unsubscribe</h1>
+            <p class="legal-hero__lede">
+              Enter your email address to stop receiving Xyrra campaign emails.
+            </p>
+          </div>
+        </section>
+
+        <section class="legal-doc" aria-label="Unsubscribe form">
+          <div class="legal-doc__inner">
+            <div class="contact-card">
+              <p
+                id="unsubscribe-form-status"
+                class="contact-form__status"
+                role="status"
+                aria-live="polite"
+                hidden
+              ></p>
+              <form class="contact-form" id="unsubscribe-form" method="post" action="/api/unsubscribe">
+                <p class="contact-honeypot" aria-hidden="true">
+                  <label for="unsubscribe-website">Website</label>
+                  <input type="text" id="unsubscribe-website" name="botcheck" tabindex="-1" autocomplete="off" />
+                </p>
+                <div class="contact-field">
+                  <label class="contact-field__label" for="unsubscribe-email">Email</label>
+                  <input
+                    class="contact-field__input"
+                    id="unsubscribe-email"
+                    name="email"
+                    type="email"
+                    required
+                    autocomplete="email"
+                    inputmode="email"
+                    placeholder="you@example.com"
+                  />
+                </div>
+                <div class="contact-form__actions">
+                  <button class="nh-btn nh-btn--solid nh-btn--lg" type="submit">Unsubscribe</button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <footer class="nh-footer afs-footer">
+        <a class="nh-brand nh-brand--sm" href="/" aria-label="Xyrra home">
+          <img
+            class="nh-brand__img"
+            src="/images/new/xyrra-logo.png"
+            alt=""
+            width="954"
+            height="115"
+            decoding="async"
+          />
+        </a>
+        <div class="nh-footer__links">
+          <a href="/">Home</a>
+          <a href="/private-policy/">Privacy</a>
+          <a href="/terms-and-conditions/">Terms</a>
+          <a href="/contact.html">Contact</a>
+        </div>
+        <p>© <span id="nh-year">2026</span> Xyrra. All rights reserved.</p>
+      </footer>
+    </div>
+
+    <script type="module" src="/src/unsubscribe.ts"></script>
+  </body>
+</html>

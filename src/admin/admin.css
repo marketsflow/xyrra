@@ -831,7 +831,7 @@ body.xa-body {
 .xa-template-editor__preview {
   width: 100%;
   max-width: 800px;
-  min-height: 24rem;
+  min-height: 32rem;
   border: 1px solid #e0deed;
   border-radius: 0.85rem;
   background: #fff;

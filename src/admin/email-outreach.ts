@@ -5,6 +5,7 @@ import {
   DEFAULT_FROM_EMAIL,
   FROM_EMAIL_OPTIONS,
   mapEmailTemplateRow,
+  rebuildEmailHtml,
 } from "../lib/email/email-templates";
 import { personalizeEmailHtml } from "../lib/email/personalize";
 
@@ -111,7 +112,7 @@ async function init() {
       return;
     }
 
-    preview.srcdoc = personalizeEmailHtml(template.bodyHtml, sampleName);
+    preview.srcdoc = personalizeEmailHtml(rebuildEmailHtml(template.bodyHtml), sampleName);
     if (previewHint) {
       const list = selectedList();
       previewHint.textContent = list

@@ -11,6 +11,11 @@ const MAX_SUBJECT = 200;
 const MEMBER_PAGE_SIZE = 1000;
 const BATCH_SIZE = 100;
 const FROM_EMAIL_OPTIONS = ["Xyrra <onboarding@resend.dev>", "Xyrra <hello@xyrra.ai>"] as const;
+const EMAIL_BODY_START = "<!--xyrra-email-body-->";
+const EMAIL_BODY_END = "<!--/xyrra-email-body-->";
+const EMAIL_SITE_ORIGIN = "https://www.xyrra.ai";
+const EMAIL_COMPANY_ADDRESS =
+  "Xyrra Ltd, Office One, 1 coldbath Square, London, England, EC1R 5HL";
 
 export type OutreachEnv = {
   RESEND_API_KEY?: string;
@@ -88,8 +93,70 @@ function personalizeSubject(subject: string, name: string | null | undefined) {
   return subject.replaceAll("{{name}}", displayNameForEmail(name));
 }
 
-function personalizeHtml(html: string, name: string | null | undefined) {
-  return html.replaceAll("{{name}}", escapeHtml(displayNameForEmail(name)));
+function personalizeHtml(html: string, name: string | null | undefined, email?: string | null) {
+  const unsubscribe = `${EMAIL_SITE_ORIGIN}/unsubscribe/${email ? `?email=${encodeURIComponent(email.trim())}` : ""}`;
+  return html
+    .replaceAll("{{name}}", escapeHtml(displayNameForEmail(name)))
+    .replaceAll("{{unsubscribe_url}}", escapeHtml(unsubscribe));
+}
+
+function escapeHtmlAttr(value: string) {
+  return value.replaceAll("&", "&amp;").replaceAll('"', "&quot;").replaceAll("<", "&lt;");
+}
+
+function wrapOutreachHtml(fullHtml: string) {
+  const startMarkerIndex = fullHtml.indexOf(EMAIL_BODY_START);
+  const endMarkerIndex = fullHtml.indexOf(EMAIL_BODY_END);
+  const editableContent =
+    startMarkerIndex !== -1 && endMarkerIndex > startMarkerIndex
+      ? fullHtml.slice(startMarkerIndex + EMAIL_BODY_START.length, endMarkerIndex)
+      : fullHtml;
+
+  const logoUrl = escapeHtmlAttr(`${EMAIL_SITE_ORIGIN}/images/email/xyrra-logo-black.png`);
+  const articlesUrl = escapeHtmlAttr(
+    `${EMAIL_SITE_ORIGIN}/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine/`,
+  );
+  const privacyUrl = escapeHtmlAttr(`${EMAIL_SITE_ORIGIN}/private-policy/`);
+  const termsUrl = escapeHtmlAttr(`${EMAIL_SITE_ORIGIN}/terms-and-conditions/`);
+  const linkStyle = "color:#6b7280;text-decoration:underline;";
+  const pipe = '<span style="color:#c5cad3;">&nbsp;|&nbsp;</span>';
+
+  return `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Xyrra email</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#f8f9fd;font-family:Arial,Helvetica,sans-serif;color:#141820;">
+    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8f9fd;padding:32px 16px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e0deed;">
+            <tr>
+              <td style="padding:28px 32px 12px;text-align:center;border-bottom:1px solid #eef0f5;">
+                <img src="${logoUrl}" alt="Xyrra" width="120" style="display:block;margin:0 auto;height:auto;max-width:120px;border:0;" />
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:32px;font-size:16px;line-height:1.6;">${EMAIL_BODY_START}${editableContent}${EMAIL_BODY_END}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px 32px;text-align:center;border-top:1px solid #eef0f5;">
+                <img src="${logoUrl}" alt="Xyrra" width="100" style="display:block;margin:0 auto 16px;height:auto;max-width:100px;border:0;" />
+                <p style="margin:0 0 16px;font-size:12px;line-height:1.6;color:#6b7280;">${EMAIL_COMPANY_ADDRESS}</p>
+                <p style="margin:0;font-size:12px;line-height:1.6;">
+                  <a href="${articlesUrl}" style="${linkStyle}">Articles</a>${pipe}<a href="${privacyUrl}" style="${linkStyle}">Privacy</a>${pipe}<a href="${termsUrl}" style="${linkStyle}">Terms</a>${pipe}<a href="{{unsubscribe_url}}" style="${linkStyle}">Unsubscribe</a>
+                </p>
+              </td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`;
 }
 
 function isValidEmail(value: string) {
@@ -260,6 +327,37 @@ async function fetchMembers(
   return members;
 }
 
+async function fetchUnsubscribedEmails(
+  config: { url: string; anonKey: string },
+  token: string,
+  emails: string[],
+): Promise<Set<string>> {
+  const unsubscribed = new Set<string>();
+  if (emails.length === 0) return unsubscribed;
+
+  for (const group of chunk(emails, BATCH_SIZE)) {
+    const filter = group.map((email) => `"${email.replaceAll('"', "")}"`).join(",");
+    const res = await supabaseFetch(
+      config,
+      token,
+      `/rest/v1/email_unsubscribes?select=email&email=in.(${filter})`,
+    );
+    if (!res.ok) {
+      break;
+    }
+    const rows = (await parseJsonResponse(res)) as Array<{ email?: string }> | unknown;
+    if (!Array.isArray(rows)) continue;
+    for (const row of rows) {
+      const email = String(row.email ?? "")
+        .trim()
+        .toLowerCase();
+      if (email) unsubscribed.add(email);
+    }
+  }
+
+  return unsubscribed;
+}
+
 async function insertOutreach(
   config: { url: string; anonKey: string },
   token: string,
@@ -347,6 +445,7 @@ async function sendResendBatch(
     to: string[];
     subject: string;
     html: string;
+    headers?: Record<string, string>;
     tags?: Array<{ name: string; value: string }>;
   }>,
 ): Promise<{ ok: true; ids: Array<string | null> } | { ok: false; message: string }> {
@@ -449,10 +548,25 @@ export async function sendEmailOutreach(
     }
   }
 
-  const recipients = [...uniqueByEmail.values()];
-  if (recipients.length === 0) {
-    return { success: false, message: "This list has no valid email addresses.", status: 400 };
+  let unsubscribed = new Set<string>();
+  try {
+    unsubscribed = await fetchUnsubscribedEmails(config, token, [...uniqueByEmail.keys()]);
+  } catch {
+    unsubscribed = new Set();
   }
+
+  const recipients = [...uniqueByEmail.values()].filter((member) => !unsubscribed.has(member.email));
+  if (recipients.length === 0) {
+    return {
+      success: false,
+      message: uniqueByEmail.size === 0
+        ? "This list has no valid email addresses."
+        : "Every recipient on this list has unsubscribed.",
+      status: 400,
+    };
+  }
+
+  const wrappedHtml = wrapOutreachHtml(template.body_html);
 
   let outreachId: string;
   try {
@@ -461,7 +575,7 @@ export async function sendEmailOutreach(
       list_id: list.id,
       subject: parsed.data.subject,
       from_email: parsed.data.fromEmail,
-      body_html: template.body_html,
+      body_html: wrappedHtml,
       recipient_count: recipients.length,
       sent_count: 0,
       failed_count: 0,
@@ -480,18 +594,25 @@ export async function sendEmailOutreach(
   const results: RecipientResult[] = [];
 
   for (const group of chunk(recipients, BATCH_SIZE)) {
-    const batch = group.map((member) => ({
-      from: parsed.data.fromEmail,
-      to: [member.email],
-      subject: personalizeSubject(parsed.data.subject, member.name),
-      html: personalizeHtml(template.body_html, member.name),
-      tags: [
-        { name: "xyrra_outreach", value: "true" },
-        { name: "outreach_id", value: outreachId },
-        { name: "list_id", value: list.id },
-        { name: "template_id", value: template.id },
-      ],
-    }));
+    const batch = group.map((member) => {
+      const unsubscribeApi = `${EMAIL_SITE_ORIGIN}/api/unsubscribe?email=${encodeURIComponent(member.email)}`;
+      return {
+        from: parsed.data.fromEmail,
+        to: [member.email],
+        subject: personalizeSubject(parsed.data.subject, member.name),
+        html: personalizeHtml(wrappedHtml, member.name, member.email),
+        headers: {
+          "List-Unsubscribe": `<${unsubscribeApi}>`,
+          "List-Unsubscribe-Post": "List-Unsubscribe=One-Click",
+        },
+        tags: [
+          { name: "xyrra_outreach", value: "true" },
+          { name: "outreach_id", value: outreachId },
+          { name: "list_id", value: list.id },
+          { name: "template_id", value: template.id },
+        ],
+      };
+    });
 
     const sent = await sendResendBatch(apiKey, batch);
     if (!sent.ok) {

@@ -5,6 +5,7 @@ import {
   getDefaultEditableContent,
   splitEmailHtml,
 } from "../lib/email/email-templates";
+import { personalizeEmailHtml } from "../lib/email/personalize";
 
 function escapeHtml(value: string) {
   return value
@@ -84,7 +85,7 @@ export function bindEmailTemplateForm(options: {
   }
 
   function updatePreview() {
-    previewField.srcdoc = currentBodyHtml();
+    previewField.srcdoc = personalizeEmailHtml(currentBodyHtml(), "Alex");
   }
 
   function setStatus(message: string, isError = false) {

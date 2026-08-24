@@ -5,6 +5,7 @@ import type { IncomingMessage, ServerResponse } from "node:http";
 import { sendContactEmail } from "./api/contact";
 import { sendEmailOutreach } from "./api/email-outreach";
 import { handleResendWebhook } from "./api/resend-webhook";
+import { recordEmailUnsubscribe } from "./api/unsubscribe";
 import { articleSeoPlugin } from "./vite/article-seo-plugin";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -101,6 +102,52 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
               sentCount: result.sentCount,
               failedCount: result.failedCount,
             });
+            return;
+          }
+          writeJson(res, result.status ?? 500, { success: false, message: result.message });
+          return;
+        }
+        if (path === "/api/unsubscribe") {
+          if (req.method !== "POST") {
+            writeJson(res, 405, { success: false, message: "Method not allowed" });
+            return;
+          }
+          let raw: string;
+          try {
+            raw = await readRequestBody(req);
+          } catch {
+            writeJson(res, 413, { success: false, message: "Request too large" });
+            return;
+          }
+          const search = (req as IncomingMessage & { url?: string }).url?.includes("?")
+            ? (req as IncomingMessage & { url?: string }).url!.slice(
+                (req as IncomingMessage & { url?: string }).url!.indexOf("?"),
+              )
+            : "";
+          const queryEmail = new URLSearchParams(search).get("email")?.trim() ?? "";
+          let email = queryEmail;
+          const ct = (req.headers["content-type"] || "").toLowerCase();
+          if (ct.includes("application/json")) {
+            try {
+              const body = raw ? JSON.parse(raw) : {};
+              if (body && typeof body.email === "string" && body.email.trim()) {
+                email = body.email.trim();
+              }
+            } catch {
+              writeJson(res, 400, { success: false, message: "Invalid JSON" });
+              return;
+            }
+          } else if (raw === "List-Unsubscribe=One-Click") {
+            email = queryEmail;
+          } else if (raw) {
+            email = new URLSearchParams(raw).get("email")?.trim() || queryEmail;
+          }
+          const result = await recordEmailUnsubscribe(email, {
+            SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+            SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+          });
+          if (result.success) {
+            writeJson(res, 200, { success: true });
             return;
           }
           writeJson(res, result.status ?? 500, { success: false, message: result.message });
@@ -205,6 +252,8 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/private-policy/" + search;
       } else if (path === "/disclaimer") {
         (req as IncomingMessage & { url?: string }).url = "/disclaimer/" + search;
+      } else if (path === "/unsubscribe") {
+        (req as IncomingMessage & { url?: string }).url = "/unsubscribe/" + search;
       } else if (path === "/ai-financial-strategies") {
         (req as IncomingMessage & { url?: string }).url = "/ai-financial-strategies/" + search;
       } else if (path === "/features") {
@@ -277,6 +326,7 @@ export default defineConfig(({ mode }) => {
           terms: resolve(__dirname, "terms-and-conditions/index.html"),
           privatePolicy: resolve(__dirname, "private-policy/index.html"),
           disclaimer: resolve(__dirname, "disclaimer/index.html"),
+          unsubscribe: resolve(__dirname, "unsubscribe/index.html"),
           aiFinancialStrategies: resolve(__dirname, "ai-financial-strategies/index.html"),
           features: resolve(__dirname, "features/index.html"),
           faqPage: resolve(__dirname, "faq/index.html"),

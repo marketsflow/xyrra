@@ -8,6 +8,11 @@ export const FROM_EMAIL_OPTIONS = [
   "Xyrra <hello@xyrra.ai>",
 ] as const;
 
+export const EMAIL_SITE_ORIGIN = "https://www.xyrra.ai";
+
+export const EMAIL_COMPANY_ADDRESS =
+  "Xyrra Ltd, Office One, 1 coldbath Square, London, England, EC1R 5HL";
+
 export type EmailTemplate = {
   id: string;
   name: string;
@@ -35,8 +40,25 @@ function escapeHtmlAttr(value: string) {
     .replaceAll("<", "&lt;");
 }
 
-export function getEmailShellBefore(baseUrl = window.location.origin) {
-  const logoUrl = escapeHtmlAttr(`${baseUrl.replace(/\/+$/, "")}/images/new/xyrra-logo.png`);
+export function resolveEmailBaseUrl(baseUrl?: string) {
+  if (baseUrl?.trim()) return baseUrl.replace(/\/+$/, "");
+  if (typeof window !== "undefined" && window.location?.origin) {
+    return window.location.origin.replace(/\/+$/, "");
+  }
+  return EMAIL_SITE_ORIGIN;
+}
+
+function emailLogoUrl(baseUrl?: string) {
+  return escapeHtmlAttr(`${resolveEmailBaseUrl(baseUrl)}/images/email/xyrra-logo-black.png`);
+}
+
+function emailPageUrl(path: string, baseUrl?: string) {
+  const normalized = path.startsWith("/") ? path : `/${path}`;
+  return escapeHtmlAttr(`${resolveEmailBaseUrl(baseUrl)}${normalized}`);
+}
+
+export function getEmailShellBefore(baseUrl?: string) {
+  const logoUrl = emailLogoUrl(baseUrl);
 
   return `<!DOCTYPE html>
 <html lang="en">
@@ -52,15 +74,31 @@ export function getEmailShellBefore(baseUrl = window.location.origin) {
           <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e0deed;">
             <tr>
               <td style="padding:28px 32px 12px;text-align:center;border-bottom:1px solid #eef0f5;">
-                <img src="${logoUrl}" alt="Xyrra" width="120" style="display:block;margin:0 auto;height:auto;max-width:120px;" />
+                <img src="${logoUrl}" alt="Xyrra" width="120" style="display:block;margin:0 auto;height:auto;max-width:120px;border:0;" />
               </td>
             </tr>
             <tr>
               <td style="padding:32px;font-size:16px;line-height:1.6;">${EMAIL_BODY_START}`;
 }
 
-export function getEmailShellAfter() {
+export function getEmailShellAfter(baseUrl?: string) {
+  const logoUrl = emailLogoUrl(baseUrl);
+  const articlesUrl = emailPageUrl("/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine/", baseUrl);
+  const privacyUrl = emailPageUrl("/private-policy/", baseUrl);
+  const termsUrl = emailPageUrl("/terms-and-conditions/", baseUrl);
+  const linkStyle = "color:#6b7280;text-decoration:underline;";
+  const pipe = '<span style="color:#c5cad3;">&nbsp;|&nbsp;</span>';
+
   return `${EMAIL_BODY_END}
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:28px 32px 32px;text-align:center;border-top:1px solid #eef0f5;">
+                <img src="${logoUrl}" alt="Xyrra" width="100" style="display:block;margin:0 auto 16px;height:auto;max-width:100px;border:0;" />
+                <p style="margin:0 0 16px;font-size:12px;line-height:1.6;color:#6b7280;">${EMAIL_COMPANY_ADDRESS}</p>
+                <p style="margin:0;font-size:12px;line-height:1.6;">
+                  <a href="${articlesUrl}" style="${linkStyle}">Articles</a>${pipe}<a href="${privacyUrl}" style="${linkStyle}">Privacy</a>${pipe}<a href="${termsUrl}" style="${linkStyle}">Terms</a>${pipe}<a href="{{unsubscribe_url}}" style="${linkStyle}">Unsubscribe</a>
+                </p>
               </td>
             </tr>
           </table>
@@ -103,8 +141,13 @@ export function buildEmailHtml(editableContent: string, baseUrl?: string) {
   return mergeEmailHtml({
     shellBefore: getEmailShellBefore(baseUrl),
     editableContent,
-    shellAfter: getEmailShellAfter(),
+    shellAfter: getEmailShellAfter(baseUrl),
   });
+}
+
+export function rebuildEmailHtml(fullHtml: string, baseUrl?: string) {
+  const parts = splitEmailHtml(fullHtml);
+  return buildEmailHtml(parts.editableContent || getDefaultEditableContent(), baseUrl);
 }
 
 export function mapEmailTemplateRow(row: Record<string, unknown>): EmailTemplate {

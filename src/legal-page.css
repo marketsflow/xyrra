@@ -101,3 +101,7 @@
   font-style: normal;
   line-height: 1.7 !important;
 }
+
+.legal-doc .contact-card {
+  width: 100%;
+}
