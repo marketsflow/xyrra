@@ -59,6 +59,7 @@ type RecipientResult = {
   email: string;
   resend_email_id: string | null;
   status: "sent" | "failed";
+  delivery_status: "sent" | "failed";
   error: string | null;
   sent_at: string | null;
 };
@@ -317,6 +318,7 @@ async function insertRecipients(
       email: result.email,
       resend_email_id: result.resend_email_id,
       status: result.status,
+      delivery_status: result.delivery_status,
       error: result.error,
       sent_at: result.sent_at,
     }));
@@ -340,7 +342,13 @@ function chunk<T>(items: T[], size: number) {
 
 async function sendResendBatch(
   apiKey: string,
-  batch: Array<{ from: string; to: string[]; subject: string; html: string }>,
+  batch: Array<{
+    from: string;
+    to: string[];
+    subject: string;
+    html: string;
+    tags?: Array<{ name: string; value: string }>;
+  }>,
 ): Promise<{ ok: true; ids: Array<string | null> } | { ok: false; message: string }> {
   const res = await fetch(RESEND_BATCH_URL, {
     method: "POST",
@@ -477,6 +485,12 @@ export async function sendEmailOutreach(
       to: [member.email],
       subject: personalizeSubject(parsed.data.subject, member.name),
       html: personalizeHtml(template.body_html, member.name),
+      tags: [
+        { name: "xyrra_outreach", value: "true" },
+        { name: "outreach_id", value: outreachId },
+        { name: "list_id", value: list.id },
+        { name: "template_id", value: template.id },
+      ],
     }));
 
     const sent = await sendResendBatch(apiKey, batch);
@@ -488,6 +502,7 @@ export async function sendEmailOutreach(
           email: member.email,
           resend_email_id: null,
           status: "failed",
+          delivery_status: "failed",
           error: sent.message,
           sent_at: null,
         });
@@ -503,6 +518,7 @@ export async function sendEmailOutreach(
         email: member.email,
         resend_email_id: resendId,
         status: resendId ? "sent" : "failed",
+        delivery_status: resendId ? "sent" : "failed",
         error: resendId ? null : "Resend did not return an email id.",
         sent_at: resendId ? nowIso() : null,
       });

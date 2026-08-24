@@ -15,6 +15,10 @@
     "api/email-outreach.ts": {
       "memory": 256,
       "maxDuration": 60
+    },
+    "api/webhooks/resend.ts": {
+      "memory": 256,
+      "maxDuration": 30
     }
   }
 }

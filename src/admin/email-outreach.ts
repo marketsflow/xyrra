@@ -34,6 +34,7 @@ async function init() {
   const listsEmptyEl = document.getElementById("xa-outreach-lists-empty");
   const errorEl = document.getElementById("xa-outreach-error");
   const statusEl = document.getElementById("xa-outreach-status");
+  const sentLinkEl = document.getElementById("xa-outreach-sent-link");
   const subjectInput = document.getElementById("xa-outreach-subject") as HTMLInputElement | null;
   const fromSelect = document.getElementById("xa-outreach-from") as HTMLSelectElement | null;
   const previewFrame = document.getElementById("xa-outreach-preview") as HTMLIFrameElement | null;
@@ -67,11 +68,13 @@ async function init() {
   function setError(message: string) {
     if (errorEl) errorEl.textContent = message;
     if (statusEl && message) statusEl.textContent = "";
+    if (message) sentLinkEl?.setAttribute("hidden", "");
   }
 
-  function setStatus(message: string) {
+  function setStatus(message: string, showSentLink = false) {
     if (statusEl) statusEl.textContent = message;
     if (errorEl && message) errorEl.textContent = "";
+    sentLinkEl?.toggleAttribute("hidden", !showSentLink);
   }
 
   function selectedTemplate() {
@@ -287,7 +290,7 @@ async function init() {
           body.failedCount && body.failedCount > 0
             ? ` ${body.failedCount} failed.`
             : "";
-        setStatus(`Sent ${body.sentCount ?? 0} email${body.sentCount === 1 ? "" : "s"}.${failedNote}`);
+        setStatus(`Sent ${body.sentCount ?? 0} email${body.sentCount === 1 ? "" : "s"}.${failedNote}`, true);
       } catch (error) {
         setError(error instanceof Error ? error.message : "Unable to send this outreach email.");
       } finally {

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { sendContactEmail } from "./api/contact";
 import { sendEmailOutreach } from "./api/email-outreach";
+import { handleResendWebhook } from "./api/webhooks/resend";
 import { articleSeoPlugin } from "./vite/article-seo-plugin";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -29,12 +30,45 @@ function writeJson(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
+function headerValue(value: string | string[] | undefined) {
+  if (Array.isArray(value)) return value[0] ?? null;
+  return value ?? null;
+}
+
 function resendApiPlugin(env: Record<string, string>): Plugin {
   return {
     name: "resend-contact-api",
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const path = (req as IncomingMessage & { url?: string }).url?.split("?")[0] ?? "";
+        if (path === "/api/webhooks/resend") {
+          if (req.method !== "POST") {
+            writeJson(res, 405, { error: "Method not allowed" });
+            return;
+          }
+          let raw: string;
+          try {
+            raw = await readRequestBody(req);
+          } catch {
+            writeJson(res, 413, { error: "Request too large" });
+            return;
+          }
+          const result = await handleResendWebhook(
+            raw,
+            {
+              id: headerValue(req.headers["svix-id"]),
+              timestamp: headerValue(req.headers["svix-timestamp"]),
+              signature: headerValue(req.headers["svix-signature"]),
+            },
+            {
+              RESEND_WEBHOOK_SECRET: env.RESEND_WEBHOOK_SECRET,
+              SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+              SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+            },
+          );
+          writeJson(res, result.status, result.body);
+          return;
+        }
         if (path === "/api/email-outreach") {
           if (req.method !== "POST") {
             writeJson(res, 405, { success: false, message: "Method not allowed" });
@@ -209,6 +243,8 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/admin/email-lists/edit/" + search;
       } else if (path === "/admin/email-outreach") {
         (req as IncomingMessage & { url?: string }).url = "/admin/email-outreach/" + search;
+      } else if (path === "/admin/emails-sent") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/emails-sent/" + search;
       } else if (
         path === "/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine"
       ) {
@@ -264,6 +300,7 @@ export default defineConfig(({ mode }) => {
           adminEmailListsNew: resolve(__dirname, "admin/email-lists/new/index.html"),
           adminEmailListsEdit: resolve(__dirname, "admin/email-lists/edit/index.html"),
           adminEmailOutreach: resolve(__dirname, "admin/email-outreach/index.html"),
+          adminEmailsSent: resolve(__dirname, "admin/emails-sent/index.html"),
         },
       },
     },

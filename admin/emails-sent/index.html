@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#f8f9fd" />
+    <title>Emails Sent | Admin | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/admin/admin.css" />
+  </head>
+  <body class="xa-body">
+    <div id="xa-admin-loading" class="xa-loading" role="status" aria-live="polite">
+      Checking session…
+    </div>
+
+    <div class="xa-admin" id="xa-admin-app" hidden>
+      <header class="xa-admin__bar">
+        <a class="xa-brand" href="/admin/" aria-label="Xyrra admin home">
+          <img src="/images/new/xyrra-logo.png" alt="" width="954" height="115" decoding="async" />
+        </a>
+        <div class="xa-admin__bar-actions">
+          <div class="xa-admin__meta">
+            <strong id="xa-admin-email">…</strong>
+            <span id="xa-admin-role">…</span>
+          </div>
+          <button type="button" id="xa-admin-signout" class="xa-admin__signout">Sign out</button>
+        </div>
+      </header>
+
+      <div class="xa-admin__layout">
+        <aside class="xa-admin__sidebar" aria-label="Admin navigation">
+          <nav class="xa-admin__nav">
+            <a class="xa-admin__nav-link" data-xa-nav="dashboard" href="/admin/">Dashboard</a>
+            <a class="xa-admin__nav-link" data-xa-nav="users" href="/admin/users/">Users</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-templates" href="/admin/email-templates/">Email Templates</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-lists" href="/admin/email-lists/">Email Lists</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-outreach" href="/admin/email-outreach/">Email Outreach</a>
+            <a class="xa-admin__nav-link" data-xa-nav="emails-sent" href="/admin/emails-sent/">Emails Sent</a>
+          </nav>
+        </aside>
+
+        <main class="xa-admin__main">
+          <div class="xa-sent">
+            <div class="xa-sent__header">
+              <h1>Emails Sent</h1>
+              <p class="xa-templates__lede">
+                Track outreach sends with Resend open and click activity. Expand a row to see the full activity log.
+              </p>
+            </div>
+
+            <p id="xa-sent-error" class="xa-template__status xa-template__status--error" aria-live="polite"></p>
+
+            <section id="xa-sent-empty" class="xa-sent__empty" hidden>
+              <p class="xa-sent__empty-title">No sent emails yet</p>
+              <p>
+                Emails sent from Email Outreach appear here after send tracking is recorded. Open and click counts
+                update from the Resend webhook after delivery.
+              </p>
+            </section>
+
+            <div id="xa-sent-content" hidden>
+              <section class="xa-sent__card">
+                <div class="xa-sent__filter-head">
+                  <div>
+                    <p class="xa-sent__card-title">Filter by sent date</p>
+                    <p id="xa-sent-count-label" class="xa-sent__card-hint"></p>
+                  </div>
+                  <button type="button" id="xa-sent-clear" class="xa-sent__ghost" hidden>Clear dates</button>
+                </div>
+
+                <div class="xa-sent__presets" role="group" aria-label="Date presets">
+                  <button type="button" data-xa-preset="all" class="xa-sent__chip xa-sent__chip--active">All dates</button>
+                  <button type="button" data-xa-preset="today" class="xa-sent__chip">Today</button>
+                  <button type="button" data-xa-preset="yesterday" class="xa-sent__chip">Yesterday</button>
+                  <button type="button" data-xa-preset="last7" class="xa-sent__chip">Last 7 days</button>
+                </div>
+
+                <div class="xa-sent__dates">
+                  <label>
+                    <span>From</span>
+                    <input id="xa-sent-from" type="date" aria-label="Filter sent emails from date" />
+                  </label>
+                  <label>
+                    <span>To</span>
+                    <input id="xa-sent-to" type="date" aria-label="Filter sent emails to date" />
+                  </label>
+                </div>
+
+                <div id="xa-sent-date-chips" class="xa-sent__date-chips" hidden>
+                  <p class="xa-sent__card-hint xa-sent__card-hint--caps">Dates with logged sends</p>
+                  <div id="xa-sent-date-chip-list" class="xa-sent__presets"></div>
+                </div>
+              </section>
+
+              <section id="xa-sent-stats" class="xa-sent__stats"></section>
+
+              <section id="xa-sent-no-match" class="xa-sent__empty" hidden>
+                <p class="xa-sent__empty-title">No emails match the selected dates</p>
+                <p id="xa-sent-no-match-hint"></p>
+                <button type="button" id="xa-sent-show-all" class="xa-sent__ghost">Show all logged sends</button>
+              </section>
+
+              <div id="xa-sent-days" class="xa-sent__days"></div>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/src/admin/emails-sent.ts"></script>
+  </body>
+</html>

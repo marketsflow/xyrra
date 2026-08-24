@@ -1,7 +1,13 @@
 import { roleLabel } from "../lib/auth/admin-access";
 import type { AdminSession } from "./auth-guard";
 
-export type AdminNavId = "dashboard" | "users" | "email-templates" | "email-lists" | "email-outreach";
+export type AdminNavId =
+  | "dashboard"
+  | "users"
+  | "email-templates"
+  | "email-lists"
+  | "email-outreach"
+  | "emails-sent";
 
 export function initAdminShell(session: AdminSession, activeNav: AdminNavId) {
   const emailEl = document.getElementById("xa-admin-email");
