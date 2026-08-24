@@ -7,6 +7,10 @@
     { "source": "/new", "destination": "/", "permanent": true },
     { "source": "/new/", "destination": "/", "permanent": true }
   ],
+  "rewrites": [
+    { "source": "/api/webhooks/resend", "destination": "/api/resend-webhook" },
+    { "source": "/api/webhooks/resend/", "destination": "/api/resend-webhook" }
+  ],
   "functions": {
     "api/contact.ts": {
       "memory": 256,
@@ -16,7 +20,7 @@
       "memory": 256,
       "maxDuration": 60
     },
-    "api/webhooks/resend.ts": {
+    "api/resend-webhook.ts": {
       "memory": 256,
       "maxDuration": 30
     }

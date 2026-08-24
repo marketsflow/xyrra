@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { sendContactEmail } from "./api/contact";
 import { sendEmailOutreach } from "./api/email-outreach";
-import { handleResendWebhook } from "./api/webhooks/resend";
+import { handleResendWebhook } from "./api/resend-webhook";
 import { articleSeoPlugin } from "./vite/article-seo-plugin";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -41,7 +41,7 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const path = (req as IncomingMessage & { url?: string }).url?.split("?")[0] ?? "";
-        if (path === "/api/webhooks/resend") {
+        if (path === "/api/resend-webhook" || path === "/api/webhooks/resend" || path === "/api/webhooks/resend/") {
           if (req.method !== "POST") {
             writeJson(res, 405, { error: "Method not allowed" });
             return;
