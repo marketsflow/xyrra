@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#f8f9fd" />
+    <title>Email Lists | Admin | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/admin/admin.css" />
+  </head>
+  <body class="xa-body">
+    <div id="xa-admin-loading" class="xa-loading" role="status" aria-live="polite">
+      Checking session…
+    </div>
+
+    <div class="xa-admin" id="xa-admin-app" hidden>
+      <header class="xa-admin__bar">
+        <a class="xa-brand" href="/admin/" aria-label="Xyrra admin home">
+          <img src="/images/new/xyrra-logo.png" alt="" width="954" height="115" decoding="async" />
+        </a>
+        <div class="xa-admin__bar-actions">
+          <div class="xa-admin__meta">
+            <strong id="xa-admin-email">…</strong>
+            <span id="xa-admin-role">…</span>
+          </div>
+          <button type="button" id="xa-admin-signout" class="xa-admin__signout">Sign out</button>
+        </div>
+      </header>
+
+      <div class="xa-admin__layout">
+        <aside class="xa-admin__sidebar" aria-label="Admin navigation">
+          <nav class="xa-admin__nav">
+            <a class="xa-admin__nav-link" data-xa-nav="dashboard" href="/admin/">Dashboard</a>
+            <a class="xa-admin__nav-link" data-xa-nav="users" href="/admin/users/">Users</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-templates" href="/admin/email-templates/">Email Templates</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-lists" href="/admin/email-lists/">Email Lists</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-outreach" href="/admin/email-outreach/">Email Outreach</a>
+          </nav>
+        </aside>
+
+        <main class="xa-admin__main xa-email-lists-page">
+          <div class="xa-admin__panel xa-templates">
+            <div class="xa-templates__header">
+              <div>
+                <h1>Email lists</h1>
+                <p class="xa-templates__lede">
+                  Create named lists, then use the checkboxes in the imported users table to add recipients.
+                </p>
+              </div>
+              <a class="xa-templates__create" href="/admin/email-lists/new/">Create list</a>
+            </div>
+
+            <p id="xa-email-lists-error" class="xa-template__status xa-template__status--error" aria-live="polite"></p>
+            <p id="xa-email-lists-empty" class="xa-templates__empty" hidden>No email lists yet.</p>
+            <ul id="xa-email-lists-list" class="xa-templates__list"></ul>
+          </div>
+
+          <div id="xa-selected-user" class="xa-admin__panel xa-selected-user"></div>
+
+          <div class="xa-admin__panel xa-old-users">
+            <div class="xa-users__header xa-old-users__header">
+              <div class="xa-old-users__header-main">
+                <h2>Imported users</h2>
+                <p id="xa-old-users-summary" class="xa-templates__lede">Loading…</p>
+              </div>
+              <div class="xa-old-users__header-side">
+                <div id="xa-old-users-lists" class="xa-old-users__lists" aria-label="Latest email lists"></div>
+                <label class="xa-users__search">
+                  <span class="xa-sr-only">Search users</span>
+                  <input
+                    id="xa-old-users-search"
+                    type="search"
+                    placeholder="Search name or email…"
+                    autocomplete="off"
+                  />
+                </label>
+              </div>
+            </div>
+
+            <p id="xa-old-users-status" class="xa-users__status" aria-live="polite">Loading users…</p>
+
+            <div class="xa-users__table-wrap">
+              <table class="xa-users__table xa-old-users__table">
+                <thead>
+                  <tr id="xa-old-users-head">
+                    <th scope="col">Name</th>
+                    <th scope="col">Email</th>
+                  </tr>
+                </thead>
+                <tbody id="xa-old-users-body">
+                  <tr>
+                    <td colspan="2" class="xa-users__empty">Loading…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            <div class="xa-users__pagination">
+              <button type="button" id="xa-old-users-first" class="xa-admin__signout">First page</button>
+              <button type="button" id="xa-old-users-prev" class="xa-admin__signout">Previous</button>
+              <span id="xa-old-users-page">Page 1 of 1</span>
+              <button type="button" id="xa-old-users-next" class="xa-admin__signout">Next</button>
+              <button type="button" id="xa-old-users-last" class="xa-admin__signout">Last page</button>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/src/admin/email-lists-list.ts"></script>
+  </body>
+</html>

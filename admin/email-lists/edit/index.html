@@ -1,0 +1,115 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#f8f9fd" />
+    <title>Edit Email List | Admin | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/admin/admin.css" />
+  </head>
+  <body class="xa-body">
+    <div id="xa-admin-loading" class="xa-loading" role="status" aria-live="polite">
+      Checking session…
+    </div>
+
+    <div class="xa-admin" id="xa-admin-app" hidden>
+      <header class="xa-admin__bar">
+        <a class="xa-brand" href="/admin/" aria-label="Xyrra admin home">
+          <img src="/images/new/xyrra-logo.png" alt="" width="954" height="115" decoding="async" />
+        </a>
+        <div class="xa-admin__bar-actions">
+          <div class="xa-admin__meta">
+            <strong id="xa-admin-email">…</strong>
+            <span id="xa-admin-role">…</span>
+          </div>
+          <button type="button" id="xa-admin-signout" class="xa-admin__signout">Sign out</button>
+        </div>
+      </header>
+
+      <div class="xa-admin__layout">
+        <aside class="xa-admin__sidebar" aria-label="Admin navigation">
+          <nav class="xa-admin__nav">
+            <a class="xa-admin__nav-link" data-xa-nav="dashboard" href="/admin/">Dashboard</a>
+            <a class="xa-admin__nav-link" data-xa-nav="users" href="/admin/users/">Users</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-templates" href="/admin/email-templates/">Email Templates</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-lists" href="/admin/email-lists/">Email Lists</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-outreach" href="/admin/email-outreach/">Email Outreach</a>
+          </nav>
+        </aside>
+
+        <main class="xa-admin__main">
+          <div class="xa-template-editor">
+            <a class="xa-template-editor__back" href="/admin/email-lists/">← Back to email lists</a>
+            <h1 id="xa-email-list-title">Edit email list</h1>
+            <p class="xa-template-editor__lede">
+              Update the list name and manage members.
+            </p>
+
+            <section class="xa-template-editor__section">
+              <h2>List name</h2>
+              <input id="xa-email-list-name" type="text" placeholder="List name" aria-label="List name" />
+              <div class="xa-template-editor__actions xa-email-list__name-actions">
+                <button type="button" id="xa-email-list-save" class="xa-admin__signout">Save list name</button>
+              </div>
+            </section>
+
+            <section class="xa-template-editor__section">
+              <h2>Add member</h2>
+              <form id="xa-email-list-add-form" class="xa-email-list__add-form">
+                <div class="xa-email-list__add-grid">
+                  <label>
+                    <span>Name</span>
+                    <input name="member-name" type="text" placeholder="Full name" autocomplete="off" />
+                  </label>
+                  <label>
+                    <span>Email</span>
+                    <input name="member-email" type="email" placeholder="name@example.com" autocomplete="off" />
+                  </label>
+                </div>
+                <button type="submit" class="xa-admin__signout">Add member</button>
+              </form>
+            </section>
+
+            <section class="xa-template-editor__section">
+              <div class="xa-users__header">
+                <div>
+                  <h2>Members</h2>
+                  <p id="xa-email-list-member-count" class="xa-templates__lede">0 members</p>
+                </div>
+              </div>
+              <div class="xa-users__table-wrap">
+                <table class="xa-users__table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Name</th>
+                      <th scope="col">Email</th>
+                      <th scope="col">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody id="xa-email-list-members-body">
+                    <tr>
+                      <td colspan="3" class="xa-users__empty">Loading…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
+            <p id="xa-email-list-status" class="xa-template__status" aria-live="polite"></p>
+            <p id="xa-email-list-error" class="xa-template__status xa-template__status--error" aria-live="polite"></p>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/src/admin/email-lists-edit.ts"></script>
+  </body>
+</html>

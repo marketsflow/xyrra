@@ -3,6 +3,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { sendContactEmail } from "./api/contact";
+import { sendEmailOutreach } from "./api/email-outreach";
 import { articleSeoPlugin } from "./vite/article-seo-plugin";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -22,12 +23,55 @@ function readRequestBody(req: IncomingMessage, maxBytes = 200_000): Promise<stri
   });
 }
 
+function writeJson(res: ServerResponse, status: number, body: unknown) {
+  res.statusCode = status;
+  res.setHeader("Content-Type", "application/json");
+  res.end(JSON.stringify(body));
+}
+
 function resendApiPlugin(env: Record<string, string>): Plugin {
   return {
     name: "resend-contact-api",
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const path = (req as IncomingMessage & { url?: string }).url?.split("?")[0] ?? "";
+        if (path === "/api/email-outreach") {
+          if (req.method !== "POST") {
+            writeJson(res, 405, { success: false, message: "Method not allowed" });
+            return;
+          }
+          let raw: string;
+          try {
+            raw = await readRequestBody(req);
+          } catch {
+            writeJson(res, 413, { success: false, message: "Request too large" });
+            return;
+          }
+          let body: unknown;
+          try {
+            body = raw ? JSON.parse(raw) : {};
+          } catch {
+            writeJson(res, 400, { success: false, message: "Invalid JSON" });
+            return;
+          }
+          const result = await sendEmailOutreach(body, {
+            RESEND_API_KEY: env.RESEND_API_KEY,
+            SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+            SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY,
+          }, req.headers.authorization ?? null);
+          if (result.success) {
+            writeJson(res, 200, {
+              success: true,
+              outreachId: result.outreachId,
+              recipientCount: result.recipientCount,
+              sentCount: result.sentCount,
+              failedCount: result.failedCount,
+            });
+            return;
+          }
+          writeJson(res, result.status ?? 500, { success: false, message: result.message });
+          return;
+        }
         if (path !== "/api/contact") {
           return next();
         }
@@ -145,6 +189,26 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/pre-order/" + search;
       } else if (path === "/xyrra-agent/download") {
         (req as IncomingMessage & { url?: string }).url = "/xyrra-agent/download/" + search;
+      } else if (path === "/admin") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/" + search;
+      } else if (path === "/admin/login") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/login/" + search;
+      } else if (path === "/admin/users") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/users/" + search;
+      } else if (path === "/admin/email-templates") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/email-templates/" + search;
+      } else if (path === "/admin/email-templates/new") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/email-templates/new/" + search;
+      } else if (path === "/admin/email-templates/edit") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/email-templates/edit/" + search;
+      } else if (path === "/admin/email-lists") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/email-lists/" + search;
+      } else if (path === "/admin/email-lists/new") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/email-lists/new/" + search;
+      } else if (path === "/admin/email-lists/edit") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/email-lists/edit/" + search;
+      } else if (path === "/admin/email-outreach") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/email-outreach/" + search;
       } else if (
         path === "/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine"
       ) {
@@ -190,6 +254,16 @@ export default defineConfig(({ mode }) => {
             __dirname,
             "article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine/index.html"
           ),
+          adminLogin: resolve(__dirname, "admin/login/index.html"),
+          adminHome: resolve(__dirname, "admin/index.html"),
+          adminUsers: resolve(__dirname, "admin/users/index.html"),
+          adminEmailTemplates: resolve(__dirname, "admin/email-templates/index.html"),
+          adminEmailTemplatesNew: resolve(__dirname, "admin/email-templates/new/index.html"),
+          adminEmailTemplatesEdit: resolve(__dirname, "admin/email-templates/edit/index.html"),
+          adminEmailLists: resolve(__dirname, "admin/email-lists/index.html"),
+          adminEmailListsNew: resolve(__dirname, "admin/email-lists/new/index.html"),
+          adminEmailListsEdit: resolve(__dirname, "admin/email-lists/edit/index.html"),
+          adminEmailOutreach: resolve(__dirname, "admin/email-outreach/index.html"),
         },
       },
     },

@@ -1,0 +1,4 @@
+-- Optional: after creating a user in Supabase Auth (Studio → Authentication → Users),
+-- set their profile role to admin:
+--
+--   update public.profiles set role = 'admin' where email = 'you@example.com';

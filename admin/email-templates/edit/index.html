@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#f8f9fd" />
+    <title>Edit Email Template | Admin | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/admin/admin.css" />
+  </head>
+  <body class="xa-body">
+    <div id="xa-admin-loading" class="xa-loading" role="status" aria-live="polite">
+      Checking session…
+    </div>
+
+    <div class="xa-admin" id="xa-admin-app" hidden>
+      <header class="xa-admin__bar">
+        <a class="xa-brand" href="/admin/" aria-label="Xyrra admin home">
+          <img src="/images/new/xyrra-logo.png" alt="" width="954" height="115" decoding="async" />
+        </a>
+        <div class="xa-admin__bar-actions">
+          <div class="xa-admin__meta">
+            <strong id="xa-admin-email">…</strong>
+            <span id="xa-admin-role">…</span>
+          </div>
+          <button type="button" id="xa-admin-signout" class="xa-admin__signout">Sign out</button>
+        </div>
+      </header>
+
+      <div class="xa-admin__layout">
+        <aside class="xa-admin__sidebar" aria-label="Admin navigation">
+          <nav class="xa-admin__nav">
+            <a class="xa-admin__nav-link" data-xa-nav="dashboard" href="/admin/">Dashboard</a>
+            <a class="xa-admin__nav-link" data-xa-nav="users" href="/admin/users/">Users</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-templates" href="/admin/email-templates/">Email Templates</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-lists" href="/admin/email-lists/">Email Lists</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-outreach" href="/admin/email-outreach/">Email Outreach</a>
+          </nav>
+        </aside>
+
+        <main class="xa-admin__main">
+          <div class="xa-template-editor">
+            <a id="xa-template-back" class="xa-template-editor__back" href="/admin/email-templates/">← Back to templates</a>
+            <h1 id="xa-template-title">Edit email template</h1>
+            <p class="xa-template-editor__lede">
+              Edit the subject line and email body used in Xyrra email campaigns.
+            </p>
+
+            <section class="xa-template-editor__section">
+              <h2>Template name</h2>
+              <input id="xa-template-name" type="text" placeholder="Template name" aria-label="Template name" />
+            </section>
+
+            <section class="xa-template-editor__section">
+              <h2>Subject</h2>
+              <input id="xa-template-subject" type="text" placeholder="Email subject line" aria-label="Email subject" />
+            </section>
+
+            <section class="xa-template-editor__section">
+              <h2>Default sender</h2>
+              <select id="xa-template-from" aria-label="Default sender"></select>
+            </section>
+
+            <section class="xa-template-editor__section">
+              <h2>Body</h2>
+              <p class="xa-template-editor__hint">
+                Edit the email content with the formatting toolbar below. Use <code>{{name}}</code> to personalize.
+              </p>
+              <div class="xa-template-editor__toolbar" role="toolbar" aria-label="Formatting">
+                <button type="button" data-xa-editor-cmd="bold"><strong>B</strong></button>
+                <button type="button" data-xa-editor-cmd="italic"><em>I</em></button>
+                <button type="button" data-xa-editor-cmd="insertUnorderedList">• List</button>
+                <button type="button" data-xa-editor-cmd="createLink">Link</button>
+              </div>
+              <div id="xa-template-body" class="xa-template-editor__body" contenteditable="true" aria-label="Email body"></div>
+            </section>
+
+            <section class="xa-template-editor__section">
+              <h2>Preview</h2>
+              <p class="xa-template-editor__hint">Live preview at up to 800px wide.</p>
+              <div class="xa-template-editor__preview-wrap">
+                <iframe id="xa-template-preview" class="xa-template-editor__preview" title="Email preview"></iframe>
+              </div>
+            </section>
+
+            <div class="xa-template-editor__actions">
+              <button type="button" id="xa-template-save" class="xa-templates__create">Save template</button>
+              <button type="button" id="xa-template-duplicate" class="xa-admin__signout">Duplicate</button>
+              <p id="xa-template-status" class="xa-template__status" aria-live="polite"></p>
+              <p id="xa-template-error" class="xa-template__status xa-template__status--error" aria-live="polite"></p>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/src/admin/email-templates-edit.ts"></script>
+  </body>
+</html>

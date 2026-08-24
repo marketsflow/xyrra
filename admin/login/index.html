@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#f4f6f8" />
+    <title>Admin sign in | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/admin/admin.css" />
+  </head>
+  <body class="xa-body">
+    <div class="xa-shell">
+      <header class="xa-header">
+        <a class="xa-brand" href="/" aria-label="Xyrra home">
+          <img src="/images/new/xyrra-logo.png" alt="" width="954" height="115" decoding="async" />
+        </a>
+      </header>
+
+      <main class="xa-main">
+        <div class="xa-grid">
+          <div class="xa-copy">
+            <div class="xa-badge">Back office</div>
+            <h1 class="xa-title">Manage Xyrra here</h1>
+            <p class="xa-lede">
+              Xyrra admin: operate products, content, and member-facing settings from one console.
+            </p>
+            <div class="xa-info">
+              <h3>Role-based access</h3>
+              <p>
+                Only team accounts with an admin or editor profile can use this sign-in.
+              </p>
+            </div>
+          </div>
+
+          <div class="xa-panel-wrap">
+            <div class="xa-panel">
+              <h2>Admin sign in</h2>
+              <p class="xa-panel-sub">Use your Xyrra admin email and password.</p>
+
+              <p id="xa-login-error" class="xa-error" role="alert" hidden></p>
+
+              <form id="xa-login-form" class="xa-form" novalidate>
+                <div class="xa-field">
+                  <label for="admin-email">Email address</label>
+                  <input
+                    id="admin-email"
+                    name="email"
+                    type="email"
+                    autocomplete="email"
+                    required
+                    placeholder="Enter your email"
+                  />
+                </div>
+                <div class="xa-field">
+                  <label for="admin-password">Password</label>
+                  <input
+                    id="admin-password"
+                    name="password"
+                    type="password"
+                    autocomplete="current-password"
+                    required
+                    placeholder="Enter your password"
+                  />
+                </div>
+                <button type="submit" class="xa-submit">Sign in</button>
+              </form>
+
+              <p class="xa-hint">
+                Need access? Ask an existing admin to set your
+                <code>profiles.role</code> to <code>admin</code> or <code>editor</code>.
+              </p>
+            </div>
+
+            <p class="xa-back"><a href="/">Back to home</a></p>
+          </div>
+        </div>
+      </main>
+
+      <footer class="xa-footer">© <span id="xa-year">2026</span> Xyrra. Admin console.</footer>
+    </div>
+
+    <script type="module" src="/src/admin/login.ts"></script>
+    <script>
+      document.getElementById("xa-year").textContent = String(new Date().getFullYear());
+    </script>
+  </body>
+</html>

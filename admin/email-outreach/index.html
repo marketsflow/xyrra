@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#f8f9fd" />
+    <title>Email Outreach | Admin | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/admin/admin.css" />
+  </head>
+  <body class="xa-body">
+    <div id="xa-admin-loading" class="xa-loading" role="status" aria-live="polite">
+      Checking session…
+    </div>
+
+    <div class="xa-admin" id="xa-admin-app" hidden>
+      <header class="xa-admin__bar">
+        <a class="xa-brand" href="/admin/" aria-label="Xyrra admin home">
+          <img src="/images/new/xyrra-logo.png" alt="" width="954" height="115" decoding="async" />
+        </a>
+        <div class="xa-admin__bar-actions">
+          <div class="xa-admin__meta">
+            <strong id="xa-admin-email">…</strong>
+            <span id="xa-admin-role">…</span>
+          </div>
+          <button type="button" id="xa-admin-signout" class="xa-admin__signout">Sign out</button>
+        </div>
+      </header>
+
+      <div class="xa-admin__layout">
+        <aside class="xa-admin__sidebar" aria-label="Admin navigation">
+          <nav class="xa-admin__nav">
+            <a class="xa-admin__nav-link" data-xa-nav="dashboard" href="/admin/">Dashboard</a>
+            <a class="xa-admin__nav-link" data-xa-nav="users" href="/admin/users/">Users</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-templates" href="/admin/email-templates/">Email Templates</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-lists" href="/admin/email-lists/">Email Lists</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-outreach" href="/admin/email-outreach/">Email Outreach</a>
+          </nav>
+        </aside>
+
+        <main class="xa-admin__main">
+          <div class="xa-outreach">
+            <div class="xa-outreach__header">
+              <h1>Email outreach</h1>
+              <p class="xa-templates__lede">
+                Choose a template and list, review the email, then send it to every recipient on that list.
+              </p>
+            </div>
+
+            <p id="xa-outreach-error" class="xa-template__status xa-template__status--error" aria-live="polite"></p>
+
+            <section class="xa-template-editor__section">
+              <h2>Email templates</h2>
+              <p class="xa-template-editor__hint">Select one template to use for this send.</p>
+              <p id="xa-outreach-templates-empty" class="xa-templates__empty" hidden>No email templates yet.</p>
+              <ul id="xa-outreach-templates" class="xa-picker__list"></ul>
+            </section>
+
+            <section class="xa-template-editor__section">
+              <h2>Email lists</h2>
+              <p class="xa-template-editor__hint">Select the recipient list for this send.</p>
+              <p id="xa-outreach-lists-empty" class="xa-templates__empty" hidden>No email lists yet.</p>
+              <ul id="xa-outreach-lists" class="xa-picker__list"></ul>
+            </section>
+
+            <section class="xa-template-editor__section">
+              <h2>Subject line</h2>
+              <input
+                id="xa-outreach-subject"
+                type="text"
+                placeholder="Select a template to load the subject"
+                aria-label="Email subject"
+              />
+            </section>
+
+            <section class="xa-template-editor__section">
+              <h2>Email from</h2>
+              <select id="xa-outreach-from" aria-label="Email from"></select>
+            </section>
+
+            <section class="xa-template-editor__section">
+              <div class="xa-outreach-preview__header">
+                <h2>Email body</h2>
+                <div class="xa-outreach-preview__toggles" role="group" aria-label="Preview size">
+                  <button type="button" data-xa-preview-mode="desktop" class="xa-outreach-preview__toggle xa-outreach-preview__toggle--active">
+                    Desktop view
+                  </button>
+                  <button type="button" data-xa-preview-mode="mobile" class="xa-outreach-preview__toggle">
+                    Mobile view
+                  </button>
+                </div>
+              </div>
+              <p id="xa-outreach-preview-hint" class="xa-template-editor__hint">
+                Select a template to preview the email body.
+              </p>
+              <div class="xa-outreach-preview__stage">
+                <iframe
+                  id="xa-outreach-preview"
+                  class="xa-outreach-preview__frame xa-outreach-preview__frame--desktop"
+                  title="Email body preview"
+                ></iframe>
+              </div>
+            </section>
+
+            <div class="xa-template-editor__actions">
+              <button type="button" id="xa-outreach-send" class="xa-templates__create" disabled>Send</button>
+              <p id="xa-outreach-status" class="xa-template__status" aria-live="polite"></p>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/src/admin/email-outreach.ts"></script>
+  </body>
+</html>
