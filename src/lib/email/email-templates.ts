@@ -1,3 +1,8 @@
+import {
+  appendEmailInlineImages,
+  extractEmailInlineImages,
+} from "./email-inline-images";
+
 export const EMAIL_BODY_START = "<!--xyrra-email-body-->";
 export const EMAIL_BODY_END = "<!--/xyrra-email-body-->";
 
@@ -29,8 +34,55 @@ export type EmailHtmlParts = {
   shellAfter: string;
 };
 
+export const EMAIL_BODY_FONT = "Arial, Helvetica, sans-serif";
+export const EMAIL_BODY_FONT_SIZE = "16px";
+export const EMAIL_BODY_COLOR = "#141820";
+export const EMAIL_BODY_LINE_HEIGHT = "1.6";
+export const EMAIL_BODY_TEXT_STYLE = `font-family:${EMAIL_BODY_FONT};font-size:${EMAIL_BODY_FONT_SIZE};line-height:${EMAIL_BODY_LINE_HEIGHT};color:${EMAIL_BODY_COLOR};`;
+
+const EMAIL_BODY_STYLE_RESET = new Set(["font", "font-family", "font-size", "font-weight", "line-height", "color"]);
+
 export function getDefaultEditableContent() {
-  return "<p>Dear {{name}},</p><p><br></p>";
+  return `<p style="margin:0 0 16px;${EMAIL_BODY_TEXT_STYLE}">Dear {{name}},</p><p style="margin:0 0 16px;${EMAIL_BODY_TEXT_STYLE}"><br></p>`;
+}
+
+function keepNonFontStyles(style: string) {
+  return style
+    .split(";")
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .filter((decl) => {
+      const prop = decl.split(":")[0]?.trim().toLowerCase();
+      return Boolean(prop) && !EMAIL_BODY_STYLE_RESET.has(prop);
+    })
+    .join(";");
+}
+
+function withBodyTextStyle(existingStyle: string, extra = "margin:0 0 16px;") {
+  const kept = keepNonFontStyles(existingStyle);
+  return `${extra}${EMAIL_BODY_TEXT_STYLE}${kept ? `${kept};` : ""}`;
+}
+
+/** Force body copy to the same Arial 16px face/size, ignoring pasted heading or font styles. */
+export function normalizeEmailBodyHtml(html: string) {
+  const { content, images } = extractEmailInlineImages(html);
+  let out = content.replace(/<\/?font\b[^>]*>/gi, "");
+  out = out.replace(/<(\/?)h[1-6]\b([^>]*)>/gi, "<$1p$2>");
+  out = out.replace(/\sstyle=(["'])([\s\S]*?)\1/gi, (_match, quote: string, style: string) => {
+    const kept = keepNonFontStyles(style);
+    return kept ? ` style=${quote}${kept}${quote}` : "";
+  });
+  out = out.replace(/\s(?:face|size)=["'][^"']*["']/gi, "");
+  out = out.replace(/<(p|div|li)\b([^>]*)>/gi, (_match, tag: string, rest: string) => {
+    const extra = tag === "li" ? "margin:0 0 8px;" : "margin:0 0 16px;";
+    if (/\sstyle=/i.test(rest)) {
+      return `<${tag}${rest.replace(/\sstyle=(["'])([\s\S]*?)\1/i, (_s, quote: string, style: string) => {
+        return ` style=${quote}${withBodyTextStyle(style, extra)}${quote}`;
+      })}>`;
+    }
+    return `<${tag}${rest} style="${withBodyTextStyle("", extra)}">`;
+  });
+  return appendEmailInlineImages(out, images);
 }
 
 function escapeHtmlAttr(value: string) {
@@ -66,6 +118,36 @@ export function getEmailShellBefore(baseUrl?: string) {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Xyrra email</title>
+    <style>
+      .xyrra-email-body, .xyrra-email-body p, .xyrra-email-body div, .xyrra-email-body span,
+      .xyrra-email-body li, .xyrra-email-body h1, .xyrra-email-body h2, .xyrra-email-body h3,
+      .xyrra-email-body h4, .xyrra-email-body h5, .xyrra-email-body h6 {
+        font-family: Arial, Helvetica, sans-serif !important;
+        font-size: 16px !important;
+        line-height: 1.6 !important;
+        color: #141820 !important;
+      }
+      .xyrra-email-body h1, .xyrra-email-body h2, .xyrra-email-body h3,
+      .xyrra-email-body h4, .xyrra-email-body h5, .xyrra-email-body h6 {
+        font-weight: 400 !important;
+        margin: 0 0 16px !important;
+      }
+      .xyrra-email-body strong, .xyrra-email-body b { font-weight: 700 !important; }
+      .xyrra-email-body [data-xyrra-email-inline-image] p,
+      .xyrra-email-body [data-xyrra-email-inline-image] a {
+        font-size: 13px !important;
+        line-height: 1.4 !important;
+        color: #2563eb !important;
+      }
+      .xyrra-email-body [data-xyrra-email-inline-image] img {
+        display: block !important;
+        width: 100% !important;
+        max-width: 600px !important;
+        height: auto !important;
+        margin: 0 auto !important;
+        border: 0 !important;
+      }
+    </style>
   </head>
   <body style="margin:0;padding:0;background-color:#f8f9fd;font-family:Arial,Helvetica,sans-serif;color:#141820;">
     <table role="presentation" width="100%" cellpadding="0" cellspacing="0" style="background-color:#f8f9fd;padding:32px 16px;">
@@ -78,7 +160,7 @@ export function getEmailShellBefore(baseUrl?: string) {
               </td>
             </tr>
             <tr>
-              <td style="padding:32px;font-size:16px;line-height:1.6;">${EMAIL_BODY_START}`;
+              <td class="xyrra-email-body" style="padding:32px;font-family:Arial,Helvetica,sans-serif;font-size:16px;line-height:1.6;color:#141820;">${EMAIL_BODY_START}`;
 }
 
 export function getEmailShellAfter(baseUrl?: string) {
@@ -140,7 +222,7 @@ export function splitEmailHtml(fullHtml: string): EmailHtmlParts {
 export function buildEmailHtml(editableContent: string, baseUrl?: string) {
   return mergeEmailHtml({
     shellBefore: getEmailShellBefore(baseUrl),
-    editableContent,
+    editableContent: normalizeEmailBodyHtml(editableContent),
     shellAfter: getEmailShellAfter(baseUrl),
   });
 }

@@ -12,6 +12,8 @@ async function init() {
 
   bindEmailTemplateForm({
     mode: "create",
+    supabase: session.supabase,
+    uploadScopeId: crypto.randomUUID(),
     initialBodyHtml: buildEmailHtml(getDefaultEditableContent()),
     onSave: async ({ name, subject, fromEmail, bodyHtml }) => {
       const { data, error } = await session.supabase

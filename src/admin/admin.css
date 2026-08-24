@@ -808,6 +808,11 @@ body.xa-body {
   border-color: rgba(37, 99, 235, 0.35);
 }
 
+.xa-template-editor__toolbar button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .xa-template-editor__body {
   min-height: 12rem;
   margin-top: 0.75rem;
@@ -815,8 +820,54 @@ body.xa-body {
   border-radius: 0.75rem;
   border: 1px solid #d8d6e8;
   background: #fff;
-  font-size: 0.875rem;
+  color: #141820;
+  font-family: Arial, Helvetica, sans-serif;
+  font-size: 16px;
   line-height: 1.6;
+}
+
+.xa-template-editor__body h1,
+.xa-template-editor__body h2,
+.xa-template-editor__body h3,
+.xa-template-editor__body h4,
+.xa-template-editor__body h5,
+.xa-template-editor__body h6,
+.xa-template-editor__body p,
+.xa-template-editor__body div,
+.xa-template-editor__body span,
+.xa-template-editor__body li {
+  margin: 0 0 1em;
+  color: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: 400;
+  line-height: inherit;
+}
+
+.xa-template-editor__body strong,
+.xa-template-editor__body b {
+  font-weight: 700;
+}
+
+.xa-template-editor__body [data-xyrra-email-inline-image] {
+  margin: 1.5rem 0 0;
+  text-align: center;
+}
+
+.xa-template-editor__body [data-xyrra-email-inline-image] p {
+  margin: 0.5rem 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.xa-template-editor__body [data-xyrra-email-inline-image] img {
+  display: block;
+  width: 100%;
+  max-width: 600px;
+  height: auto;
+  margin: 0 auto;
+  border: 0;
+  border-radius: 8px;
 }
 
 .xa-template-editor__preview-wrap {

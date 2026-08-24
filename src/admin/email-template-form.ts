@@ -1,8 +1,12 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
+import { buildEmailInlineImageBlock, normalizeEmailInlineImages } from "../lib/email/email-inline-images";
+import { uploadEmailTemplateImage } from "../lib/email/email-template-images";
 import {
   buildEmailHtml,
   DEFAULT_FROM_EMAIL,
   FROM_EMAIL_OPTIONS,
   getDefaultEditableContent,
+  normalizeEmailBodyHtml,
   splitEmailHtml,
 } from "../lib/email/email-templates";
 import { personalizeEmailHtml } from "../lib/email/personalize";
@@ -17,6 +21,8 @@ function escapeHtml(value: string) {
 
 export function bindEmailTemplateForm(options: {
   mode: "create" | "edit";
+  supabase: SupabaseClient;
+  uploadScopeId: string;
   initialName?: string;
   initialSubject?: string;
   initialFromEmail?: string;
@@ -41,6 +47,8 @@ export function bindEmailTemplateForm(options: {
   const previewFrame = document.getElementById("xa-template-preview") as HTMLIFrameElement | null;
   const saveBtn = document.getElementById("xa-template-save") as HTMLButtonElement | null;
   const duplicateBtn = document.getElementById("xa-template-duplicate") as HTMLButtonElement | null;
+  const imageBtn = document.getElementById("xa-template-image") as HTMLButtonElement | null;
+  const imageInput = document.getElementById("xa-template-image-input") as HTMLInputElement | null;
   const statusEl = document.getElementById("xa-template-status");
   const errorEl = document.getElementById("xa-template-error");
 
@@ -63,7 +71,7 @@ export function bindEmailTemplateForm(options: {
     name: options.initialName ?? "",
     subject: options.initialSubject ?? "",
     fromEmail: options.initialFromEmail ?? DEFAULT_FROM_EMAIL,
-    editableContent: initialParts.editableContent || getDefaultEditableContent(),
+    editableContent: normalizeEmailBodyHtml(initialParts.editableContent || getDefaultEditableContent()),
   };
 
   if (nameInput) nameInput.value = savedBaseline.name;
@@ -117,7 +125,42 @@ export function bindEmailTemplateForm(options: {
 
   function isValidContent(content: string) {
     const stripped = content.replace(/<[^>]+>/g, "").trim();
-    return stripped.length > 0;
+    return stripped.length > 0 || /<img\b/i.test(content);
+  }
+
+  function setImageBusy(busy: boolean) {
+    if (imageBtn) {
+      imageBtn.disabled = busy;
+      imageBtn.textContent = busy ? "Uploading…" : "Image";
+    }
+    if (imageInput) imageInput.disabled = busy;
+  }
+
+  async function insertSelectedImage(files: FileList | null) {
+    const file = files?.[0];
+    if (!file || !options.uploadScopeId) return;
+
+    setError("");
+    setImageBusy(true);
+    const result = await uploadEmailTemplateImage(options.supabase, {
+      scopeId: options.uploadScopeId,
+      file,
+    });
+    setImageBusy(false);
+    if (imageInput) imageInput.value = "";
+
+    if (!result.ok) {
+      setError(result.error);
+      return;
+    }
+
+    editorField.insertAdjacentHTML(
+      "beforeend",
+      buildEmailInlineImageBlock(result.publicUrl, file.name.trim() || "Image"),
+    );
+    editorField.innerHTML = normalizeEmailInlineImages(editorField.innerHTML);
+    updatePreview();
+    updateSaveState();
   }
 
   function updateSaveState() {
@@ -146,6 +189,16 @@ export function bindEmailTemplateForm(options: {
       }
       execCommand(command);
     });
+  });
+
+  imageBtn?.addEventListener("mousedown", (event) => {
+    event.preventDefault();
+  });
+  imageBtn?.addEventListener("click", () => {
+    imageInput?.click();
+  });
+  imageInput?.addEventListener("change", () => {
+    void insertSelectedImage(imageInput.files);
   });
 
   editorField.addEventListener("input", () => {

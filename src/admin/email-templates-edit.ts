@@ -47,6 +47,8 @@ async function init() {
 
   bindEmailTemplateForm({
     mode: "edit",
+    supabase: session.supabase,
+    uploadScopeId: template.id,
     initialName: template.name,
     initialSubject: template.subject,
     initialFromEmail: template.fromEmail,
