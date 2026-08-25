@@ -51,7 +51,7 @@
             <div class="xa-sent__header">
               <h1>Emails Sent</h1>
               <p class="xa-templates__lede">
-                Track outreach sends with Resend open and click activity. Expand a row to see the full activity log.
+                Each send is listed by email list and date. Open a send to see who received it and whether they opened or clicked.
               </p>
             </div>
 
@@ -69,7 +69,7 @@
               <section class="xa-sent__card">
                 <div class="xa-sent__filter-head">
                   <div>
-                    <p class="xa-sent__card-title">Filter by sent date</p>
+                    <p class="xa-sent__card-title">Filter sends by date</p>
                     <p id="xa-sent-count-label" class="xa-sent__card-hint"></p>
                   </div>
                   <button type="button" id="xa-sent-clear" class="xa-sent__ghost" hidden>Clear dates</button>
@@ -94,7 +94,7 @@
                 </div>
 
                 <div id="xa-sent-date-chips" class="xa-sent__date-chips" hidden>
-                  <p class="xa-sent__card-hint xa-sent__card-hint--caps">Dates with logged sends</p>
+                  <p class="xa-sent__card-hint xa-sent__card-hint--caps">Dates with sends</p>
                   <div id="xa-sent-date-chip-list" class="xa-sent__presets"></div>
                 </div>
               </section>
@@ -102,12 +102,12 @@
               <section id="xa-sent-stats" class="xa-sent__stats"></section>
 
               <section id="xa-sent-no-match" class="xa-sent__empty" hidden>
-                <p class="xa-sent__empty-title">No emails match the selected dates</p>
+                <p class="xa-sent__empty-title">No sends match the selected dates</p>
                 <p id="xa-sent-no-match-hint"></p>
                 <button type="button" id="xa-sent-show-all" class="xa-sent__ghost">Show all logged sends</button>
               </section>
 
-              <div id="xa-sent-days" class="xa-sent__days"></div>
+              <ul id="xa-sent-sends" class="xa-sent__sends"></ul>
             </div>
           </div>
         </main>

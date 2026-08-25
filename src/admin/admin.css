@@ -1614,6 +1614,111 @@ body.xa-body {
   border-color: var(--xa-accent-border);
 }
 
+.xa-sent__sends {
+  display: grid;
+  gap: 0.75rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.xa-sent__send {
+  border: 1px solid #e0deed;
+  border-radius: 1rem;
+  background: #fff;
+  overflow: hidden;
+}
+
+.xa-sent__send--open {
+  border-color: var(--xa-accent-border);
+}
+
+.xa-sent__send-tab {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  width: 100%;
+  padding: 1rem 1.25rem;
+  border: none;
+  background: #fff;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+@media (max-width: 639px) {
+  .xa-sent__send-tab {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 0.65rem;
+  }
+}
+
+.xa-sent__send-tab:hover {
+  background: #fafbff;
+}
+
+.xa-sent__send--open .xa-sent__send-tab {
+  background: #eff6ff;
+}
+
+.xa-sent__send-main {
+  min-width: 0;
+  display: grid;
+  gap: 0.2rem;
+}
+
+.xa-sent__send-name,
+.xa-sent__send-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.xa-sent__send-name {
+  font-size: 0.95rem;
+  font-weight: 600;
+}
+
+.xa-sent__send-meta {
+  color: #5c5f7a;
+  font-size: 0.8125rem;
+}
+
+.xa-sent__send-date {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+  gap: 0.75rem;
+  color: #5c5f7a;
+  font-size: 0.8125rem;
+}
+
+.xa-sent__send-panel {
+  border-top: 1px solid #eceef6;
+}
+
+.xa-sent__send-panel > .xa-sent__muted {
+  margin: 0;
+  padding: 1rem 1.25rem 1.25rem;
+}
+
+.xa-sent__send-panel ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.xa-sent__send-panel li {
+  border-bottom: 1px solid #eceef6;
+}
+
+.xa-sent__send-panel li:last-child {
+  border-bottom: none;
+}
+
 .xa-sent__days {
   display: grid;
   gap: 1.5rem;

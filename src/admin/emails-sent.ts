@@ -2,7 +2,6 @@ import { requireAdminSession, setAdminLoading } from "./auth-guard";
 import { initAdminShell } from "./shell";
 import {
   formatSentEmailDateKeyLabel,
-  formatSentEmailDayLabel,
   sentEmailDateKeyWithOffset,
   toSentEmailDateKey,
 } from "../lib/email/sent-email-dates";
@@ -17,14 +16,23 @@ type SentEmailEvent = {
   occurredAt: string;
 };
 
+type OutreachSend = {
+  id: string;
+  listName: string;
+  subject: string;
+  fromEmail: string;
+  templateName: string | null;
+  sentAt: string;
+  recipientCount: number;
+  sentCount: number;
+  failedCount: number;
+  status: string;
+};
+
 type SentEmailRow = {
   id: string;
   recipientName: string | null;
   recipientEmail: string;
-  subject: string;
-  fromEmail: string;
-  templateName: string | null;
-  listName: string | null;
   sentAt: string;
   deliveryStatus: string;
   error: string | null;
@@ -34,24 +42,22 @@ type SentEmailRow = {
   lastOpenedAt: string | null;
   firstClickedAt: string | null;
   lastClickedAt: string | null;
-  events: SentEmailEvent[];
+  events: SentEmailEvent[] | null;
 };
 
-type DaySummary = {
-  dateKey: string;
-  emailCount: number;
-  totalOpens: number;
-  totalClicks: number;
-};
-
-type DaySortField = "sentAt" | "views" | "clicks";
+type RecipientSortField = "sentAt" | "views" | "clicks";
 type SortDirection = "asc" | "desc";
-type DaySort = { field: DaySortField; direction: SortDirection };
+type RecipientSort = { field: RecipientSortField; direction: SortDirection };
 type DatePreset = "all" | "today" | "yesterday" | "last7";
 
-const EMAIL_PAGE_SIZE = 1000;
-const EVENT_ID_BATCH_SIZE = 100;
-const DEFAULT_DAY_SORT: DaySort = { field: "sentAt", direction: "desc" };
+type RecipientStat = {
+  outreachId: string;
+  openCount: number;
+  clickCount: number;
+};
+
+const RECIPIENT_PAGE_SIZE = 1000;
+const DEFAULT_RECIPIENT_SORT: RecipientSort = { field: "sentAt", direction: "desc" };
 
 function escapeHtml(value: string) {
   return value
@@ -148,16 +154,16 @@ function detectActivePreset(fromDate: string, toDate: string): DatePreset | null
   return null;
 }
 
-function filterRowsByDateRange(rows: SentEmailRow[], fromDate: string, toDate: string) {
-  return rows.filter((row) => {
-    const dateKey = toSentEmailDateKey(row.sentAt);
+function filterSendsByDateRange(sends: OutreachSend[], fromDate: string, toDate: string) {
+  return sends.filter((send) => {
+    const dateKey = toSentEmailDateKey(send.sentAt);
     if (fromDate && dateKey < fromDate) return false;
     if (toDate && dateKey > toDate) return false;
     return true;
   });
 }
 
-function sortDayRows(rows: SentEmailRow[], sort: DaySort) {
+function sortRecipientRows(rows: SentEmailRow[], sort: RecipientSort) {
   const sorted = [...rows];
   sorted.sort((a, b) => {
     let comparison = 0;
@@ -181,27 +187,24 @@ function sortDayRows(rows: SentEmailRow[], sort: DaySort) {
   return sorted;
 }
 
-function buildDaySummaries(rows: SentEmailRow[]): DaySummary[] {
-  const byDay = new Map<string, DaySummary>();
-  for (const row of rows) {
-    const dateKey = toSentEmailDateKey(row.sentAt);
-    const existing = byDay.get(dateKey) ?? { dateKey, emailCount: 0, totalOpens: 0, totalClicks: 0 };
-    existing.emailCount += 1;
-    existing.totalOpens += row.openCount;
-    existing.totalClicks += row.clickCount;
-    byDay.set(dateKey, existing);
-  }
-  return [...byDay.values()].sort((a, b) => b.dateKey.localeCompare(a.dateKey));
-}
-
 function sortIcon(active: boolean, direction: SortDirection) {
   if (!active) return "↕";
   return direction === "asc" ? "↑" : "↓";
 }
 
+function buildSendDateKeys(sends: OutreachSend[]) {
+  const keys = new Set<string>();
+  for (const send of sends) {
+    keys.add(toSentEmailDateKey(send.sentAt));
+  }
+  return [...keys].sort((a, b) => b.localeCompare(a));
+}
+
 async function init() {
   const session = await requireAdminSession();
   if (!session) return;
+
+  const adminSession = session;
 
   initAdminShell(session, "emails-sent");
   setAdminLoading(false);
@@ -219,21 +222,25 @@ async function init() {
   const noMatchEl = document.getElementById("xa-sent-no-match");
   const noMatchHintEl = document.getElementById("xa-sent-no-match-hint");
   const showAllBtn = document.getElementById("xa-sent-show-all");
-  const daysEl = document.getElementById("xa-sent-days");
+  const sendsEl = document.getElementById("xa-sent-sends");
 
-  if (!fromInput || !toInput || !statsEl || !daysEl) return;
+  if (!fromInput || !toInput || !statsEl || !sendsEl) return;
 
   const fromField = fromInput;
   const toField = toInput;
   const stats = statsEl;
-  const days = daysEl;
+  const sendsList = sendsEl;
 
-  let rows: SentEmailRow[] = [];
-  let daySummaries: DaySummary[] = [];
+  let sends: OutreachSend[] = [];
+  let recipientStats: RecipientStat[] = [];
   let fromDate = "";
   let toDate = "";
-  let expandedId: string | null = null;
-  const daySorts: Record<string, DaySort> = {};
+  let expandedSendId: string | null = null;
+  let expandedRecipientId: string | null = null;
+  let loadingSendId: string | null = null;
+  let loadingEventsId: string | null = null;
+  const recipientsBySend = new Map<string, SentEmailRow[]>();
+  const recipientSorts: Record<string, RecipientSort> = {};
 
   function setError(message: string) {
     if (errorEl) errorEl.textContent = message;
@@ -252,40 +259,151 @@ async function init() {
     applyPreset("all");
   }
 
-  function toggleDaySort(dateKey: string, field: "views" | "clicks") {
-    const existing = daySorts[dateKey] ?? DEFAULT_DAY_SORT;
+  function toggleRecipientSort(sendId: string, field: "views" | "clicks") {
+    const existing = recipientSorts[sendId] ?? DEFAULT_RECIPIENT_SORT;
     if (existing.field === field) {
-      daySorts[dateKey] = { field, direction: existing.direction === "asc" ? "desc" : "asc" };
+      recipientSorts[sendId] = { field, direction: existing.direction === "asc" ? "desc" : "asc" };
     } else {
-      daySorts[dateKey] = { field, direction: "desc" };
+      recipientSorts[sendId] = { field, direction: "desc" };
     }
     render();
   }
 
-  function renderRow(row: SentEmailRow) {
-    const isExpanded = expandedId === row.id;
+  async function loadSendRecipients(sendId: string) {
+    if (recipientsBySend.has(sendId)) return;
+
+    loadingSendId = sendId;
+    render();
+
+    const allRows: Array<Record<string, unknown>> = [];
+    let offset = 0;
+
+    while (true) {
+      const { data, error } = await adminSession.supabase
+        .from("email_outreach_recipients")
+        .select(
+          `
+            id,
+            name,
+            email,
+            status,
+            error,
+            sent_at,
+            created_at,
+            delivery_status,
+            open_count,
+            click_count,
+            first_opened_at,
+            last_opened_at,
+            first_clicked_at,
+            last_clicked_at
+          `,
+        )
+        .eq("outreach_id", sendId)
+        .order("sent_at", { ascending: false, nullsFirst: false })
+        .range(offset, offset + RECIPIENT_PAGE_SIZE - 1);
+
+      if (error) {
+        setError(error.message);
+        loadingSendId = null;
+        render();
+        return;
+      }
+
+      const batch = data ?? [];
+      allRows.push(...(batch as Array<Record<string, unknown>>));
+      if (batch.length < RECIPIENT_PAGE_SIZE) break;
+      offset += RECIPIENT_PAGE_SIZE;
+    }
+
+    recipientsBySend.set(
+      sendId,
+      allRows.map((row) => ({
+        id: String(row.id),
+        recipientName: row.name ? String(row.name) : null,
+        recipientEmail: String(row.email ?? ""),
+        sentAt: String(row.sent_at || row.created_at || ""),
+        deliveryStatus: String(row.delivery_status ?? row.status ?? "sent"),
+        error: row.error ? String(row.error) : null,
+        openCount: Number(row.open_count ?? 0),
+        clickCount: Number(row.click_count ?? 0),
+        firstOpenedAt: row.first_opened_at ? String(row.first_opened_at) : null,
+        lastOpenedAt: row.last_opened_at ? String(row.last_opened_at) : null,
+        firstClickedAt: row.first_clicked_at ? String(row.first_clicked_at) : null,
+        lastClickedAt: row.last_clicked_at ? String(row.last_clicked_at) : null,
+        events: null,
+      })),
+    );
+
+    if (loadingSendId === sendId) loadingSendId = null;
+    render();
+  }
+
+  async function loadRecipientEvents(sendId: string, recipientId: string) {
+    const rows = recipientsBySend.get(sendId);
+    const recipient = rows?.find((row) => row.id === recipientId);
+    if (!recipient || recipient.events) return;
+
+    loadingEventsId = recipientId;
+    render();
+
+    const { data, error } = await adminSession.supabase
+      .from("email_outreach_events")
+      .select("id, event_type, link_url, user_agent, occurred_at")
+      .eq("recipient_id", recipientId)
+      .order("occurred_at", { ascending: false });
+
+    if (error) {
+      setError(error.message);
+      loadingEventsId = null;
+      render();
+      return;
+    }
+
+    recipient.events = (data ?? []).map((event) => ({
+      id: String(event.id),
+      eventType: event.event_type as EventType,
+      linkUrl: event.link_url ? String(event.link_url) : null,
+      userAgent: event.user_agent ? String(event.user_agent) : null,
+      occurredAt: String(event.occurred_at),
+    }));
+
+    if (loadingEventsId === recipientId) loadingEventsId = null;
+    render();
+  }
+
+  function renderRecipient(row: SentEmailRow) {
+    const isExpanded = expandedRecipientId === row.id;
     const name = row.recipientName?.trim() || row.recipientEmail;
-    const eventsHtml =
-      row.events.length === 0
-        ? `<p class="xa-sent__muted">No opens or clicks recorded yet. Enable open/click tracking and the Resend webhook for your sending domain.</p>`
-        : `<ul class="xa-sent__events">${row.events
-            .map(
-              (event) => `
-                <li>
-                  <div class="xa-sent__event-top">
-                    <strong>${escapeHtml(eventLabel(event.eventType))}</strong>
-                    <span>${escapeHtml(formatDateTime(event.occurredAt))}</span>
-                  </div>
-                  ${
-                    event.linkUrl
-                      ? `<p class="xa-sent__event-link">Link: <a href="${escapeHtml(event.linkUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(event.linkUrl)}</a></p>`
-                      : ""
-                  }
-                  ${event.userAgent ? `<p class="xa-sent__muted">${escapeHtml(event.userAgent)}</p>` : ""}
-                </li>
-              `,
-            )
-            .join("")}</ul>`;
+    const events = row.events;
+    let eventsHtml = "";
+
+    if (!isExpanded) {
+      eventsHtml = "";
+    } else if (loadingEventsId === row.id && !events) {
+      eventsHtml = `<p class="xa-sent__muted">Loading activity…</p>`;
+    } else if (!events || events.length === 0) {
+      eventsHtml = `<p class="xa-sent__muted">No opens or clicks recorded yet. Enable open/click tracking and the Resend webhook for your sending domain.</p>`;
+    } else {
+      eventsHtml = `<ul class="xa-sent__events">${events
+        .map(
+          (event) => `
+            <li>
+              <div class="xa-sent__event-top">
+                <strong>${escapeHtml(eventLabel(event.eventType))}</strong>
+                <span>${escapeHtml(formatDateTime(event.occurredAt))}</span>
+              </div>
+              ${
+                event.linkUrl
+                  ? `<p class="xa-sent__event-link">Link: <a href="${escapeHtml(event.linkUrl)}" target="_blank" rel="noopener noreferrer">${escapeHtml(event.linkUrl)}</a></p>`
+                  : ""
+              }
+              ${event.userAgent ? `<p class="xa-sent__muted">${escapeHtml(event.userAgent)}</p>` : ""}
+            </li>
+          `,
+        )
+        .join("")}</ul>`;
+    }
 
     return `
       <li>
@@ -295,15 +413,11 @@ async function init() {
               <span>${escapeHtml(name)}</span>
               <span class="xa-sent__badge ${deliveryStatusClass(row.deliveryStatus)}">${escapeHtml(deliveryStatusLabel(row.deliveryStatus))}</span>
             </span>
-            <span class="xa-sent__row-subject">${escapeHtml(row.subject)}</span>
-            ${row.templateName ? `<span class="xa-sent__row-meta">Template: ${escapeHtml(row.templateName)}</span>` : ""}
-            ${row.listName ? `<span class="xa-sent__row-meta">List: ${escapeHtml(row.listName)}</span>` : ""}
-            ${row.fromEmail ? `<span class="xa-sent__row-meta">From: ${escapeHtml(row.fromEmail)}</span>` : ""}
             ${row.error ? `<span class="xa-sent__row-meta xa-sent__row-meta--error">${escapeHtml(row.error)}</span>` : ""}
           </span>
           <span class="xa-sent__row-recipients">${escapeHtml(row.recipientEmail)}</span>
-          <span class="xa-sent__metric"><span class="xa-sent__metric-label">Views</span> ${row.openCount}</span>
-          <span class="xa-sent__metric"><span class="xa-sent__metric-label">Clicks</span> ${row.clickCount}</span>
+          <span class="xa-sent__metric"><span class="xa-sent__metric-label">Opened</span> ${row.openCount > 0 ? "Yes" : "No"} · ${row.openCount}</span>
+          <span class="xa-sent__metric"><span class="xa-sent__metric-label">Clicked</span> ${row.clickCount > 0 ? "Yes" : "No"} · ${row.clickCount}</span>
           <span class="xa-sent__row-sent">
             <span>${escapeHtml(formatDateTime(row.sentAt))}</span>
             <span class="xa-sent__chevron${isExpanded ? " xa-sent__chevron--open" : ""}" aria-hidden="true">▾</span>
@@ -329,26 +443,68 @@ async function init() {
     `;
   }
 
+  function renderSendPanel(send: OutreachSend) {
+    if (loadingSendId === send.id && !recipientsBySend.has(send.id)) {
+      return `<div class="xa-sent__send-panel"><p class="xa-sent__muted">Loading recipients…</p></div>`;
+    }
+
+    const recipients = recipientsBySend.get(send.id) ?? [];
+    if (recipients.length === 0) {
+      return `<div class="xa-sent__send-panel"><p class="xa-sent__muted">No recipient records for this send.</p></div>`;
+    }
+
+    const sort = recipientSorts[send.id] ?? DEFAULT_RECIPIENT_SORT;
+    const sorted = sortRecipientRows(recipients, sort);
+    const opened = recipients.filter((row) => row.openCount > 0).length;
+    const clicked = recipients.filter((row) => row.clickCount > 0).length;
+    const totalOpens = recipients.reduce((sum, row) => sum + row.openCount, 0);
+    const totalClicks = recipients.reduce((sum, row) => sum + row.clickCount, 0);
+
+    return `
+      <div class="xa-sent__send-panel">
+        <div class="xa-sent__day-head">
+          <div>
+            <h2>${escapeHtml(send.subject)}</h2>
+            <p>${recipients.length} email${recipients.length === 1 ? "" : "s"} · ${opened} opened · ${clicked} clicked · ${totalOpens} views · ${totalClicks} clicks</p>
+            ${send.templateName ? `<p>Template: ${escapeHtml(send.templateName)}</p>` : ""}
+            ${send.fromEmail ? `<p>From: ${escapeHtml(send.fromEmail)}</p>` : ""}
+          </div>
+          <div class="xa-sent__sorts">
+            <span>Sort by</span>
+            <button type="button" class="xa-sent__chip${sort.field === "views" ? " xa-sent__chip--active" : ""}" data-xa-sort-send="${escapeHtml(send.id)}" data-xa-sort-field="views">
+              Opened ${sortIcon(sort.field === "views", sort.direction)}
+            </button>
+            <button type="button" class="xa-sent__chip${sort.field === "clicks" ? " xa-sent__chip--active" : ""}" data-xa-sort-send="${escapeHtml(send.id)}" data-xa-sort-field="clicks">
+              Clicked ${sortIcon(sort.field === "clicks", sort.direction)}
+            </button>
+          </div>
+        </div>
+        <div class="xa-sent__cols">
+          <span>Email</span>
+          <span>Recipient</span>
+          <span>Opened</span>
+          <span>Clicked</span>
+          <span>Sent</span>
+        </div>
+        <ul>${sorted.map(renderRecipient).join("")}</ul>
+      </div>
+    `;
+  }
+
   function render() {
-    const filteredRows = filterRowsByDateRange(rows, fromDate, toDate);
-    const filteredDaySummaries = daySummaries.filter((summary) => {
-      if (fromDate && summary.dateKey < fromDate) return false;
-      if (toDate && summary.dateKey > toDate) return false;
-      return true;
-    });
+    const filteredSends = filterSendsByDateRange(sends, fromDate, toDate);
+    const dateKeys = buildSendDateKeys(sends);
     const hasDateFilter = Boolean(fromDate || toDate);
     const activePreset = detectActivePreset(fromDate, toDate);
-    const totalOpens = filteredRows.reduce((sum, row) => sum + row.openCount, 0);
-    const totalClicks = filteredRows.reduce((sum, row) => sum + row.clickCount, 0);
-    const openedEmails = filteredRows.filter((row) => row.openCount > 0).length;
-    const clickedEmails = filteredRows.filter((row) => row.clickCount > 0).length;
+    const filteredSendIds = new Set(filteredSends.map((send) => send.id));
+    const filteredStats = recipientStats.filter((row) => filteredSendIds.has(row.outreachId));
+    const totalOpens = filteredStats.reduce((sum, row) => sum + row.openCount, 0);
+    const totalClicks = filteredStats.reduce((sum, row) => sum + row.clickCount, 0);
+    const openedEmails = filteredStats.filter((row) => row.openCount > 0).length;
+    const clickedEmails = filteredStats.filter((row) => row.clickCount > 0).length;
 
     if (countLabelEl) {
-      countLabelEl.textContent = `${filteredRows.length} of ${rows.length} logged email${rows.length === 1 ? "" : "s"} shown${
-        filteredDaySummaries.length > 0
-          ? ` across ${filteredDaySummaries.length} day${filteredDaySummaries.length === 1 ? "" : "s"}`
-          : ""
-      }`;
+      countLabelEl.textContent = `${filteredSends.length} of ${sends.length} send${sends.length === 1 ? "" : "s"} shown`;
     }
 
     clearBtn?.toggleAttribute("hidden", !hasDateFilter);
@@ -363,13 +519,14 @@ async function init() {
     toField.min = fromDate || "";
 
     if (dateChipsWrap && dateChipList) {
-      dateChipsWrap.hidden = daySummaries.length === 0;
-      dateChipList.innerHTML = daySummaries
-        .map((summary) => {
-          const isActive = fromDate === summary.dateKey && toDate === summary.dateKey;
+      dateChipsWrap.hidden = dateKeys.length === 0;
+      dateChipList.innerHTML = dateKeys
+        .map((dateKey) => {
+          const isActive = fromDate === dateKey && toDate === dateKey;
+          const count = sends.filter((send) => toSentEmailDateKey(send.sentAt) === dateKey).length;
           return `
-            <button type="button" class="xa-sent__chip${isActive ? " xa-sent__chip--active" : ""}" data-xa-date-key="${escapeHtml(summary.dateKey)}">
-              ${escapeHtml(formatSentEmailDateKeyLabel(summary.dateKey))} (${summary.emailCount})
+            <button type="button" class="xa-sent__chip${isActive ? " xa-sent__chip--active" : ""}" data-xa-date-key="${escapeHtml(dateKey)}">
+              ${escapeHtml(formatSentEmailDateKeyLabel(dateKey))} (${count})
             </button>
           `;
         })
@@ -388,16 +545,16 @@ async function init() {
     stats.innerHTML = `
       <div class="xa-sent__stat">
         <p>Sent emails</p>
-        <strong>${filteredRows.length}</strong>
+        <strong>${filteredStats.length.toLocaleString()}</strong>
       </div>
       <div class="xa-sent__stat">
         <p>Total views</p>
-        <strong>${totalOpens}</strong>
+        <strong>${totalOpens.toLocaleString()}</strong>
         <span>${openedEmails} email${openedEmails === 1 ? "" : "s"} viewed at least once</span>
       </div>
       <div class="xa-sent__stat">
         <p>Total clicks</p>
-        <strong>${totalClicks}</strong>
+        <strong>${totalClicks.toLocaleString()}</strong>
         <span>${clickedEmails} email${clickedEmails === 1 ? "" : "s"} clicked at least once</span>
       </div>
       <div class="xa-sent__stat xa-sent__stat--accent">
@@ -406,13 +563,13 @@ async function init() {
       </div>
     `;
 
-    if (filteredRows.length === 0) {
-      days.innerHTML = "";
+    if (filteredSends.length === 0) {
+      sendsList.innerHTML = "";
       noMatchEl?.removeAttribute("hidden");
       if (noMatchHintEl) {
         noMatchHintEl.textContent =
-          rows.length > 0
-            ? `Logged sends are available for ${daySummaries.map((summary) => formatSentEmailDateKeyLabel(summary.dateKey)).join(", ")}.`
+          sends.length > 0
+            ? `Sends are logged for ${dateKeys.map((key) => formatSentEmailDateKeyLabel(key)).join(", ")}.`
             : "Try widening the date range or clear the filter.";
       }
       return;
@@ -420,73 +577,64 @@ async function init() {
 
     noMatchEl?.setAttribute("hidden", "");
 
-    const rowsByDay = new Map<string, SentEmailRow[]>();
-    for (const row of filteredRows) {
-      const dateKey = toSentEmailDateKey(row.sentAt);
-      const bucket = rowsByDay.get(dateKey) ?? [];
-      bucket.push(row);
-      rowsByDay.set(dateKey, bucket);
-    }
-
-    const dayKeys =
-      filteredDaySummaries.length > 0
-        ? filteredDaySummaries.map((summary) => summary.dateKey)
-        : [...rowsByDay.keys()].sort((a, b) => b.localeCompare(a));
-
-    days.innerHTML = dayKeys
-      .map((dateKey) => {
-        const sort = daySorts[dateKey] ?? DEFAULT_DAY_SORT;
-        const dayRows = sortDayRows(rowsByDay.get(dateKey) ?? [], sort);
-        const summary = filteredDaySummaries.find((item) => item.dateKey === dateKey);
-        const emailCount = summary?.emailCount ?? dayRows.length;
-        const dayOpens = summary?.totalOpens ?? dayRows.reduce((sum, row) => sum + row.openCount, 0);
-        const dayClicks = summary?.totalClicks ?? dayRows.reduce((sum, row) => sum + row.clickCount, 0);
-
+    sendsList.innerHTML = filteredSends
+      .map((send) => {
+        const isOpen = expandedSendId === send.id;
         return `
-          <section class="xa-sent__day">
-            <div class="xa-sent__day-head">
-              <div>
-                <h2>${escapeHtml(formatSentEmailDayLabel(dateKey))}</h2>
-                <p>${emailCount} email${emailCount === 1 ? "" : "s"} sent · ${dayOpens} views · ${dayClicks} clicks</p>
-              </div>
-              <div class="xa-sent__sorts">
-                <span>Sort by</span>
-                <button type="button" class="xa-sent__chip${sort.field === "views" ? " xa-sent__chip--active" : ""}" data-xa-sort-day="${escapeHtml(dateKey)}" data-xa-sort-field="views">
-                  Views ${sortIcon(sort.field === "views", sort.direction)}
-                </button>
-                <button type="button" class="xa-sent__chip${sort.field === "clicks" ? " xa-sent__chip--active" : ""}" data-xa-sort-day="${escapeHtml(dateKey)}" data-xa-sort-field="clicks">
-                  Clicks ${sortIcon(sort.field === "clicks", sort.direction)}
-                </button>
-              </div>
-            </div>
-            <div class="xa-sent__cols">
-              <span>Email</span>
-              <span>Recipient</span>
-              <span>Views</span>
-              <span>Clicks</span>
-              <span>Sent</span>
-            </div>
-            <ul>${dayRows.map(renderRow).join("")}</ul>
-          </section>
+          <li class="xa-sent__send${isOpen ? " xa-sent__send--open" : ""}">
+            <button type="button" class="xa-sent__send-tab" data-send-id="${escapeHtml(send.id)}" aria-expanded="${isOpen ? "true" : "false"}">
+              <span class="xa-sent__send-main">
+                <span class="xa-sent__send-name">${escapeHtml(send.listName)}</span>
+                <span class="xa-sent__send-meta">${escapeHtml(send.subject)} · ${send.sentCount.toLocaleString()} sent</span>
+              </span>
+              <span class="xa-sent__send-date">
+                <span>${escapeHtml(formatDateTime(send.sentAt))}</span>
+                <span class="xa-sent__chevron${isOpen ? " xa-sent__chevron--open" : ""}" aria-hidden="true">▾</span>
+              </span>
+            </button>
+            ${isOpen ? renderSendPanel(send) : ""}
+          </li>
         `;
       })
       .join("");
 
-    days.querySelectorAll<HTMLButtonElement>("[data-sent-id]").forEach((button) => {
+    sendsList.querySelectorAll<HTMLButtonElement>("[data-send-id]").forEach((button) => {
       button.addEventListener("click", () => {
-        const id = button.dataset.sentId;
+        const id = button.dataset.sendId;
         if (!id) return;
-        expandedId = expandedId === id ? null : id;
+        expandedRecipientId = null;
+        if (expandedSendId === id) {
+          expandedSendId = null;
+          render();
+          return;
+        }
+        expandedSendId = id;
+        void loadSendRecipients(id);
         render();
       });
     });
 
-    days.querySelectorAll<HTMLButtonElement>("[data-xa-sort-day]").forEach((button) => {
+    sendsList.querySelectorAll<HTMLButtonElement>("[data-sent-id]").forEach((button) => {
       button.addEventListener("click", () => {
-        const dateKey = button.dataset.xaSortDay;
+        const id = button.dataset.sentId;
+        if (!id || !expandedSendId) return;
+        if (expandedRecipientId === id) {
+          expandedRecipientId = null;
+          render();
+          return;
+        }
+        expandedRecipientId = id;
+        void loadRecipientEvents(expandedSendId, id);
+        render();
+      });
+    });
+
+    sendsList.querySelectorAll<HTMLButtonElement>("[data-xa-sort-send]").forEach((button) => {
+      button.addEventListener("click", () => {
+        const sendId = button.dataset.xaSortSend;
         const field = button.dataset.xaSortField;
-        if (!dateKey || (field !== "views" && field !== "clicks")) return;
-        toggleDaySort(dateKey, field);
+        if (!sendId || (field !== "views" && field !== "clicks")) return;
+        toggleRecipientSort(sendId, field);
       });
     });
   }
@@ -510,129 +658,93 @@ async function init() {
   clearBtn?.addEventListener("click", clearDates);
   showAllBtn?.addEventListener("click", clearDates);
 
-  const allRecipientRows: Array<Record<string, unknown>> = [];
-  let offset = 0;
+  async function loadRecipientStats() {
+    const rows: RecipientStat[] = [];
+    let offset = 0;
 
-  while (true) {
-    const { data, error } = await session.supabase
-      .from("email_outreach_recipients")
-      .select(
-        `
-          id,
-          name,
-          email,
-          resend_email_id,
-          status,
-          error,
-          sent_at,
-          created_at,
-          delivery_status,
-          open_count,
-          click_count,
-          first_opened_at,
-          last_opened_at,
-          first_clicked_at,
-          last_clicked_at,
-          email_outreach (
+    while (true) {
+      const { data, error } = await adminSession.supabase
+        .from("email_outreach_recipients")
+        .select("outreach_id, open_count, click_count")
+        .order("id", { ascending: true })
+        .range(offset, offset + RECIPIENT_PAGE_SIZE - 1);
+
+      if (error) {
+        throw new Error(error.message);
+      }
+
+      const batch = data ?? [];
+      for (const row of batch) {
+        rows.push({
+          outreachId: String(row.outreach_id),
+          openCount: Number(row.open_count ?? 0),
+          clickCount: Number(row.click_count ?? 0),
+        });
+      }
+
+      if (batch.length < RECIPIENT_PAGE_SIZE) break;
+      offset += RECIPIENT_PAGE_SIZE;
+    }
+
+    return rows;
+  }
+
+  let loadedStats: RecipientStat[] = [];
+  try {
+    const [sendsResult, statsRows] = await Promise.all([
+      adminSession.supabase
+        .from("email_outreach")
+        .select(
+          `
+            id,
             subject,
             from_email,
+            recipient_count,
+            sent_count,
+            failed_count,
+            status,
+            created_at,
             email_lists ( name ),
             email_templates ( name )
-          )
-        `,
-      )
-      .order("sent_at", { ascending: false })
-      .range(offset, offset + EMAIL_PAGE_SIZE - 1);
+          `,
+        )
+        .in("status", ["sending", "sent", "failed", "partial"])
+        .order("created_at", { ascending: false }),
+      loadRecipientStats(),
+    ]);
 
-    if (error) {
-      setError(error.message);
+    if (sendsResult.error) {
+      setError(sendsResult.error.message);
       emptyEl?.removeAttribute("hidden");
       return;
     }
 
-    const batch = data ?? [];
-    allRecipientRows.push(...(batch as Array<Record<string, unknown>>));
-    if (batch.length < EMAIL_PAGE_SIZE) break;
-    offset += EMAIL_PAGE_SIZE;
+    loadedStats = statsRows;
+    sends = (sendsResult.data ?? []).map((row) => {
+      const list = firstRelation(row.email_lists as { name?: string } | { name?: string }[] | null);
+      const template = firstRelation(row.email_templates as { name?: string } | { name?: string }[] | null);
+      return {
+        id: String(row.id),
+        listName: list?.name ? String(list.name) : "Untitled list",
+        subject: row.subject ? String(row.subject) : "Untitled",
+        fromEmail: row.from_email ? String(row.from_email) : "",
+        templateName: template?.name ? String(template.name) : null,
+        sentAt: String(row.created_at ?? ""),
+        recipientCount: Number(row.recipient_count ?? 0),
+        sentCount: Number(row.sent_count ?? 0),
+        failedCount: Number(row.failed_count ?? 0),
+        status: String(row.status ?? "sent"),
+      };
+    });
+  } catch (error) {
+    setError(error instanceof Error ? error.message : "Unable to load sent email stats.");
+    emptyEl?.removeAttribute("hidden");
+    return;
   }
 
-  const ids = allRecipientRows.map((row) => String(row.id));
-  const eventsByRecipient = new Map<string, SentEmailEvent[]>();
+  recipientStats = loadedStats;
 
-  for (let i = 0; i < ids.length; i += EVENT_ID_BATCH_SIZE) {
-    const batchIds = ids.slice(i, i + EVENT_ID_BATCH_SIZE);
-    if (batchIds.length === 0) continue;
-    const { data: eventRows, error: eventsError } = await session.supabase
-      .from("email_outreach_events")
-      .select("id, recipient_id, event_type, link_url, user_agent, occurred_at")
-      .in("recipient_id", batchIds)
-      .order("occurred_at", { ascending: false });
-
-    if (eventsError) {
-      setError(eventsError.message);
-      emptyEl?.removeAttribute("hidden");
-      return;
-    }
-
-    for (const event of eventRows ?? []) {
-      const recipientId = String(event.recipient_id);
-      const bucket = eventsByRecipient.get(recipientId) ?? [];
-      bucket.push({
-        id: String(event.id),
-        eventType: event.event_type as EventType,
-        linkUrl: event.link_url ? String(event.link_url) : null,
-        userAgent: event.user_agent ? String(event.user_agent) : null,
-        occurredAt: String(event.occurred_at),
-      });
-      eventsByRecipient.set(recipientId, bucket);
-    }
-  }
-
-  rows = allRecipientRows.map((row) => {
-    const outreach = firstRelation(
-      row.email_outreach as
-        | {
-            subject?: string;
-            from_email?: string;
-            email_lists?: { name?: string } | { name?: string }[] | null;
-            email_templates?: { name?: string } | { name?: string }[] | null;
-          }
-        | Array<{
-            subject?: string;
-            from_email?: string;
-            email_lists?: { name?: string } | { name?: string }[] | null;
-            email_templates?: { name?: string } | { name?: string }[] | null;
-          }>
-        | null,
-    );
-    const list = firstRelation(outreach?.email_lists);
-    const template = firstRelation(outreach?.email_templates);
-    const sentAt = String(row.sent_at || row.created_at || "");
-
-    return {
-      id: String(row.id),
-      recipientName: row.name ? String(row.name) : null,
-      recipientEmail: String(row.email ?? ""),
-      subject: outreach?.subject ? String(outreach.subject) : "Untitled",
-      fromEmail: outreach?.from_email ? String(outreach.from_email) : "",
-      templateName: template?.name ? String(template.name) : null,
-      listName: list?.name ? String(list.name) : null,
-      sentAt,
-      deliveryStatus: String(row.delivery_status ?? row.status ?? "sent"),
-      error: row.error ? String(row.error) : null,
-      openCount: Number(row.open_count ?? 0),
-      clickCount: Number(row.click_count ?? 0),
-      firstOpenedAt: row.first_opened_at ? String(row.first_opened_at) : null,
-      lastOpenedAt: row.last_opened_at ? String(row.last_opened_at) : null,
-      firstClickedAt: row.first_clicked_at ? String(row.first_clicked_at) : null,
-      lastClickedAt: row.last_clicked_at ? String(row.last_clicked_at) : null,
-      events: eventsByRecipient.get(String(row.id)) ?? [],
-    };
-  });
-
-  daySummaries = buildDaySummaries(rows);
-
-  if (rows.length === 0) {
+  if (sends.length === 0) {
     emptyEl?.removeAttribute("hidden");
     contentEl?.setAttribute("hidden", "");
     return;
