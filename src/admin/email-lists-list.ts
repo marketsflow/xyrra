@@ -59,10 +59,12 @@ async function init() {
 
   let lists: EmailListItem[] = [];
   let selectedUser: OldUser | null = null;
+  let pageUsers: OldUser[] = [];
   let membershipByEmail = new Map<string, Set<string>>();
   let userPage = 1;
   let userSearch = "";
   let userTotal = 0;
+  let pageMembershipBusy = false;
 
   function userColumnCount() {
     return 2 + lists.length;
@@ -107,6 +109,62 @@ async function init() {
     `;
   }
 
+  function eligiblePageUsers() {
+    return pageUsers.filter((user) => Boolean(user.email));
+  }
+
+  function pageMembersForList(listId: string) {
+    return eligiblePageUsers().filter((user) => {
+      const email = user.email?.toLowerCase() ?? "";
+      return membershipByEmail.get(email)?.has(listId) ?? false;
+    });
+  }
+
+  function updateSelectAllCheckboxes() {
+    if (!usersHeadEl) return;
+
+    const eligible = eligiblePageUsers();
+
+    usersHeadEl.querySelectorAll<HTMLInputElement>("[data-select-all-list-id]").forEach((checkbox) => {
+      const listId = checkbox.dataset.selectAllListId;
+      if (!listId) return;
+
+      if (eligible.length === 0) {
+        checkbox.checked = false;
+        checkbox.indeterminate = false;
+        checkbox.disabled = true;
+        return;
+      }
+
+      const memberCount = pageMembersForList(listId).length;
+      checkbox.disabled = pageMembershipBusy;
+      checkbox.checked = memberCount === eligible.length;
+      checkbox.indeterminate = memberCount > 0 && memberCount < eligible.length;
+    });
+  }
+
+  function bindHeaderSelectAll() {
+    if (!usersHeadEl) return;
+
+    usersHeadEl.querySelectorAll<HTMLInputElement>("[data-select-all-list-id]").forEach((checkbox) => {
+      checkbox.addEventListener("click", (event) => {
+        event.stopPropagation();
+      });
+
+      checkbox.addEventListener("change", () => {
+        const listId = checkbox.dataset.selectAllListId;
+        if (!listId) {
+          checkbox.checked = !checkbox.checked;
+          return;
+        }
+
+        const nextChecked = checkbox.checked;
+        checkbox.indeterminate = false;
+        void togglePageMembership(listId, nextChecked);
+      });
+    });
+  }
+
   function renderUsersTableHead() {
     if (!usersHeadEl) return;
 
@@ -117,12 +175,22 @@ async function init() {
         .map(
           (list) => `
             <th scope="col" class="xa-old-users__list-col" title="${escapeHtml(list.name)}">
-              ${escapeHtml(list.name)}
+              <div class="xa-old-users__list-head">
+                <input
+                  type="checkbox"
+                  data-select-all-list-id="${escapeHtml(list.id)}"
+                  aria-label="Select all users on this page for ${escapeHtml(list.name)}"
+                />
+                <span class="xa-old-users__list-name">${escapeHtml(list.name)}</span>
+              </div>
             </th>
           `,
         )
         .join("")}
     `;
+
+    bindHeaderSelectAll();
+    updateSelectAllCheckboxes();
   }
 
   function renderSelectedUser() {
@@ -226,6 +294,110 @@ async function init() {
     return true;
   }
 
+  function setPageCheckboxesForList(listId: string, checked: boolean) {
+    usersBodyEl?.querySelectorAll<HTMLInputElement>(`input[data-list-id="${listId}"]`).forEach((checkbox) => {
+      if (!checkbox.disabled) {
+        checkbox.checked = checked;
+      }
+    });
+  }
+
+  async function togglePageMembership(listId: string, checked: boolean) {
+    const list = lists.find((item) => item.id === listId);
+    const listName = list?.name ?? "the list";
+    const eligible = eligiblePageUsers();
+
+    if (eligible.length === 0) {
+      setUsersStatus("No users with email addresses on this page.", true);
+      updateSelectAllCheckboxes();
+      return false;
+    }
+
+    if (pageMembershipBusy) {
+      updateSelectAllCheckboxes();
+      return false;
+    }
+
+    pageMembershipBusy = true;
+    updateSelectAllCheckboxes();
+    setUsersStatus(checked ? `Adding this page to ${listName}…` : `Removing this page from ${listName}…`);
+
+    try {
+      if (checked) {
+        const toAdd = eligible.filter((user) => {
+          const email = user.email?.toLowerCase() ?? "";
+          return !membershipByEmail.get(email)?.has(listId);
+        });
+
+        if (toAdd.length > 0) {
+          const { error } = await adminSession.supabase.from("email_list_members").insert(
+            toAdd.map((user) => ({
+              list_id: listId,
+              name: oldUserDisplayName(user),
+              email: user.email!.toLowerCase(),
+              old_user_id: user.id,
+            })),
+          );
+
+          if (error) {
+            setUsersStatus(error.message, true);
+            return false;
+          }
+
+          for (const user of toAdd) {
+            const email = user.email!.toLowerCase();
+            const current = membershipByEmail.get(email) ?? new Set<string>();
+            current.add(listId);
+            membershipByEmail.set(email, current);
+          }
+        }
+
+        setPageCheckboxesForList(listId, true);
+        setUsersStatus(
+          toAdd.length === 0
+            ? `All users on this page are already on ${listName}.`
+            : `Added ${toAdd.length} user${toAdd.length === 1 ? "" : "s"} on this page to ${listName}.`,
+        );
+      } else {
+        const toRemove = pageMembersForList(listId);
+
+        if (toRemove.length > 0) {
+          const emails = toRemove.map((user) => user.email!.toLowerCase());
+          for (let index = 0; index < emails.length; index += 50) {
+            const chunk = emails.slice(index, index + 50);
+            const { error } = await adminSession.supabase
+              .from("email_list_members")
+              .delete()
+              .eq("list_id", listId)
+              .in("email", chunk);
+
+            if (error) {
+              setUsersStatus(error.message, true);
+              return false;
+            }
+          }
+
+          for (const email of emails) {
+            membershipByEmail.get(email)?.delete(listId);
+          }
+        }
+
+        setPageCheckboxesForList(listId, false);
+        setUsersStatus(
+          toRemove.length === 0
+            ? `None of the users on this page are on ${listName}.`
+            : `Removed ${toRemove.length} user${toRemove.length === 1 ? "" : "s"} on this page from ${listName}.`,
+        );
+      }
+
+      await reloadLists(false);
+      return true;
+    } finally {
+      pageMembershipBusy = false;
+      updateSelectAllCheckboxes();
+    }
+  }
+
   async function reloadLists(reloadUsers = true) {
     const { data, error } = await adminSession.supabase
       .from("email_lists")
@@ -318,7 +490,7 @@ async function init() {
         const listId = checkbox.dataset.listId;
         const user = users.find((item) => item.id === userId);
 
-        if (!user || !listId) {
+        if (!user || !listId || pageMembershipBusy) {
           checkbox.checked = !checkbox.checked;
           return;
         }
@@ -380,8 +552,10 @@ async function init() {
     const { data, error, count } = await query;
 
     if (error) {
+      pageUsers = [];
       setUsersStatus(error.message, true);
       usersBodyEl.innerHTML = `<tr><td colspan="${columnCount}" class="xa-users__empty">Unable to load users.</td></tr>`;
+      updateSelectAllCheckboxes();
       return;
     }
 
@@ -390,6 +564,7 @@ async function init() {
     userPage = Math.min(userPage, totalPages);
 
     const users = (data ?? []).map((row) => mapOldUserRow(row as Record<string, unknown>));
+    pageUsers = users;
     await loadMembershipForEmails(users.map((user) => user.email ?? ""));
 
     if (users.length === 0) {
@@ -437,6 +612,7 @@ async function init() {
     }
 
     updateUserPagination(userPage, totalPages, userTotal);
+    updateSelectAllCheckboxes();
     setUsersStatus(
       userTotal === 0
         ? "No users found."

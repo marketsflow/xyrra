@@ -1233,11 +1233,35 @@ body.xa-body {
 
 .xa-old-users__list-col {
   max-width: 8rem;
+  text-align: center;
+  font-size: 0.75rem;
+}
+
+.xa-old-users__list-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.xa-old-users__list-head input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.xa-old-users__list-head input:disabled {
+  cursor: default;
+}
+
+.xa-old-users__list-name {
+  display: block;
+  max-width: 8rem;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  text-align: center;
-  font-size: 0.75rem;
 }
 
 .xa-old-users__check-col {
