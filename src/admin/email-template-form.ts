@@ -1,5 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
-import { buildEmailInlineImageBlock, normalizeEmailInlineImages } from "../lib/email/email-inline-images";
+import { bindEmailImageResize } from "./email-image-resize";
+import { buildEmailInlineImageBlock } from "../lib/email/email-inline-images";
 import { uploadEmailTemplateImage } from "../lib/email/email-template-images";
 import {
   buildEmailHtml,
@@ -84,9 +85,87 @@ export function bindEmailTemplateForm(options: {
     : DEFAULT_FROM_EMAIL;
   editorField.innerHTML = savedBaseline.editableContent;
 
-  function currentEditableContent() {
-    return editorField.innerHTML.trim();
+  function emptyParagraph() {
+    const p = document.createElement("p");
+    p.innerHTML = "<br>";
+    return p;
   }
+
+  function meaningfulSibling(node: ChildNode | null, direction: "next" | "previous") {
+    let current = node;
+    while (current) {
+      if (current.nodeType === Node.TEXT_NODE && !current.textContent?.trim()) {
+        current = direction === "next" ? current.nextSibling : current.previousSibling;
+        continue;
+      }
+      return current;
+    }
+    return null;
+  }
+
+  function isImageBlock(node: ChildNode | null) {
+    return node instanceof HTMLElement && node.matches("[data-xyrra-email-inline-image]");
+  }
+
+  function prepareEditorImages() {
+    editorField.querySelectorAll("p > [data-xyrra-email-inline-image]").forEach((block) => {
+      const parent = block.parentElement;
+      if (!parent) return;
+      parent.before(block);
+      if (!parent.textContent?.trim()) parent.remove();
+    });
+
+    editorField.querySelectorAll("[data-xyrra-email-inline-image]").forEach((block) => {
+      if (!(block instanceof HTMLElement)) return;
+      block.setAttribute("contenteditable", "false");
+      const prev = meaningfulSibling(block.previousSibling, "previous");
+      if (!prev || isImageBlock(prev)) block.before(emptyParagraph());
+      const next = meaningfulSibling(block.nextSibling, "next");
+      if (!next || isImageBlock(next)) block.after(emptyParagraph());
+    });
+  }
+
+  function placeCaretIn(el: HTMLElement) {
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(true);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  }
+
+  prepareEditorImages();
+
+  function isEmptyParagraph(node: ChildNode | null) {
+    return (
+      node instanceof HTMLElement &&
+      node.tagName === "P" &&
+      !node.textContent?.trim()
+    );
+  }
+
+  function currentEditableContent() {
+    const clone = editorField.cloneNode(true) as HTMLElement;
+    clone.querySelectorAll("[data-xyrra-email-inline-image]").forEach((block) => {
+      block.removeAttribute("contenteditable");
+      let next = block.nextSibling;
+      while (next) {
+        if (next.nodeType === Node.TEXT_NODE && !next.textContent?.trim()) {
+          const whitespace = next;
+          next = next.nextSibling;
+          whitespace.remove();
+          continue;
+        }
+        if (!isEmptyParagraph(next)) break;
+        const empty = next;
+        next = next.nextSibling;
+        empty.remove();
+      }
+    });
+    return clone.innerHTML.trim();
+  }
+
+  savedBaseline.editableContent = currentEditableContent();
 
   function currentBodyHtml() {
     return buildEmailHtml(currentEditableContent());
@@ -128,12 +207,77 @@ export function bindEmailTemplateForm(options: {
     return stripped.length > 0 || /<img\b/i.test(content);
   }
 
+  function updateSaveState() {
+    saveButton.disabled =
+      saveButton.dataset.pending === "true" ||
+      subjectField.value.trim().length === 0 ||
+      !isValidContent(currentEditableContent()) ||
+      (options.mode === "create" ? !nameInput?.value.trim() : !hasChanges());
+  }
+
+  let previewRaf = 0;
+  function schedulePreviewAndSaveState() {
+    imageResize.sync();
+    updateSaveState();
+    cancelAnimationFrame(previewRaf);
+    previewRaf = requestAnimationFrame(updatePreview);
+  }
+
+  const imageResize = bindEmailImageResize(editorField, {
+    onChange: schedulePreviewAndSaveState,
+  });
+
   function setImageBusy(busy: boolean) {
     if (imageBtn) {
       imageBtn.disabled = busy;
       imageBtn.textContent = busy ? "Uploading…" : "Image";
     }
     if (imageInput) imageInput.disabled = busy;
+  }
+
+  let savedRange: Range | null = null;
+
+  function saveEditorRange() {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0 && editorField.contains(selection.anchorNode)) {
+      savedRange = selection.getRangeAt(0).cloneRange();
+    }
+  }
+
+  function restoreEditorRange() {
+    editorField.focus();
+    if (!savedRange) return;
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    try {
+      selection?.addRange(savedRange);
+    } catch {
+      savedRange = null;
+    }
+  }
+
+  function insertImageHtml(html: string) {
+    const insertId = `xa-img-${crypto.randomUUID()}`;
+    const marked = html.replace(
+      'data-xyrra-email-inline-image="true"',
+      `data-xyrra-email-inline-image="true" data-xa-inserted="${insertId}"`,
+    );
+    restoreEditorRange();
+    document.execCommand("insertHTML", false, marked);
+    if (!editorField.querySelector(`[data-xa-inserted="${insertId}"]`)) {
+      const last = editorField.lastElementChild;
+      if (last) last.insertAdjacentHTML("beforebegin", marked);
+      else editorField.insertAdjacentHTML("beforeend", marked);
+    }
+
+    prepareEditorImages();
+    const block = editorField.querySelector(`[data-xa-inserted="${insertId}"]`);
+    if (block instanceof HTMLElement) {
+      block.removeAttribute("data-xa-inserted");
+      const after = meaningfulSibling(block.nextSibling, "next");
+      if (after instanceof HTMLElement) placeCaretIn(after);
+    }
+    imageResize.sync();
   }
 
   async function insertSelectedImage(files: FileList | null) {
@@ -154,21 +298,9 @@ export function bindEmailTemplateForm(options: {
       return;
     }
 
-    editorField.insertAdjacentHTML(
-      "beforeend",
-      buildEmailInlineImageBlock(result.publicUrl, file.name.trim() || "Image"),
-    );
-    editorField.innerHTML = normalizeEmailInlineImages(editorField.innerHTML);
+    insertImageHtml(buildEmailInlineImageBlock(result.publicUrl, file.name.trim() || "Image"));
     updatePreview();
     updateSaveState();
-  }
-
-  function updateSaveState() {
-    saveButton.disabled =
-      saveButton.dataset.pending === "true" ||
-      subjectField.value.trim().length === 0 ||
-      !isValidContent(currentEditableContent()) ||
-      (options.mode === "create" ? !nameInput?.value.trim() : !hasChanges());
   }
 
   function execCommand(command: string, value?: string) {
@@ -193,8 +325,10 @@ export function bindEmailTemplateForm(options: {
 
   imageBtn?.addEventListener("mousedown", (event) => {
     event.preventDefault();
+    saveEditorRange();
   });
   imageBtn?.addEventListener("click", () => {
+    saveEditorRange();
     imageInput?.click();
   });
   imageInput?.addEventListener("change", () => {
@@ -202,6 +336,18 @@ export function bindEmailTemplateForm(options: {
   });
 
   editorField.addEventListener("input", () => {
+    imageResize.sync();
+    updatePreview();
+    updateSaveState();
+  });
+
+  editorField.addEventListener("click", (event) => {
+    if (event.target !== editorField) return;
+    const last = editorField.lastElementChild;
+    if (!(last instanceof HTMLElement) || !last.matches("[data-xyrra-email-inline-image]")) return;
+    const p = emptyParagraph();
+    editorField.appendChild(p);
+    placeCaretIn(p);
     updatePreview();
     updateSaveState();
   });

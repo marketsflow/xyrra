@@ -73,14 +73,14 @@
               <h2>Body</h2>
               <p class="xa-template-editor__hint">
                 Edit the email content below. Use <code>{{name}}</code> to personalize with the recipient&apos;s name.
-                Images are added at the bottom of the body.
+                Click in the body, then use Image to insert there. You can type above and below each image. Drag a corner to resize; images stay centered.
               </p>
               <div class="xa-template-editor__toolbar" role="toolbar" aria-label="Formatting">
                 <button type="button" data-xa-editor-cmd="bold"><strong>B</strong></button>
                 <button type="button" data-xa-editor-cmd="italic"><em>I</em></button>
                 <button type="button" data-xa-editor-cmd="insertUnorderedList">• List</button>
                 <button type="button" data-xa-editor-cmd="createLink">Link</button>
-                <button type="button" id="xa-template-image" title="Add image at bottom of email">Image</button>
+                <button type="button" id="xa-template-image" title="Insert image at the cursor">Image</button>
                 <input
                   id="xa-template-image-input"
                   class="xa-sr-only"
@@ -89,7 +89,9 @@
                   aria-label="Upload email image"
                 />
               </div>
-              <div id="xa-template-body" class="xa-template-editor__body" contenteditable="true" aria-label="Email body"></div>
+              <div class="xa-template-editor__body-wrap">
+                <div id="xa-template-body" class="xa-template-editor__body" contenteditable="true" aria-label="Email body"></div>
+              </div>
             </section>
 
             <section class="xa-template-editor__section">

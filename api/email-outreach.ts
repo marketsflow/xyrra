@@ -106,84 +106,111 @@ function escapeHtmlAttr(value: string) {
 
 const EMAIL_INLINE_IMAGE_MARKER = 'data-xyrra-email-inline-image="true"';
 const EMAIL_INLINE_IMAGE_WIDTH = 600;
+const EMAIL_INLINE_IMAGE_MIN_WIDTH = 120;
+const EMAIL_INLINE_IMAGE_MAX_WIDTH = 600;
 const EMAIL_TEMPLATE_BUCKET = "email-templates";
 
-function buildOutreachInlineImageBlock(publicUrl: string, fileName: string) {
+function clampOutreachImageWidth(width: number) {
+  if (!Number.isFinite(width)) return EMAIL_INLINE_IMAGE_WIDTH;
+  return Math.min(EMAIL_INLINE_IMAGE_MAX_WIDTH, Math.max(EMAIL_INLINE_IMAGE_MIN_WIDTH, Math.round(width)));
+}
+
+function parseOutreachImageWidth(html: string) {
+  const maxWidthPx = html.match(/max-width:\s*(\d+)px/i)?.[1];
+  const widthPx = html.match(/(?:^|[;\s])width:\s*(\d+)px/i)?.[1];
+  const widthAttr = html.match(/\bwidth="(\d+)"/i)?.[1];
+  return clampOutreachImageWidth(Number(maxWidthPx || widthPx || widthAttr || EMAIL_INLINE_IMAGE_WIDTH));
+}
+
+function buildOutreachInlineImageBlock(publicUrl: string, fileName: string, width = EMAIL_INLINE_IMAGE_WIDTH) {
   const safeUrl = escapeHtmlAttr(publicUrl.trim());
   const safeName = escapeHtmlAttr(fileName.trim() || "Image");
-  const width = EMAIL_INLINE_IMAGE_WIDTH;
-  const linkStyle = "color:#2563eb;font-weight:600;font-size:13px;text-decoration:underline;";
+  const next = clampOutreachImageWidth(width);
 
-  return `<div ${EMAIL_INLINE_IMAGE_MARKER} style="margin:24px 0 0;text-align:center;">
-  <img src="${safeUrl}" alt="${safeName}" width="${width}" style="display:block;width:100%;max-width:${width}px;height:auto;margin:0 auto;border:0;border-radius:8px;" />
-  <p style="margin:8px 0 0;font-size:13px;line-height:1.4;text-align:center;">
-    <a href="${safeUrl}" target="_blank" rel="noopener noreferrer" style="${linkStyle}">Download full-size image</a>
-  </p>
+  return `<div ${EMAIL_INLINE_IMAGE_MARKER} style="margin:0 0 16px;text-align:center;">
+  <img src="${safeUrl}" alt="${safeName}" width="${next}" style="display:block;width:${next}px;max-width:100%;height:auto;margin:0 auto;border:0;border-radius:8px;" />
 </div>`;
 }
 
-function extractOutreachInlineImages(html: string) {
-  const images: Array<{ src: string; fileName: string }> = [];
-  let content = html;
+function extractOutreachImageFromBlock(block: string) {
+  const src = block.match(/\bsrc="([^"]+)"/i)?.[1]?.trim();
+  if (!src) return null;
+  return {
+    src,
+    fileName: block.match(/\balt="([^"]*)"/i)?.[1]?.trim() || "Image",
+    width: parseOutreachImageWidth(block),
+  };
+}
 
-  content = content.replace(/<div[^>]*data-xyrra-email-inline-image="true"[^>]*>[\s\S]*?<\/div>/gi, (block) => {
-    const src = block.match(/\bsrc="([^"]+)"/i)?.[1]?.trim();
-    if (src) {
-      images.push({ src, fileName: block.match(/\balt="([^"]*)"/i)?.[1]?.trim() || "Image" });
-    }
-    return "";
+function mapOutreachInlineImages(html: string, transform: (content: string) => string) {
+  const blocks: string[] = [];
+  const placeholder = (index: number) => `<!--xyrra-inline-image-${index}-->`;
+
+  let content = html.replace(/<div[^>]*data-xyrra-email-inline-image="true"[^>]*>[\s\S]*?<\/div>/gi, (block) => {
+    const image = extractOutreachImageFromBlock(block);
+    const rebuilt = image
+      ? buildOutreachInlineImageBlock(image.src, image.fileName, image.width)
+      : block;
+    const index = blocks.length;
+    blocks.push(rebuilt);
+    return placeholder(index);
   });
 
   content = content.replace(/<img\b[^>]*\bsrc="([^"]+)"[^>]*\/?>/gi, (tag, src: string) => {
     if (!src.includes(`/${EMAIL_TEMPLATE_BUCKET}/`) && !src.includes(`${EMAIL_TEMPLATE_BUCKET}/`)) {
       return tag;
     }
-    images.push({ src, fileName: tag.match(/\balt="([^"]*)"/i)?.[1]?.trim() || "Image" });
-    return "";
+    const image = extractOutreachImageFromBlock(tag);
+    if (!image) return tag;
+    const index = blocks.length;
+    blocks.push(buildOutreachInlineImageBlock(image.src, image.fileName, image.width));
+    return placeholder(index);
   });
 
-  return { content, images };
-}
-
-function appendOutreachInlineImages(content: string, images: Array<{ src: string; fileName: string }>) {
-  if (images.length === 0) return content;
-  const trimmed = content.replace(/(\s*<p><br><\/p>\s*)+$/gi, "").trimEnd();
-  return `${trimmed}${images.map((image) => buildOutreachInlineImageBlock(image.src, image.fileName)).join("")}`;
+  let out = transform(content);
+  blocks.forEach((block, index) => {
+    out = out.replace(placeholder(index), block);
+  });
+  return out.replace(
+    /(<div[^>]*data-xyrra-email-inline-image="true"[^>]*>[\s\S]*?<\/div>)(?:\s*<p\b[^>]*>\s*(?:<br\s*\/?>|&nbsp;|\s)*<\/p>)+/gi,
+    "$1",
+  );
 }
 
 function normalizeOutreachBodyHtml(html: string) {
-  const { content, images } = extractOutreachInlineImages(html);
-  const textStyle = "font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:1.6;color:#141820;";
-  const reset = new Set(["font", "font-family", "font-size", "font-weight", "line-height", "color"]);
-  const keep = (style: string) =>
-    style
-      .split(";")
-      .map((part) => part.trim())
-      .filter(Boolean)
-      .filter((decl) => {
-        const prop = decl.split(":")[0]?.trim().toLowerCase();
-        return Boolean(prop) && !reset.has(prop);
-      })
-      .join(";");
+  return mapOutreachInlineImages(html, (content) => {
+    const textStyle = "font-family:Arial, Helvetica, sans-serif;font-size:16px;line-height:1.6;color:#141820;";
+    const reset = new Set(["font", "font-family", "font-size", "font-weight", "line-height", "color"]);
+    const keep = (style: string) =>
+      style
+        .split(";")
+        .map((part) => part.trim())
+        .filter(Boolean)
+        .filter((decl) => {
+          const prop = decl.split(":")[0]?.trim().toLowerCase();
+          return Boolean(prop) && !reset.has(prop);
+        })
+        .join(";");
 
-  let out = content.replace(/<\/?font\b[^>]*>/gi, "");
-  out = out.replace(/<(\/?)h[1-6]\b([^>]*)>/gi, "<$1p$2>");
-  out = out.replace(/\sstyle=(["'])([\s\S]*?)\1/gi, (_match, quote: string, style: string) => {
-    const kept = keep(style);
-    return kept ? ` style=${quote}${kept}${quote}` : "";
+    let out = content.replace(/<\/?font\b[^>]*>/gi, "");
+    out = out.replace(/<(\/?)h[1-6]\b([^>]*)>/gi, "<$1p$2>");
+    out = out.replace(/\sstyle=(["'])([\s\S]*?)\1/gi, (_match, quote: string, style: string) => {
+      const kept = keep(style);
+      return kept ? ` style=${quote}${kept}${quote}` : "";
+    });
+    out = out.replace(/\s(?:face|size)=["'][^"']*["']/gi, "");
+    out = out.replace(/<(p|div|li)\b([^>]*)>/gi, (_match, tag: string, rest: string) => {
+      const extra = tag === "li" ? "margin:0 0 8px;" : "margin:0 0 16px;";
+      if (/\sstyle=/i.test(rest)) {
+        return `<${tag}${rest.replace(/\sstyle=(["'])([\s\S]*?)\1/i, (_s, quote: string, style: string) => {
+          const kept = keep(style);
+          return ` style=${quote}${extra}${textStyle}${kept ? `${kept};` : ""}${quote}`;
+        })}>`;
+      }
+      return `<${tag}${rest} style="${extra}${textStyle}">`;
+    });
+    return out;
   });
-  out = out.replace(/\s(?:face|size)=["'][^"']*["']/gi, "");
-  out = out.replace(/<(p|div|li)\b([^>]*)>/gi, (_match, tag: string, rest: string) => {
-    const extra = tag === "li" ? "margin:0 0 8px;" : "margin:0 0 16px;";
-    if (/\sstyle=/i.test(rest)) {
-      return `<${tag}${rest.replace(/\sstyle=(["'])([\s\S]*?)\1/i, (_s, quote: string, style: string) => {
-        const kept = keep(style);
-        return ` style=${quote}${extra}${textStyle}${kept ? `${kept};` : ""}${quote}`;
-      })}>`;
-    }
-    return `<${tag}${rest} style="${extra}${textStyle}">`;
-  });
-  return appendOutreachInlineImages(out, images);
 }
 
 function wrapOutreachHtml(fullHtml: string) {
@@ -227,16 +254,15 @@ function wrapOutreachHtml(fullHtml: string) {
         margin: 0 0 16px !important;
       }
       .xyrra-email-body strong, .xyrra-email-body b { font-weight: 700 !important; }
-      .xyrra-email-body [data-xyrra-email-inline-image] p,
-      .xyrra-email-body [data-xyrra-email-inline-image] a {
-        font-size: 13px !important;
-        line-height: 1.4 !important;
-        color: #2563eb !important;
+      .xyrra-email-body [data-xyrra-email-inline-image] {
+        text-align: center !important;
+        margin: 0 0 16px !important;
+        line-height: 0 !important;
+        font-size: 0 !important;
       }
       .xyrra-email-body [data-xyrra-email-inline-image] img {
         display: block !important;
-        width: 100% !important;
-        max-width: 600px !important;
+        max-width: 100% !important;
         height: auto !important;
         margin: 0 auto !important;
         border: 0 !important;
@@ -249,7 +275,7 @@ function wrapOutreachHtml(fullHtml: string) {
         <td align="center">
           <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e0deed;">
             <tr>
-              <td style="padding:28px 32px 12px;text-align:center;border-bottom:1px solid #eef0f5;">
+              <td style="padding:28px 32px 12px;text-align:center;">
                 <img src="${logoUrl}" alt="Xyrra" width="120" style="display:block;margin:0 auto;height:auto;max-width:120px;border:0;" />
               </td>
             </tr>
@@ -258,7 +284,7 @@ function wrapOutreachHtml(fullHtml: string) {
               </td>
             </tr>
             <tr>
-              <td style="padding:28px 32px 32px;text-align:center;border-top:1px solid #eef0f5;">
+              <td style="padding:28px 32px 32px;text-align:center;">
                 <img src="${logoUrl}" alt="Xyrra" width="100" style="display:block;margin:0 auto 16px;height:auto;max-width:100px;border:0;" />
                 <p style="margin:0 0 16px;font-size:12px;line-height:1.6;color:#6b7280;">${EMAIL_COMPANY_ADDRESS}</p>
                 <p style="margin:0;font-size:12px;line-height:1.6;">

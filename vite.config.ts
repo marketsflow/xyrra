@@ -272,6 +272,8 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/pre-order/" + search;
       } else if (path === "/xyrra-agent/download") {
         (req as IncomingMessage & { url?: string }).url = "/xyrra-agent/download/" + search;
+      } else if (path === "/xyrra-agent/explore") {
+        (req as IncomingMessage & { url?: string }).url = "/xyrra-agent/explore/" + search;
       } else if (path === "/admin") {
         (req as IncomingMessage & { url?: string }).url = "/admin/" + search;
       } else if (path === "/admin/login") {
@@ -335,6 +337,7 @@ export default defineConfig(({ mode }) => {
           xyrraPc: resolve(__dirname, "xyrra-pc/index.html"),
           xyrraAgent: resolve(__dirname, "xyrra-agent/index.html"),
           xyrraAgentDownload: resolve(__dirname, "xyrra-agent/download/index.html"),
+          xyrraAgentExplore: resolve(__dirname, "xyrra-agent/explore/index.html"),
           preOrder: resolve(__dirname, "pre-order/index.html"),
           articleAiHardware: resolve(
             __dirname,

@@ -1,7 +1,4 @@
-import {
-  appendEmailInlineImages,
-  extractEmailInlineImages,
-} from "./email-inline-images";
+import { mapEmailInlineImages } from "./email-inline-images";
 
 export const EMAIL_BODY_START = "<!--xyrra-email-body-->";
 export const EMAIL_BODY_END = "<!--/xyrra-email-body-->";
@@ -65,24 +62,25 @@ function withBodyTextStyle(existingStyle: string, extra = "margin:0 0 16px;") {
 
 /** Force body copy to the same Arial 16px face/size, ignoring pasted heading or font styles. */
 export function normalizeEmailBodyHtml(html: string) {
-  const { content, images } = extractEmailInlineImages(html);
-  let out = content.replace(/<\/?font\b[^>]*>/gi, "");
-  out = out.replace(/<(\/?)h[1-6]\b([^>]*)>/gi, "<$1p$2>");
-  out = out.replace(/\sstyle=(["'])([\s\S]*?)\1/gi, (_match, quote: string, style: string) => {
-    const kept = keepNonFontStyles(style);
-    return kept ? ` style=${quote}${kept}${quote}` : "";
+  return mapEmailInlineImages(html, (content) => {
+    let out = content.replace(/<\/?font\b[^>]*>/gi, "");
+    out = out.replace(/<(\/?)h[1-6]\b([^>]*)>/gi, "<$1p$2>");
+    out = out.replace(/\sstyle=(["'])([\s\S]*?)\1/gi, (_match, quote: string, style: string) => {
+      const kept = keepNonFontStyles(style);
+      return kept ? ` style=${quote}${kept}${quote}` : "";
+    });
+    out = out.replace(/\s(?:face|size)=["'][^"']*["']/gi, "");
+    out = out.replace(/<(p|div|li)\b([^>]*)>/gi, (_match, tag: string, rest: string) => {
+      const extra = tag === "li" ? "margin:0 0 8px;" : "margin:0 0 16px;";
+      if (/\sstyle=/i.test(rest)) {
+        return `<${tag}${rest.replace(/\sstyle=(["'])([\s\S]*?)\1/i, (_s, quote: string, style: string) => {
+          return ` style=${quote}${withBodyTextStyle(style, extra)}${quote}`;
+        })}>`;
+      }
+      return `<${tag}${rest} style="${withBodyTextStyle("", extra)}">`;
+    });
+    return out;
   });
-  out = out.replace(/\s(?:face|size)=["'][^"']*["']/gi, "");
-  out = out.replace(/<(p|div|li)\b([^>]*)>/gi, (_match, tag: string, rest: string) => {
-    const extra = tag === "li" ? "margin:0 0 8px;" : "margin:0 0 16px;";
-    if (/\sstyle=/i.test(rest)) {
-      return `<${tag}${rest.replace(/\sstyle=(["'])([\s\S]*?)\1/i, (_s, quote: string, style: string) => {
-        return ` style=${quote}${withBodyTextStyle(style, extra)}${quote}`;
-      })}>`;
-    }
-    return `<${tag}${rest} style="${withBodyTextStyle("", extra)}">`;
-  });
-  return appendEmailInlineImages(out, images);
 }
 
 function escapeHtmlAttr(value: string) {
@@ -133,16 +131,15 @@ export function getEmailShellBefore(baseUrl?: string) {
         margin: 0 0 16px !important;
       }
       .xyrra-email-body strong, .xyrra-email-body b { font-weight: 700 !important; }
-      .xyrra-email-body [data-xyrra-email-inline-image] p,
-      .xyrra-email-body [data-xyrra-email-inline-image] a {
-        font-size: 13px !important;
-        line-height: 1.4 !important;
-        color: #2563eb !important;
+      .xyrra-email-body [data-xyrra-email-inline-image] {
+        text-align: center !important;
+        margin: 0 0 16px !important;
+        line-height: 0 !important;
+        font-size: 0 !important;
       }
       .xyrra-email-body [data-xyrra-email-inline-image] img {
         display: block !important;
-        width: 100% !important;
-        max-width: 600px !important;
+        max-width: 100% !important;
         height: auto !important;
         margin: 0 auto !important;
         border: 0 !important;
@@ -155,7 +152,7 @@ export function getEmailShellBefore(baseUrl?: string) {
         <td align="center">
           <table role="presentation" width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;background-color:#ffffff;border-radius:16px;overflow:hidden;border:1px solid #e0deed;">
             <tr>
-              <td style="padding:28px 32px 12px;text-align:center;border-bottom:1px solid #eef0f5;">
+              <td style="padding:28px 32px 12px;text-align:center;">
                 <img src="${logoUrl}" alt="Xyrra" width="120" style="display:block;margin:0 auto;height:auto;max-width:120px;border:0;" />
               </td>
             </tr>
@@ -175,7 +172,7 @@ export function getEmailShellAfter(baseUrl?: string) {
               </td>
             </tr>
             <tr>
-              <td style="padding:28px 32px 32px;text-align:center;border-top:1px solid #eef0f5;">
+              <td style="padding:28px 32px 32px;text-align:center;">
                 <img src="${logoUrl}" alt="Xyrra" width="100" style="display:block;margin:0 auto 16px;height:auto;max-width:100px;border:0;" />
                 <p style="margin:0 0 16px;font-size:12px;line-height:1.6;color:#6b7280;">${EMAIL_COMPANY_ADDRESS}</p>
                 <p style="margin:0;font-size:12px;line-height:1.6;">
