@@ -6,6 +6,7 @@ import { sendContactEmail } from "./api/contact";
 import { sendEmailOutreach } from "./api/email-outreach";
 import { handleResendWebhook } from "./api/resend-webhook";
 import { recordEmailUnsubscribe } from "./api/unsubscribe";
+import { recordFreecapsSignup } from "./api/freecaps-signup";
 import { articleSeoPlugin } from "./vite/article-seo-plugin";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -153,6 +154,39 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
           writeJson(res, result.status ?? 500, { success: false, message: result.message });
           return;
         }
+        if (path === "/api/freecaps-signup") {
+          if (req.method !== "POST") {
+            writeJson(res, 405, { success: false, message: "Method not allowed" });
+            return;
+          }
+          let raw: string;
+          try {
+            raw = await readRequestBody(req);
+          } catch {
+            writeJson(res, 413, { success: false, message: "Request too large" });
+            return;
+          }
+          let body: unknown;
+          try {
+            body = raw ? JSON.parse(raw) : {};
+          } catch {
+            writeJson(res, 400, { success: false, message: "Invalid JSON" });
+            return;
+          }
+          const result = await recordFreecapsSignup(body, {
+            SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+            SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+            RESEND_API_KEY: env.RESEND_API_KEY,
+            RESEND_FROM_EMAIL: env.RESEND_FROM_EMAIL,
+            RESEND_TO_EMAIL: env.RESEND_TO_EMAIL,
+          });
+          if (result.success) {
+            writeJson(res, 200, { success: true, id: result.id });
+            return;
+          }
+          writeJson(res, result.status ?? 500, { success: false, message: result.message });
+          return;
+        }
         if (path !== "/api/contact") {
           return next();
         }
@@ -270,6 +304,8 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/xyrra-agent/" + search;
       } else if (path === "/pre-order") {
         (req as IncomingMessage & { url?: string }).url = "/pre-order/" + search;
+      } else if (path === "/freecaps-community") {
+        (req as IncomingMessage & { url?: string }).url = "/freecaps-community/" + search;
       } else if (path === "/xyrra-agent/download") {
         (req as IncomingMessage & { url?: string }).url = "/xyrra-agent/download/" + search;
       } else if (path === "/xyrra-agent/explore") {
@@ -339,6 +375,7 @@ export default defineConfig(({ mode }) => {
           xyrraAgentDownload: resolve(__dirname, "xyrra-agent/download/index.html"),
           xyrraAgentExplore: resolve(__dirname, "xyrra-agent/explore/index.html"),
           preOrder: resolve(__dirname, "pre-order/index.html"),
+          freecapsCommunity: resolve(__dirname, "freecaps-community/index.html"),
           articleAiHardware: resolve(
             __dirname,
             "article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine/index.html"

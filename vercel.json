@@ -11,6 +11,16 @@
     { "source": "/api/webhooks/resend", "destination": "/api/resend-webhook" },
     { "source": "/api/webhooks/resend/", "destination": "/api/resend-webhook" }
   ],
+  "headers": [
+    {
+      "source": "/freecaps-community",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    },
+    {
+      "source": "/freecaps-community/",
+      "headers": [{ "key": "X-Robots-Tag", "value": "noindex, nofollow" }]
+    }
+  ],
   "functions": {
     "api/contact.ts": {
       "memory": 256,
@@ -25,6 +35,10 @@
       "maxDuration": 30
     },
     "api/unsubscribe.ts": {
+      "memory": 256,
+      "maxDuration": 30
+    },
+    "api/freecaps-signup.ts": {
       "memory": 256,
       "maxDuration": 30
     }
