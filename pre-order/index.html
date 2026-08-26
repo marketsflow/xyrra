@@ -87,7 +87,7 @@
       }
     </script>
   </head>
-  <body class="nh-body">
+  <body class="nh-body auth-checking">
     <div class="nh po-page">
       <header class="nh-header">
         <a class="nh-brand" href="/" aria-label="Xyrra home">
@@ -102,7 +102,7 @@
         </a>
         <nav class="nh-nav" id="nh-nav" data-open="false" aria-label="Primary">
           <a href="/xyrra-pc/">Xyrra PC</a>
-          <a href="/xyrra-agent/">Xyrra Agent</a>
+          <a href="/xyrra-agent/ai-agent/">Xyrra Agent</a>
           <a href="/ai-financial-strategies/">AI Strategy</a>
           <a href="/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine/">Articles</a>
         </nav>
@@ -126,7 +126,7 @@
               <h1 class="po-title" id="po-title">
                 Pre-order the <em>Xyrra PC</em>
               </h1>
-              <p class="po-lede">
+              <p class="po-lede" id="po-lede">
                 Your local AI powerhouse. Run advanced models on-device — zero latency, full privacy,
                 maximum performance.
               </p>
@@ -168,6 +168,11 @@
             <aside class="po-reserve" aria-labelledby="po-form-title">
               <div class="contact-card po-card">
                 <p class="po-card__eyebrow">Reserve your allocation</p>
+                <div class="po-selected" id="po-selected" hidden>
+                  <span class="po-selected__label">You’re ordering</span>
+                  <strong class="po-selected__name" id="po-selected-name"></strong>
+                  <span class="po-selected__price" id="po-selected-price"></span>
+                </div>
                 <h2 class="po-card__title" id="po-form-title">No payment today</h2>
                 <p class="contact-card__lede">
                   Tell us where to reach you. We’ll confirm availability, timeline, and next steps
@@ -191,6 +196,7 @@
                       autocomplete="off"
                     />
                   </p>
+                  <input type="hidden" id="preorder-system" name="system" value="" />
                   <div class="contact-field">
                     <label class="contact-field__label" for="preorder-name">Name</label>
                     <input
@@ -326,5 +332,7 @@
     </div>
 
     <script type="module" src="/src/new.ts"></script>
+    <script type="module" src="/src/pre-order.ts"></script>
+    <script type="module" src="/src/require-user.ts"></script>
   </body>
 </html>

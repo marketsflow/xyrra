@@ -1,3 +1,5 @@
+import { pcSystemFromKey } from "./lib/pc-systems";
+
 const nav = document.getElementById("nh-nav");
 const menu = document.getElementById("nh-menu");
 const year = document.getElementById("nh-year");
@@ -217,10 +219,16 @@ if (preorderForm && preorderStatus) {
     const quantity = (preorderForm.querySelector<HTMLSelectElement>("#preorder-quantity")?.value ?? "").trim();
     const use = (preorderForm.querySelector<HTMLSelectElement>("#preorder-use")?.value ?? "").trim();
     const notes = (preorderForm.querySelector<HTMLTextAreaElement>("#preorder-notes")?.value ?? "").trim();
+    const systemKey =
+      new URLSearchParams(window.location.search).get("system")?.toLowerCase() ||
+      (preorderForm.querySelector<HTMLInputElement>("#preorder-system")?.value ?? "").toLowerCase();
+    const selected = pcSystemFromKey(systemKey);
+    const system = selected?.name ?? "";
 
     const message = [
       "Xyrra PC pre-order reservation",
       "",
+      `System: ${system || "(not specified)"}`,
       `Country: ${country}`,
       `Quantity: ${quantity}`,
       `Primary use: ${use}`,
@@ -236,7 +244,7 @@ if (preorderForm && preorderStatus) {
         body: JSON.stringify({
           name,
           email,
-          subject: "Xyrra PC Pre-Order",
+          subject: system ? `Xyrra PC Pre-Order — ${system}` : "Xyrra PC Pre-Order",
           message,
         }),
       });

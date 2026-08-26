@@ -34,6 +34,10 @@ body.nh-body {
   text-rendering: optimizeLegibility;
 }
 
+body.auth-checking .nh-main {
+  visibility: hidden;
+}
+
 .visually-hidden {
   position: absolute;
   width: 1px;
@@ -205,6 +209,135 @@ body.nh-body {
   height: 1.25rem;
 }
 
+/* Home page — hero matched to marketing mock */
+.nh-home {
+  --nh-hero-bg: #fafafa;
+}
+
+.nh-home .nh-header {
+  background: var(--nh-hero-bg);
+  backdrop-filter: none;
+  border-bottom-color: rgba(40, 48, 62, 0.04);
+}
+
+.nh-home .nh-hero__stage {
+  background: var(--nh-hero-bg);
+}
+
+.nh-home .nh-copy {
+  max-width: 29rem;
+  padding-left: clamp(0rem, 1vw, 0.5rem);
+}
+
+.nh-home .nh-badge {
+  margin-bottom: 1.5rem;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: rgba(42, 50, 64, 0.58);
+  font-family: var(--nh-font);
+  font-size: 0.7rem;
+  font-weight: 600;
+  letter-spacing: 0.11em;
+  text-transform: uppercase;
+}
+
+.nh-home .nh-badge span {
+  color: rgba(42, 50, 64, 0.58);
+}
+
+.nh-home .nh-title {
+  display: grid;
+  gap: 0.55rem;
+  margin: 0;
+  font-family: var(--nh-font-brand);
+  font-weight: 700;
+}
+
+.nh-home .nh-title__main {
+  display: block;
+  font-family: var(--nh-font-brand);
+  font-size: clamp(2.5rem, 4.4vw, 3.75rem);
+  font-weight: 700;
+  line-height: 1.06;
+  letter-spacing: -0.04em;
+  color: #000000;
+}
+
+.nh-home .nh-title__sub {
+  display: block;
+  font-family: var(--nh-font-brand);
+  font-size: clamp(1.45rem, 2.35vw, 2rem);
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: -0.03em;
+  color: #000000;
+}
+
+.nh-home .nh-lede {
+  margin-top: 1.35rem;
+  max-width: 26rem;
+  font-family: var(--nh-font);
+  font-size: clamp(0.95rem, 1.05vw, 1.06rem);
+  font-weight: 400;
+  line-height: 1.62;
+  color: rgba(42, 50, 64, 0.68);
+}
+
+.nh-home .nh-actions {
+  margin-top: 1.85rem;
+  gap: 0.85rem;
+}
+
+.nh-home .nh-actions .nh-btn {
+  font-family: var(--nh-font);
+  font-weight: 600;
+  font-size: 0.92rem;
+  letter-spacing: -0.01em;
+}
+
+.nh-home .nh-actions .nh-btn--solid {
+  background: #000000;
+  color: #ffffff;
+  border-color: #000000;
+}
+
+.nh-home .nh-actions .nh-btn--solid:hover {
+  background: #111111;
+  box-shadow: 0 12px 28px rgba(20, 24, 32, 0.16);
+}
+
+.nh-home .nh-actions .nh-btn--ghost {
+  background: transparent;
+  color: #000000;
+  border-color: rgba(0, 0, 0, 0.82);
+  box-shadow: none;
+}
+
+.nh-home .nh-actions .nh-btn--ghost:hover {
+  background: rgba(0, 0, 0, 0.03);
+  border-color: #000000;
+}
+
+.nh-home .nh-hero__grid {
+  grid-template-columns: minmax(260px, 0.82fr) minmax(440px, 1.18fr);
+  gap: clamp(0.75rem, 2vw, 2rem);
+  align-items: center;
+  max-width: 1380px;
+  padding-inline: clamp(1.5rem, 4.5vw, 4rem);
+}
+
+.nh-home .nh-hero__visual {
+  justify-self: end;
+  align-self: center;
+  width: min(100%, 960px);
+  margin-right: clamp(-1rem, -2vw, 0rem);
+}
+
+.nh-home .nh-hero__visual img {
+  image-rendering: -webkit-optimize-contrast;
+}
+
 /* Hero */
 .nh-main {
   flex: 1;
@@ -216,6 +349,7 @@ body.nh-body {
   min-height: 100svh;
   padding-top: var(--nh-header-h);
   overflow: hidden;
+  background: var(--nh-hero-bg, var(--nh-bg));
 }
 
 .nh-hero__stage {
@@ -225,14 +359,14 @@ body.nh-body {
   height: calc(100vh - var(--nh-header-h));
   height: calc(100svh - var(--nh-header-h));
   min-height: 720px;
-  background: var(--nh-bg);
+  background: var(--nh-hero-bg, var(--nh-bg));
 }
 
 .nh-hero__bg {
   position: absolute;
   inset: 0;
   z-index: 0;
-  background: var(--nh-bg);
+  background: transparent;
 }
 
 .nh-hero__grid {
@@ -240,26 +374,20 @@ body.nh-body {
   z-index: 1;
   flex: 1;
   display: grid;
-  grid-template-columns: minmax(300px, 0.95fr) minmax(360px, 1.15fr);
-  gap: clamp(1.5rem, 3vw, 3rem);
+  grid-template-columns: minmax(280px, 0.88fr) minmax(400px, 1.12fr);
+  gap: clamp(1.25rem, 3.5vw, 3rem);
   align-items: center;
-  padding: clamp(1.25rem, 2.5vh, 2rem) clamp(1.25rem, 4vw, 3.5rem) 0.5rem;
+  max-width: 1320px;
+  width: 100%;
+  margin: 0 auto;
+  padding: clamp(1.25rem, 3vh, 2.5rem) clamp(1.25rem, 4vw, 3.5rem);
   min-height: 0;
 }
 
-.nh-hardware {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  gap: clamp(1rem, 2vh, 1.75rem);
-  min-width: 0;
-  max-width: 34rem;
-}
-
 .nh-copy {
-  max-width: 32rem;
-  padding-top: clamp(0.25rem, 2vh, 1.25rem);
+  max-width: 34rem;
+  align-self: center;
+  padding-top: 0;
   animation: nh-rise 900ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
@@ -313,19 +441,19 @@ body.nh-body {
   margin-top: 1.5rem;
 }
 
-.nh-pc {
-  margin: 0 0 0 auto;
-  width: min(100%, 360px);
-  align-self: flex-end;
-  animation: none;
+.nh-hero__visual {
+  margin: 0;
+  justify-self: end;
+  width: min(100%, 1024px);
+  animation: nh-rise 1000ms 120ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-.nh-pc img {
+.nh-hero__visual img {
   display: block;
   width: 100%;
   height: auto;
+  max-width: 1024px;
   object-fit: contain;
-  filter: drop-shadow(0 20px 36px rgba(20, 24, 32, 0.14));
 }
 
 .nh-specs-bar {
@@ -388,7 +516,7 @@ body.nh-body {
   height: 14px;
 }
 
-/* Agent UI image */
+/* Legacy agent image styles — used on other pages */
 .nh-agent-wrap {
   position: relative;
   z-index: 1;
@@ -780,8 +908,8 @@ body.nh-body {
 @media (prefers-reduced-motion: reduce) {
   .nh-copy,
   .nh-specs-bar,
-  .nh-agent-wrap,
-  .nh-pc {
+  .nh-hero__visual,
+  .nh-agent-wrap {
     animation: none !important;
     transition: none !important;
   }
@@ -794,8 +922,8 @@ body.nh-body {
     gap: 1.25rem;
   }
 
-  .nh-agent-img {
-    width: min(100%, 560px);
+  .nh-hero__visual {
+    width: min(100%, 620px);
   }
 
   .nh-machine__inner,
@@ -866,28 +994,31 @@ body.nh-body {
 
   .nh-hero__grid {
     grid-template-columns: 1fr;
-    padding-bottom: 0.5rem;
+    padding-bottom: 1.25rem;
   }
 
-  .nh-hardware {
+  .nh-copy {
     width: 100%;
     max-width: none;
   }
 
-  .nh-pc {
-    width: min(100%, 320px);
-    align-self: flex-end;
-    margin-left: auto;
-    margin-right: 0;
+  .nh-hero__visual {
+    width: min(100%, 680px);
+    justify-self: center;
+    margin-top: 0.5rem;
   }
 
-  .nh-agent-wrap {
-    padding: 0.5rem 0;
+  .nh-home .nh-hero__visual {
+    width: min(100%, 680px);
+    justify-self: center;
   }
 
-  .nh-agent-img {
-    width: min(100%, 640px);
-    margin: 0 auto;
+  .nh-home .nh-title__main {
+    font-size: 2.15rem;
+  }
+
+  .nh-home .nh-title__sub {
+    font-size: 1.25rem;
   }
 
   .nh-specs-bar {

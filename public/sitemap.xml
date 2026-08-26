@@ -49,6 +49,24 @@
     <priority>0.9</priority>
   </url>
   <url>
+    <loc>https://xyrra.ai/xyrra-pc/core-system-32gb/</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://xyrra.ai/xyrra-pc/pro-system-64gb/</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://xyrra.ai/xyrra-pc/ultra-system-128gb/</loc>
+    <lastmod>2026-08-26</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://xyrra.ai/xyrra-agent/download/</loc>
     <lastmod>2026-08-20</lastmod>
     <changefreq>weekly</changefreq>
@@ -57,6 +75,12 @@
   <url>
     <loc>https://xyrra.ai/xyrra-agent/explore/</loc>
     <lastmod>2026-08-25</lastmod>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>https://xyrra.ai/xyrra-agent/ai-agent/</loc>
+    <lastmod>2026-08-26</lastmod>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
   </url>

@@ -39,6 +39,10 @@
   flex-direction: column;
 }
 
+.contact-form[hidden] {
+  display: none;
+}
+
 .contact-field {
   margin-bottom: 1.1rem;
 }

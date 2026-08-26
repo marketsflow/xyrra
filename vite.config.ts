@@ -298,10 +298,18 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/about-xyrra/" + search;
       } else if (path === "/contact-us") {
         (req as IncomingMessage & { url?: string }).url = "/contact-us/" + search;
+      } else if (path === "/xyrra-pc/core-system-32gb") {
+        (req as IncomingMessage & { url?: string }).url = "/xyrra-pc/core-system-32gb/" + search;
+      } else if (path === "/xyrra-pc/pro-system-64gb") {
+        (req as IncomingMessage & { url?: string }).url = "/xyrra-pc/pro-system-64gb/" + search;
+      } else if (path === "/xyrra-pc/ultra-system-128gb") {
+        (req as IncomingMessage & { url?: string }).url = "/xyrra-pc/ultra-system-128gb/" + search;
       } else if (path === "/xyrra-pc") {
         (req as IncomingMessage & { url?: string }).url = "/xyrra-pc/" + search;
       } else if (path === "/xyrra-agent") {
         (req as IncomingMessage & { url?: string }).url = "/xyrra-agent/" + search;
+      } else if (path === "/login") {
+        (req as IncomingMessage & { url?: string }).url = "/login/" + search;
       } else if (path === "/pre-order") {
         (req as IncomingMessage & { url?: string }).url = "/pre-order/" + search;
       } else if (path === "/freecaps-community") {
@@ -310,6 +318,8 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/xyrra-agent/download/" + search;
       } else if (path === "/xyrra-agent/explore") {
         (req as IncomingMessage & { url?: string }).url = "/xyrra-agent/explore/" + search;
+      } else if (path === "/xyrra-agent/ai-agent") {
+        (req as IncomingMessage & { url?: string }).url = "/xyrra-agent/ai-agent/" + search;
       } else if (path === "/admin") {
         (req as IncomingMessage & { url?: string }).url = "/admin/" + search;
       } else if (path === "/admin/login") {
@@ -371,9 +381,14 @@ export default defineConfig(({ mode }) => {
           aboutXyrra: resolve(__dirname, "about-xyrra/index.html"),
           contactUs: resolve(__dirname, "contact-us/index.html"),
           xyrraPc: resolve(__dirname, "xyrra-pc/index.html"),
+          xyrraPcCore: resolve(__dirname, "xyrra-pc/core-system-32gb/index.html"),
+          xyrraPcPro: resolve(__dirname, "xyrra-pc/pro-system-64gb/index.html"),
+          xyrraPcUltra: resolve(__dirname, "xyrra-pc/ultra-system-128gb/index.html"),
           xyrraAgent: resolve(__dirname, "xyrra-agent/index.html"),
           xyrraAgentDownload: resolve(__dirname, "xyrra-agent/download/index.html"),
           xyrraAgentExplore: resolve(__dirname, "xyrra-agent/explore/index.html"),
+          xyrraAgentAiAgent: resolve(__dirname, "xyrra-agent/ai-agent/index.html"),
+          login: resolve(__dirname, "login/index.html"),
           preOrder: resolve(__dirname, "pre-order/index.html"),
           freecapsCommunity: resolve(__dirname, "freecaps-community/index.html"),
           articleAiHardware: resolve(

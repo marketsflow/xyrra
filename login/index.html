@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <!-- Google tag (gtag.js) -->
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-6G0ZX6DKHR"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+
+      gtag('config', 'G-6G0ZX6DKHR');
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="canonical" href="https://xyrra.ai/login/" />
+    <meta name="robots" content="noindex, follow" />
+    <meta name="theme-color" content="#fefefe" />
+    <meta name="author" content="Xyrra" />
+    <meta
+      name="description"
+      content="Sign up or sign in to Xyrra to pre-order a Xyrra PC or download Xyrra Agent."
+    />
+    <title>Sign in | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/new.css" />
+    <link rel="stylesheet" href="/src/contact-us.css" />
+    <link rel="stylesheet" href="/src/login.css" />
+  </head>
+  <body class="nh-body">
+    <div class="nh login-page">
+      <header class="nh-header">
+        <a class="nh-brand" href="/" aria-label="Xyrra home">
+          <img
+            class="nh-brand__img"
+            src="/images/new/xyrra-logo.png"
+            alt=""
+            width="954"
+            height="115"
+            decoding="async"
+          />
+        </a>
+        <nav class="nh-nav" id="nh-nav" data-open="false" aria-label="Primary">
+          <a href="/xyrra-pc/">Xyrra PC</a>
+          <a href="/xyrra-agent/ai-agent/">Xyrra Agent</a>
+          <a href="/ai-financial-strategies/">AI Strategy</a>
+          <a href="/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine/">Articles</a>
+        </nav>
+        <button
+          type="button"
+          class="nh-menu"
+          id="nh-menu"
+          aria-expanded="false"
+          aria-controls="nh-nav"
+          aria-label="Open menu"
+        >
+          <span></span><span></span><span></span>
+        </button>
+      </header>
+
+      <main class="nh-main">
+        <section class="login-hero" aria-labelledby="login-title">
+          <div class="login-layout">
+            <article>
+              <p class="login-badge" id="login-eyebrow">Xyrra account</p>
+              <h1 class="login-title" id="login-title">Create your <em>account</em></h1>
+              <p class="login-lede" id="login-lede">
+                Sign up to pre-order a Xyrra PC or download Xyrra Agent.
+              </p>
+              <figure class="login-visual" id="login-visual">
+                <img
+                  src="/images/new/xyrra-pc.png"
+                  alt="Xyrra PC compact AI workstation"
+                  width="1024"
+                  height="1024"
+                  decoding="async"
+                />
+              </figure>
+            </article>
+
+            <aside>
+              <div class="contact-card login-card">
+                <div class="login-tabs" role="tablist" aria-label="Account">
+                  <button
+                    type="button"
+                    class="login-tabs__btn login-tabs__btn--active"
+                    id="login-tab-signup"
+                    role="tab"
+                    aria-selected="true"
+                    aria-controls="login-signup-form"
+                  >
+                    Sign up
+                  </button>
+                  <button
+                    type="button"
+                    class="login-tabs__btn"
+                    id="login-tab-signin"
+                    role="tab"
+                    aria-selected="false"
+                    aria-controls="login-signin-form"
+                  >
+                    Sign in
+                  </button>
+                </div>
+                <h2 class="login-card__title" id="login-card-title">Create your account</h2>
+                <p class="contact-card__lede" id="login-card-lede">
+                  Sign up to continue. It only takes a moment.
+                </p>
+                <p
+                  id="login-form-status"
+                  class="contact-form__status"
+                  role="status"
+                  aria-live="polite"
+                  hidden
+                ></p>
+
+                <form class="contact-form" id="login-signup-form" method="post" action="#">
+                  <div class="contact-field">
+                    <label class="contact-field__label" for="signup-name">Name</label>
+                    <input
+                      class="contact-field__input"
+                      id="signup-name"
+                      name="name"
+                      type="text"
+                      required
+                      autocomplete="name"
+                      placeholder="Your name"
+                    />
+                  </div>
+                  <div class="contact-field">
+                    <label class="contact-field__label" for="signup-email">Email</label>
+                    <input
+                      class="contact-field__input"
+                      id="signup-email"
+                      name="email"
+                      type="email"
+                      required
+                      autocomplete="email"
+                      inputmode="email"
+                      placeholder="you@example.com"
+                    />
+                  </div>
+                  <div class="contact-field">
+                    <label class="contact-field__label" for="signup-password">Password</label>
+                    <input
+                      class="contact-field__input"
+                      id="signup-password"
+                      name="password"
+                      type="password"
+                      required
+                      minlength="8"
+                      autocomplete="new-password"
+                      placeholder="At least 8 characters"
+                    />
+                  </div>
+                  <div class="contact-field">
+                    <label class="contact-field__label" for="signup-confirm">Confirm password</label>
+                    <input
+                      class="contact-field__input"
+                      id="signup-confirm"
+                      name="confirm"
+                      type="password"
+                      required
+                      minlength="8"
+                      autocomplete="new-password"
+                      placeholder="Repeat your password"
+                    />
+                  </div>
+                  <div class="contact-form__actions">
+                    <button class="nh-btn nh-btn--solid nh-btn--lg" type="submit">Create account</button>
+                  </div>
+                  <p class="login-legal">
+                    By creating an account you agree to our
+                    <a href="/terms-and-conditions/">Terms</a> and
+                    <a href="/private-policy/">Privacy Policy</a>.
+                  </p>
+                  <p class="login-switch">
+                    Already have an account?
+                    <a href="#signin" id="login-switch-signin">Sign in</a>
+                  </p>
+                </form>
+
+                <form class="contact-form" id="login-signin-form" method="post" action="#" hidden>
+                  <div class="contact-field">
+                    <label class="contact-field__label" for="signin-email">Email</label>
+                    <input
+                      class="contact-field__input"
+                      id="signin-email"
+                      name="email"
+                      type="email"
+                      required
+                      autocomplete="email"
+                      inputmode="email"
+                      placeholder="you@example.com"
+                    />
+                  </div>
+                  <div class="contact-field">
+                    <label class="contact-field__label" for="signin-password">Password</label>
+                    <input
+                      class="contact-field__input"
+                      id="signin-password"
+                      name="password"
+                      type="password"
+                      required
+                      autocomplete="current-password"
+                      placeholder="Your password"
+                    />
+                  </div>
+                  <div class="contact-form__actions">
+                    <button class="nh-btn nh-btn--solid nh-btn--lg" type="submit">Sign in</button>
+                  </div>
+                  <p class="login-switch">
+                    New to Xyrra?
+                    <a href="#signup" id="login-switch-signup">Create an account</a>
+                  </p>
+                </form>
+              </div>
+            </aside>
+          </div>
+        </section>
+      </main>
+
+      <footer class="nh-footer">
+        <a class="nh-brand nh-brand--sm" href="/" aria-label="Xyrra home">
+          <img
+            class="nh-brand__img"
+            src="/images/new/xyrra-logo.png"
+            alt=""
+            width="954"
+            height="115"
+            decoding="async"
+          />
+        </a>
+        <div class="nh-footer__links">
+          <a href="/xyrra-pc/">Xyrra PC</a>
+          <a href="/xyrra-agent/ai-agent/">Xyrra Agent</a>
+          <a href="/contact-us/">Contact</a>
+          <a href="/private-policy/">Privacy</a>
+          <a href="/terms-and-conditions/">Terms</a>
+          <a href="/disclaimer/">Disclaimer</a>
+        </div>
+        <p>© <span id="nh-year">2026</span> Xyrra. All rights reserved.</p>
+      </footer>
+    </div>
+
+    <script type="module" src="/src/new.ts"></script>
+    <script type="module" src="/src/login.ts"></script>
+  </body>
+</html>

@@ -93,6 +93,14 @@
   background: rgba(255, 255, 255, 0.72);
 }
 
+.po-highlights li > span:only-child {
+  margin-top: 0;
+  color: var(--nh-ink);
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
 .po-highlights strong {
   display: block;
   font-size: 0.88rem;
@@ -142,6 +150,45 @@
   letter-spacing: 0.12em;
   text-transform: uppercase;
   text-align: center;
+}
+
+.po-selected {
+  margin: 0.85rem 0 0;
+  padding: 0.85rem 1rem;
+  border-radius: 14px;
+  border: 1px solid rgba(110, 200, 255, 0.35);
+  background: rgba(110, 200, 255, 0.1);
+  text-align: center;
+}
+
+.po-selected[hidden] {
+  display: none;
+}
+
+.po-selected__label {
+  display: block;
+  color: rgba(40, 48, 62, 0.55);
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.po-selected__name {
+  display: block;
+  margin-top: 0.28rem;
+  font-size: 1.02rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--nh-ink);
+}
+
+.po-selected__price {
+  display: block;
+  margin-top: 0.2rem;
+  color: rgba(40, 48, 62, 0.72);
+  font-size: 0.88rem;
+  font-weight: 600;
 }
 
 .po-card__title {
