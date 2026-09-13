@@ -3,7 +3,10 @@
     "details": [
       {
         "appIDs": ["T8RJ27G7R6.com.marketsflow.mobileapp"],
-        "components": [{ "/": "/product/*" }]
+        "components": [
+          { "/": "/product/*" },
+          { "/": "/onboarding/*" }
+        ]
       }
     ]
   }
