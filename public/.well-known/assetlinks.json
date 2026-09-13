@@ -1,0 +1,10 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.marketsflow.mobileapp",
+      "sha256_cert_fingerprints": ["8B:29:A1:18:E8:82:2B:48:3F:93:0B:E1:55:03:CB:A4:59:35:8B:C2:71:4B:4E:0F:5D:6B:DE:86:A0:83:F2:EC"]
+    }
+  }
+]
