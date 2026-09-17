@@ -83,7 +83,7 @@ export function mapEmailInlineImages(html: string, transform: (content: string) 
   let content = html.replace(/<div[^>]*data-xyrra-email-inline-image="true"[^>]*>[\s\S]*?<\/div>/gi, (block) => {
     const image = extractImageFromBlock(block);
     const rebuilt = image
-      ? buildEmailInlineImageBlock(image.src, image.fileName, image.width)
+      ? buildEmailInlineImageBlock(image.src, image.fileName, image.width, image.href)
       : block;
     const index = blocks.length;
     blocks.push(rebuilt);
@@ -95,7 +95,7 @@ export function mapEmailInlineImages(html: string, transform: (content: string) 
     const image = extractImageFromBlock(tag);
     if (!image) return tag;
     const index = blocks.length;
-    blocks.push(buildEmailInlineImageBlock(image.src, image.fileName, image.width));
+    blocks.push(buildEmailInlineImageBlock(image.src, image.fileName, image.width, image.href));
     return placeholderFor(index);
   });
 
