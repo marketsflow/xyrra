@@ -103,7 +103,7 @@ export function readMemberForm(form: HTMLFormElement) {
   };
 }
 
-export function validateMemberInput(name: string, email: string, existingEmails: string[]) {
+export function validateMemberInput(email: string, existingEmails: string[]) {
   if (!email) {
     return "Email is required.";
   }
@@ -113,9 +113,6 @@ export function validateMemberInput(name: string, email: string, existingEmails:
   const normalized = email.toLowerCase();
   if (existingEmails.some((value) => value.toLowerCase() === normalized)) {
     return "This email is already on the list.";
-  }
-  if (!name.trim()) {
-    return "Name is required.";
   }
   return null;
 }

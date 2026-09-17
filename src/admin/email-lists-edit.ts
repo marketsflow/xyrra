@@ -111,7 +111,6 @@ async function init() {
     void (async () => {
       const { name, email, clear } = readMemberForm(addForm);
       const validationError = validateMemberInput(
-        name,
         email,
         membersUi.getMembers().map((member) => member.email),
       );
@@ -124,7 +123,7 @@ async function init() {
         .from("email_list_members")
         .insert({
           list_id: listId,
-          name,
+          name: name || null,
           email: email.toLowerCase(),
         })
         .select("id, list_id, name, email, created_at")

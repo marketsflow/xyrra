@@ -78,7 +78,6 @@ async function init() {
     event.preventDefault();
     const { name, email, clear } = readMemberForm(addForm);
     const validationError = validateMemberInput(
-      name,
       email,
       pendingMembers.map((member) => member.email),
     );
