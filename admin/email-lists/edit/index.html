@@ -104,6 +104,31 @@
               </div>
             </section>
 
+            <section class="xa-template-editor__section">
+              <div class="xa-users__header">
+                <div>
+                  <h2>Add users to this list</h2>
+                  <p id="xa-email-list-users-status" class="xa-templates__lede">Loading users…</p>
+                </div>
+              </div>
+              <div class="xa-users__table-wrap">
+                <table class="xa-users__table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Name</th>
+                      <th scope="col">Email</th>
+                      <th scope="col">On list</th>
+                    </tr>
+                  </thead>
+                  <tbody id="xa-email-list-users-body">
+                    <tr>
+                      <td colspan="3" class="xa-users__empty">Loading…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
+
             <p id="xa-email-list-status" class="xa-template__status" aria-live="polite"></p>
             <p id="xa-email-list-error" class="xa-template__status xa-template__status--error" aria-live="polite"></p>
           </div>

@@ -1276,6 +1276,18 @@ body.xa-body {
   cursor: pointer;
 }
 
+.xa-email-list__check-cell {
+  width: 1%;
+  text-align: center;
+}
+
+.xa-email-list__check-cell input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  cursor: pointer;
+}
+
 .xa-outreach {
   max-width: 56rem;
 }
