@@ -122,13 +122,20 @@ function parseOutreachImageWidth(html: string) {
   return clampOutreachImageWidth(Number(maxWidthPx || widthPx || widthAttr || EMAIL_INLINE_IMAGE_WIDTH));
 }
 
-function buildOutreachInlineImageBlock(publicUrl: string, fileName: string, width = EMAIL_INLINE_IMAGE_WIDTH) {
+function buildOutreachInlineImageBlock(
+  publicUrl: string,
+  fileName: string,
+  width = EMAIL_INLINE_IMAGE_WIDTH,
+  href?: string,
+) {
   const safeUrl = escapeHtmlAttr(publicUrl.trim());
   const safeName = escapeHtmlAttr(fileName.trim() || "Image");
+  const safeHref = href?.trim() ? escapeHtmlAttr(href.trim()) : "";
   const next = clampOutreachImageWidth(width);
+  const image = `<img src="${safeUrl}" alt="${safeName}" width="${next}" style="display:block;width:${next}px;max-width:100%;height:auto;margin:0 auto;border:0;border-radius:8px;" />`;
 
   return `<div ${EMAIL_INLINE_IMAGE_MARKER} style="margin:0 0 16px;text-align:center;">
-  <img src="${safeUrl}" alt="${safeName}" width="${next}" style="display:block;width:${next}px;max-width:100%;height:auto;margin:0 auto;border:0;border-radius:8px;" />
+  ${safeHref ? `<a href="${safeHref}">${image}</a>` : image}
 </div>`;
 }
 
@@ -139,6 +146,7 @@ function extractOutreachImageFromBlock(block: string) {
     src,
     fileName: block.match(/\balt="([^"]*)"/i)?.[1]?.trim() || "Image",
     width: parseOutreachImageWidth(block),
+    href: block.match(/<a\b[^>]*\bhref="([^"]+)"[^>]*>/i)?.[1]?.trim(),
   };
 }
 
@@ -149,7 +157,7 @@ function mapOutreachInlineImages(html: string, transform: (content: string) => s
   let content = html.replace(/<div[^>]*data-xyrra-email-inline-image="true"[^>]*>[\s\S]*?<\/div>/gi, (block) => {
     const image = extractOutreachImageFromBlock(block);
     const rebuilt = image
-      ? buildOutreachInlineImageBlock(image.src, image.fileName, image.width)
+      ? buildOutreachInlineImageBlock(image.src, image.fileName, image.width, image.href)
       : block;
     const index = blocks.length;
     blocks.push(rebuilt);
@@ -163,7 +171,7 @@ function mapOutreachInlineImages(html: string, transform: (content: string) => s
     const image = extractOutreachImageFromBlock(tag);
     if (!image) return tag;
     const index = blocks.length;
-    blocks.push(buildOutreachInlineImageBlock(image.src, image.fileName, image.width));
+    blocks.push(buildOutreachInlineImageBlock(image.src, image.fileName, image.width, image.href));
     return placeholder(index);
   });
 
