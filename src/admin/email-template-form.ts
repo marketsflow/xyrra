@@ -216,6 +216,7 @@ export function bindEmailTemplateForm(options: {
   }
 
   let previewRaf = 0;
+  let selectedImage: HTMLImageElement | null = null;
   function schedulePreviewAndSaveState() {
     imageResize.sync();
     updateSaveState();
@@ -225,6 +226,9 @@ export function bindEmailTemplateForm(options: {
 
   const imageResize = bindEmailImageResize(editorField, {
     onChange: schedulePreviewAndSaveState,
+    onSelect: (img) => {
+      selectedImage = img;
+    },
   });
 
   function setImageBusy(busy: boolean) {
@@ -310,13 +314,52 @@ export function bindEmailTemplateForm(options: {
     updateSaveState();
   }
 
+  function imageLinkUrl(value: string) {
+    const url = value.trim();
+    if (!url) return null;
+    if (/^(https?:|mailto:|tel:|\/|#)/i.test(url)) return url;
+    return null;
+  }
+
+  function linkSelectedImage(url: string) {
+    if (!selectedImage?.isConnected) return false;
+    const safeUrl = imageLinkUrl(url);
+    if (!safeUrl) {
+      setError("Enter a valid http(s), mailto, tel, or relative URL.");
+      return true;
+    }
+
+    const existingLink = selectedImage.parentElement?.matches("a")
+      ? selectedImage.parentElement
+      : null;
+    if (existingLink) {
+      existingLink.setAttribute("href", safeUrl);
+    } else {
+      const link = document.createElement("a");
+      link.href = safeUrl;
+      selectedImage.before(link);
+      link.append(selectedImage);
+    }
+    selectedImage = null;
+    imageResize.clear();
+    updatePreview();
+    updateSaveState();
+    return true;
+  }
+
   document.querySelectorAll<HTMLButtonElement>("[data-xa-editor-cmd]").forEach((button) => {
+    button.addEventListener("mousedown", (event) => {
+      saveEditorRange();
+      if (button.dataset.xaEditorCmd === "createLink") event.stopPropagation();
+    });
     button.addEventListener("click", () => {
       const command = button.dataset.xaEditorCmd;
       if (!command) return;
       if (command === "createLink") {
         const url = window.prompt("Link URL");
-        if (url?.trim()) execCommand("createLink", url.trim());
+        if (!url?.trim()) return;
+        if (selectedImage && linkSelectedImage(url)) return;
+        execCommand("createLink", url.trim());
         return;
       }
       execCommand(command);

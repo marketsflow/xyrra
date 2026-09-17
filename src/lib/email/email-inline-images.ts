@@ -12,6 +12,7 @@ type InlineImageRecord = {
   src: string;
   fileName: string;
   width: number;
+  href?: string;
 };
 
 function escapeHtmlAttr(value: string) {
@@ -42,13 +43,20 @@ export function applyEmailInlineImageWidth(img: HTMLImageElement, width: number)
   return next;
 }
 
-export function buildEmailInlineImageBlock(publicUrl: string, fileName: string, width = EMAIL_INLINE_IMAGE_WIDTH) {
+export function buildEmailInlineImageBlock(
+  publicUrl: string,
+  fileName: string,
+  width = EMAIL_INLINE_IMAGE_WIDTH,
+  href?: string,
+) {
   const safeUrl = escapeHtmlAttr(publicUrl.trim());
   const safeName = escapeHtmlAttr(fileName.trim() || "Image");
+  const safeHref = href?.trim() ? escapeHtmlAttr(href.trim()) : "";
   const next = clampEmailInlineImageWidth(width);
+  const image = `<img src="${safeUrl}" alt="${safeName}" width="${next}" style="${emailInlineImageStyle(next)}" />`;
 
   return `<div ${EMAIL_INLINE_IMAGE_MARKER} style="margin:0 0 16px;text-align:center;">
-  <img src="${safeUrl}" alt="${safeName}" width="${next}" style="${emailInlineImageStyle(next)}" />
+  ${safeHref ? `<a href="${safeHref}">${image}</a>` : image}
 </div>`;
 }
 
@@ -57,7 +65,8 @@ function extractImageFromBlock(block: string): InlineImageRecord | null {
   if (!src) return null;
 
   const alt = block.match(/\balt="([^"]*)"/i)?.[1]?.trim() || "Image";
-  return { src, fileName: alt, width: parseEmailInlineImageWidth(block) };
+  const href = block.match(/<a\b[^>]*\bhref="([^"]+)"[^>]*>/i)?.[1]?.trim();
+  return { src, fileName: alt, width: parseEmailInlineImageWidth(block), href };
 }
 
 function isEmailTemplateImageSrc(src: string) {

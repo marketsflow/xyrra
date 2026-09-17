@@ -9,6 +9,7 @@ export function bindEmailImageResize(
   editor: HTMLElement,
   options: {
     onChange: () => void;
+    onSelect?: (img: HTMLImageElement | null) => void;
   },
 ) {
   const wrap = editor.closest(".xa-template-editor__body-wrap");
@@ -41,6 +42,7 @@ export function bindEmailImageResize(
   function clear() {
     selected = null;
     overlay.hidden = true;
+    options.onSelect?.(null);
   }
 
   function sync() {
@@ -63,6 +65,7 @@ export function bindEmailImageResize(
 
   function select(img: HTMLImageElement | null) {
     selected = img;
+    options.onSelect?.(img);
     sync();
   }
 
