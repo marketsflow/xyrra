@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#f8f9fd" />
-    <title>Users | Admin | Xyrra</title>
+    <title>Stock Prices | Admin | Xyrra</title>
     <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -49,66 +49,35 @@
 
         <main class="xa-admin__main">
           <div class="xa-admin__panel">
-            <div class="xa-users__header">
-              <div>
-                <h1>Users</h1>
-                <p id="xa-users-summary" class="xa-users__summary">Loading…</p>
-              </div>
-              <label class="xa-users__search">
-                <span class="xa-sr-only">Search users</span>
-                <input
-                  id="xa-users-search"
-                  type="search"
-                  placeholder="Search name or email…"
-                  autocomplete="off"
-                />
+            <h1>Stock Prices</h1>
+            <p class="xa-templates__lede">
+              Fetch end-of-day prices for all stocks enabled for trading from the EODHD API and store them in
+              <code>stock_prices</code>.
+            </p>
+
+            <div class="xa-sent__dates">
+              <label>
+                <span>From</span>
+                <input id="xa-stock-prices-from" type="date" aria-label="Fetch prices from date" />
+              </label>
+              <label>
+                <span>To</span>
+                <input id="xa-stock-prices-to" type="date" aria-label="Fetch prices to date" />
               </label>
             </div>
 
-            <p id="xa-users-status" class="xa-users__status" aria-live="polite">Loading users…</p>
+            <button type="button" id="xa-stock-prices-fetch" class="xa-admin__signout xa-stock-prices__fetch">
+              Fetch EOD prices
+            </button>
 
-            <div class="xa-users__table-wrap">
-              <table class="xa-users__table">
-                <thead>
-                  <tr>
-                    <th scope="col">
-                      <button type="button" class="xa-users__sort" data-sort="old_id">Old ID</button>
-                    </th>
-                    <th scope="col">
-                      <button type="button" class="xa-users__sort" data-sort="name">Name</button>
-                    </th>
-                    <th scope="col">
-                      <button type="button" class="xa-users__sort" data-sort="f_name">First name</button>
-                    </th>
-                    <th scope="col">
-                      <button type="button" class="xa-users__sort" data-sort="l_name">Last name</button>
-                    </th>
-                    <th scope="col">
-                      <button type="button" class="xa-users__sort" data-sort="email">Email</button>
-                    </th>
-                    <th scope="col">
-                      <button type="button" class="xa-users__sort" data-sort="created">Created</button>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody id="xa-users-body">
-                  <tr>
-                    <td colspan="6" class="xa-users__empty">Loading…</td>
-                  </tr>
-                </tbody>
-              </table>
-            </div>
+            <p id="xa-stock-prices-status" class="xa-users__status" aria-live="polite"></p>
 
-            <div class="xa-users__pagination">
-              <button type="button" id="xa-users-prev" class="xa-admin__signout">Previous</button>
-              <span id="xa-users-page">Page 1 of 1</span>
-              <button type="button" id="xa-users-next" class="xa-admin__signout">Next</button>
-            </div>
+            <ul id="xa-stock-prices-errors" class="xa-stock-prices__errors" hidden></ul>
           </div>
         </main>
       </div>
     </div>
 
-    <script type="module" src="/src/admin/users.ts"></script>
+    <script type="module" src="/src/admin/stock-prices.ts"></script>
   </body>
 </html>

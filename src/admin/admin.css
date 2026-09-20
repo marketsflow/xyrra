@@ -2008,3 +2008,26 @@ body.xa-body {
   color: var(--xa-muted);
   font-size: 0.75rem;
 }
+
+.xa-stock-prices__fetch {
+  margin-top: 1.25rem;
+  width: auto;
+  padding: 0.7rem 1.25rem;
+}
+
+.xa-stock-prices__errors {
+  margin: 1rem 0 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.xa-stock-prices__errors li {
+  padding: 0.65rem 0.85rem;
+  border-radius: 0.65rem;
+  border: 1px solid #fecaca;
+  background: #fef2f2;
+  color: #991b1b;
+  font-size: 0.8125rem;
+}

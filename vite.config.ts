@@ -7,6 +7,7 @@ import { sendEmailOutreach } from "./api/email-outreach";
 import { handleResendWebhook } from "./api/resend-webhook";
 import { recordEmailUnsubscribe } from "./api/unsubscribe";
 import { recordFreecapsSignup } from "./api/freecaps-signup";
+import { fetchStockPrices } from "./api/stock-prices";
 import { articleSeoPlugin } from "./vite/article-seo-plugin";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -182,6 +183,48 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
           });
           if (result.success) {
             writeJson(res, 200, { success: true, id: result.id });
+            return;
+          }
+          writeJson(res, result.status ?? 500, { success: false, message: result.message });
+          return;
+        }
+        if (path === "/api/stock-prices") {
+          if (req.method !== "POST") {
+            writeJson(res, 405, { success: false, message: "Method not allowed" });
+            return;
+          }
+          let raw: string;
+          try {
+            raw = await readRequestBody(req);
+          } catch {
+            writeJson(res, 413, { success: false, message: "Request too large" });
+            return;
+          }
+          let body: unknown;
+          try {
+            body = raw ? JSON.parse(raw) : {};
+          } catch {
+            writeJson(res, 400, { success: false, message: "Invalid JSON" });
+            return;
+          }
+          const result = await fetchStockPrices(
+            body,
+            {
+              SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+              SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY,
+              SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+              EODHD_API_KEY: env.EODHD_API_KEY,
+              EODHD_API_BASE_URI: env.EODHD_API_BASE_URI,
+            },
+            headerValue(req.headers.authorization),
+          );
+          if (result.success) {
+            writeJson(res, 200, {
+              success: true,
+              stocksProcessed: result.stocksProcessed,
+              rowsUpserted: result.rowsUpserted,
+              errors: result.errors,
+            });
             return;
           }
           writeJson(res, result.status ?? 500, { success: false, message: result.message });

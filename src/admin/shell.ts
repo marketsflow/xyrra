@@ -7,7 +7,8 @@ export type AdminNavId =
   | "email-templates"
   | "email-lists"
   | "email-outreach"
-  | "emails-sent";
+  | "emails-sent"
+  | "stock-prices";
 
 export function initAdminShell(session: AdminSession, activeNav: AdminNavId) {
   const emailEl = document.getElementById("xa-admin-email");

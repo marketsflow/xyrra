@@ -49,6 +49,10 @@
     "api/freecaps-signup.ts": {
       "memory": 256,
       "maxDuration": 30
+    },
+    "api/stock-prices.ts": {
+      "memory": 256,
+      "maxDuration": 60
     }
   }
 }
