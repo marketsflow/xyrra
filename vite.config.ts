@@ -385,6 +385,8 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/admin/email-outreach/" + search;
       } else if (path === "/admin/emails-sent") {
         (req as IncomingMessage & { url?: string }).url = "/admin/emails-sent/" + search;
+      } else if (path === "/admin/stock-prices") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/stock-prices/" + search;
       } else if (
         path === "/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine"
       ) {
@@ -449,6 +451,7 @@ export default defineConfig(({ mode }) => {
           adminEmailListsEdit: resolve(__dirname, "admin/email-lists/edit/index.html"),
           adminEmailOutreach: resolve(__dirname, "admin/email-outreach/index.html"),
           adminEmailsSent: resolve(__dirname, "admin/emails-sent/index.html"),
+          adminStockPrices: resolve(__dirname, "admin/stock-prices/index.html"),
         },
       },
     },
