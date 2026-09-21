@@ -158,10 +158,11 @@ async function serviceFetch(
   return fetch(`${config.url}${path}`, { ...init, headers });
 }
 
-async function fetchTradableStocks(config: { url: string; serviceRoleKey: string }): Promise<StockRow[]> {
+async function fetchStocksToFetch(config: { url: string; serviceRoleKey: string }): Promise<StockRow[]> {
+  // Fetches every stock (not just enable_for_trading = true) — crypto symbols use a separate EODHD endpoint.
   const res = await serviceFetch(
     config,
-    "/rest/v1/stocks?enable_for_trading=eq.true&stock=not.like.C:*&select=stock&order=stock.asc",
+    "/rest/v1/stocks?stock=not.like.C:*&select=stock&order=stock.asc",
   );
   if (!res.ok) {
     throw new Error("Unable to load stocks.");
@@ -271,7 +272,7 @@ export async function fetchStockPrices(
 
   let stocks: StockRow[];
   try {
-    stocks = await fetchTradableStocks(service);
+    stocks = await fetchStocksToFetch(service);
   } catch (error) {
     return {
       success: false,
@@ -281,20 +282,27 @@ export async function fetchStockPrices(
   }
 
   if (stocks.length === 0) {
-    return { success: false, message: "No stocks are enabled for trading.", status: 400 };
+    return { success: false, message: "No stocks were found.", status: 400 };
   }
 
   const errors: Array<{ stock: string; message: string }> = [];
   let rowsUpserted = 0;
 
-  for (const { stock } of stocks) {
-    try {
-      const candles = await getEodForStockFromTo({ baseUri, apiKey }, stock, parsed.data.from, parsed.data.to);
-      rowsUpserted += await upsertStockPrices(service, stock, candles);
-    } catch (error) {
-      errors.push({ stock, message: error instanceof Error ? error.message : "Unknown error." });
+  // Fetch several symbols concurrently — sequential requests would blow past the serverless timeout for large stock lists.
+  const CONCURRENCY = 10;
+  let nextIndex = 0;
+  async function worker() {
+    while (nextIndex < stocks.length) {
+      const { stock } = stocks[nextIndex++];
+      try {
+        const candles = await getEodForStockFromTo({ baseUri, apiKey }, stock, parsed.data.from, parsed.data.to);
+        rowsUpserted += await upsertStockPrices(service, stock, candles);
+      } catch (error) {
+        errors.push({ stock, message: error instanceof Error ? error.message : "Unknown error." });
+      }
     }
   }
+  await Promise.all(Array.from({ length: Math.min(CONCURRENCY, stocks.length) }, () => worker()));
 
   return { success: true, stocksProcessed: stocks.length, rowsUpserted, errors };
 }
