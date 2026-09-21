@@ -28,6 +28,16 @@ async function init() {
   initAdminShell(session, "stock-prices");
   setAdminLoading(false);
 
+  const countEl = document.getElementById("xa-stock-prices-count");
+  if (countEl) {
+    const { count, error } = await session.supabase
+      .from("stocks")
+      .select("*", { count: "exact", head: true });
+    countEl.textContent = error
+      ? `Unable to read the stocks table: ${error.message}`
+      : `${(count ?? 0).toLocaleString()} stock${count === 1 ? "" : "s"} in the database.`;
+  }
+
   const fromInput = document.getElementById("xa-stock-prices-from") as HTMLInputElement | null;
   const toInput = document.getElementById("xa-stock-prices-to") as HTMLInputElement | null;
   const fetchBtn = document.getElementById("xa-stock-prices-fetch") as HTMLButtonElement | null;

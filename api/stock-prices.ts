@@ -290,13 +290,16 @@ export async function fetchStockPrices(
 
   // Fetch several symbols concurrently — sequential requests would blow past the serverless timeout for large stock lists.
   const CONCURRENCY = 10;
+  const { from, to } = parsed.data;
+  const svc = service;
+  const eodhdApiKey = apiKey;
   let nextIndex = 0;
   async function worker() {
     while (nextIndex < stocks.length) {
       const { stock } = stocks[nextIndex++];
       try {
-        const candles = await getEodForStockFromTo({ baseUri, apiKey }, stock, parsed.data.from, parsed.data.to);
-        rowsUpserted += await upsertStockPrices(service, stock, candles);
+        const candles = await getEodForStockFromTo({ baseUri, apiKey: eodhdApiKey }, stock, from, to);
+        rowsUpserted += await upsertStockPrices(svc, stock, candles);
       } catch (error) {
         errors.push({ stock, message: error instanceof Error ? error.message : "Unknown error." });
       }
