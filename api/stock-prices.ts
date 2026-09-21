@@ -9,6 +9,14 @@
 const EODHD_BASE_URI = "https://eodhd.com/api/";
 const MAX_RANGE_DAYS = 366;
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+const DEFAULT_BATCH_SIZE = 100;
+const MAX_BATCH_SIZE = 300;
+const RATE_LIMIT_RETRIES = 3;
+const RATE_LIMIT_BASE_DELAY_MS = 1000;
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 export type StockPricesEnv = {
   SUPABASE_URL?: string;
@@ -24,6 +32,8 @@ type FetchResult =
       stocksProcessed: number;
       rowsUpserted: number;
       errors: Array<{ stock: string; message: string }>;
+      totalStocks: number;
+      nextOffset: number | null;
     }
   | { success: false; message: string; status?: number };
 
@@ -38,7 +48,7 @@ type EodhdCandle = {
   volume?: number | string | null;
 };
 
-type Payload = { from: string; to: string };
+type Payload = { from: string; to: string; offset: number; limit: number };
 
 function jsonHeaders() {
   return { "Content-Type": "application/json; charset=utf-8" };
@@ -73,7 +83,13 @@ function parsePayload(raw: unknown): { ok: true; data: Payload } | { ok: false; 
     return { ok: false, error: `Date range cannot exceed ${MAX_RANGE_DAYS} days.` };
   }
 
-  return { ok: true, data: { from, to } };
+  const offsetRaw = Number(o.offset ?? 0);
+  const offset = Number.isFinite(offsetRaw) && offsetRaw >= 0 ? Math.floor(offsetRaw) : 0;
+  const limitRaw = Number(o.limit ?? DEFAULT_BATCH_SIZE);
+  const limit =
+    Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(MAX_BATCH_SIZE, Math.floor(limitRaw)) : DEFAULT_BATCH_SIZE;
+
+  return { ok: true, data: { from, to, offset, limit } };
 }
 
 async function parseJsonResponse(res: Response): Promise<unknown> {
@@ -158,17 +174,25 @@ async function serviceFetch(
   return fetch(`${config.url}${path}`, { ...init, headers });
 }
 
-async function fetchStocksToFetch(config: { url: string; serviceRoleKey: string }): Promise<StockRow[]> {
+async function fetchStocksToFetch(
+  config: { url: string; serviceRoleKey: string },
+  offset: number,
+  limit: number,
+): Promise<{ rows: StockRow[]; total: number }> {
   // Fetches every stock (not just enable_for_trading = true) — crypto symbols use a separate EODHD endpoint.
+  // Paginated with offset/limit — PostgREST caps unpaginated responses at 1000 rows by default.
   const res = await serviceFetch(
     config,
-    "/rest/v1/stocks?stock=not.like.C:*&select=stock&order=stock.asc",
+    `/rest/v1/stocks?stock=not.like.C:*&select=stock&order=stock.asc&offset=${offset}&limit=${limit}`,
+    { headers: { Prefer: "count=exact" } },
   );
   if (!res.ok) {
     throw new Error("Unable to load stocks.");
   }
   const rows = (await parseJsonResponse(res)) as StockRow[] | unknown;
-  return Array.isArray(rows) ? rows : [];
+  const contentRange = res.headers.get("content-range") ?? "";
+  const total = Number(contentRange.split("/")[1]) || 0;
+  return { rows: Array.isArray(rows) ? rows : [], total };
 }
 
 function toNumberOrNull(value: number | string | null | undefined): number | null {
@@ -189,12 +213,18 @@ async function getEodForStockFromTo(
   url.searchParams.set("from", from);
   url.searchParams.set("to", to);
 
-  const res = await fetch(url.toString());
-  if (!res.ok) {
-    throw new Error(`EODHD request failed (HTTP ${res.status}).`);
+  let lastStatus = 0;
+  for (let attempt = 0; attempt <= RATE_LIMIT_RETRIES; attempt++) {
+    const res = await fetch(url.toString());
+    if (res.ok) {
+      const json = await parseJsonResponse(res);
+      return Array.isArray(json) ? (json as EodhdCandle[]) : [];
+    }
+    lastStatus = res.status;
+    if (res.status !== 429 || attempt === RATE_LIMIT_RETRIES) break;
+    await sleep(RATE_LIMIT_BASE_DELAY_MS * (attempt + 1));
   }
-  const json = await parseJsonResponse(res);
-  return Array.isArray(json) ? (json as EodhdCandle[]) : [];
+  throw new Error(`EODHD request failed (HTTP ${lastStatus}).`);
 }
 
 async function upsertStockPrices(
@@ -271,8 +301,11 @@ export async function fetchStockPrices(
   }
 
   let stocks: StockRow[];
+  let total: number;
   try {
-    stocks = await fetchStocksToFetch(service);
+    const page = await fetchStocksToFetch(service, parsed.data.offset, parsed.data.limit);
+    stocks = page.rows;
+    total = page.total;
   } catch (error) {
     return {
       success: false,
@@ -288,9 +321,9 @@ export async function fetchStockPrices(
   const errors: Array<{ stock: string; message: string }> = [];
   let rowsUpserted = 0;
 
-  // Fetch several symbols concurrently — sequential requests would blow past the serverless timeout for large stock lists.
-  const CONCURRENCY = 10;
-  const { from, to } = parsed.data;
+  // Fetch a few symbols concurrently — kept low to avoid tripping EODHD's per-minute rate limit (HTTP 429).
+  const CONCURRENCY = 5;
+  const { from, to, offset, limit } = parsed.data;
   const svc = service;
   const eodhdApiKey = apiKey;
   let nextIndex = 0;
@@ -307,7 +340,16 @@ export async function fetchStockPrices(
   }
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, stocks.length) }, () => worker()));
 
-  return { success: true, stocksProcessed: stocks.length, rowsUpserted, errors };
+  const nextOffset = offset + limit < total ? offset + limit : null;
+
+  return {
+    success: true,
+    stocksProcessed: stocks.length,
+    rowsUpserted,
+    errors,
+    totalStocks: total,
+    nextOffset,
+  };
 }
 
 export const config = {
@@ -358,6 +400,8 @@ export default {
             stocksProcessed: result.stocksProcessed,
             rowsUpserted: result.rowsUpserted,
             errors: result.errors,
+            totalStocks: result.totalStocks,
+            nextOffset: result.nextOffset,
           },
           { status: 200, headers: jsonHeaders() },
         );

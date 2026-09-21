@@ -7,7 +7,11 @@ type FetchResponse = {
   stocksProcessed?: number;
   rowsUpserted?: number;
   errors?: Array<{ stock: string; message: string }>;
+  totalStocks?: number;
+  nextOffset?: number | null;
 };
+
+const BATCH_SIZE = 100;
 
 function escapeHtml(value: string) {
   return value
@@ -86,9 +90,13 @@ async function init() {
 
       fetching = true;
       fetchBtn.disabled = true;
-      fetchBtn.textContent = "Fetching…";
       renderErrors([]);
-      setStatus("Fetching EOD prices…");
+
+      const allErrors: Array<{ stock: string; message: string }> = [];
+      let totalStocksProcessed = 0;
+      let totalRowsUpserted = 0;
+      let offset = 0;
+      let totalStocks: number | null = null;
 
       try {
         const auth = await session.supabase.auth.getSession();
@@ -97,32 +105,51 @@ async function init() {
           throw new Error("Your session expired. Sign in again.");
         }
 
-        const response = await fetch("/api/stock-prices", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-            Authorization: `Bearer ${accessToken}`,
-          },
-          body: JSON.stringify({ from, to }),
-        });
+        // Fetched in batches — a single request covering thousands of stocks would exceed the serverless function timeout.
+        for (;;) {
+          const batchNumber = Math.floor(offset / BATCH_SIZE) + 1;
+          fetchBtn.textContent = `Fetching batch ${batchNumber}…`;
+          setStatus(
+            totalStocks
+              ? `Fetching ${offset + 1}–${Math.min(offset + BATCH_SIZE, totalStocks)} of ${totalStocks} stocks…`
+              : "Fetching…",
+          );
 
-        const raw = await response.text();
-        let body: FetchResponse = {};
-        if (raw) {
-          try {
-            body = JSON.parse(raw) as FetchResponse;
-          } catch {
-            throw new Error("The stock prices API did not return JSON.");
+          const response = await fetch("/api/stock-prices", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${accessToken}`,
+            },
+            body: JSON.stringify({ from, to, offset, limit: BATCH_SIZE }),
+          });
+
+          const raw = await response.text();
+          let body: FetchResponse = {};
+          if (raw) {
+            try {
+              body = JSON.parse(raw) as FetchResponse;
+            } catch {
+              throw new Error("The stock prices API did not return JSON.");
+            }
           }
+
+          if (!response.ok || !body.success) {
+            throw new Error(body.message || "Unable to fetch stock prices.");
+          }
+
+          totalStocksProcessed += body.stocksProcessed ?? 0;
+          totalRowsUpserted += body.rowsUpserted ?? 0;
+          totalStocks = body.totalStocks ?? totalStocks;
+          allErrors.push(...(body.errors ?? []));
+          renderErrors(allErrors);
+
+          if (body.nextOffset === null || body.nextOffset === undefined) break;
+          offset = body.nextOffset;
         }
 
-        if (!response.ok || !body.success) {
-          throw new Error(body.message || "Unable to fetch stock prices.");
-        }
-
-        renderErrors(body.errors ?? []);
         setStatus(
-          `Fetched prices for ${body.stocksProcessed ?? 0} stock${body.stocksProcessed === 1 ? "" : "s"}, saved ${body.rowsUpserted ?? 0} price${body.rowsUpserted === 1 ? "" : "s"}.`,
+          `Fetched prices for ${totalStocksProcessed} stock${totalStocksProcessed === 1 ? "" : "s"}, saved ${totalRowsUpserted} price${totalRowsUpserted === 1 ? "" : "s"}.${allErrors.length ? ` ${allErrors.length} error${allErrors.length === 1 ? "" : "s"}.` : ""}`,
         );
       } catch (error) {
         setStatus(error instanceof Error ? error.message : "Unable to fetch stock prices.", true);
@@ -136,3 +163,4 @@ async function init() {
 }
 
 void init();
+

@@ -224,6 +224,8 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
               stocksProcessed: result.stocksProcessed,
               rowsUpserted: result.rowsUpserted,
               errors: result.errors,
+              totalStocks: result.totalStocks,
+              nextOffset: result.nextOffset,
             });
             return;
           }
