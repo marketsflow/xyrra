@@ -1,0 +1,257 @@
+.mh-dash {
+  padding: 2.2rem 0 3.5rem;
+}
+
+.mh-dash .mh-wrap {
+  width: min(760px, calc(100% - 2.5rem));
+}
+
+.mh-dash__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 1.15rem;
+}
+
+.mh-dash__head h1 {
+  margin: 0;
+  font-size: clamp(1.8rem, 3vw, 2.4rem);
+  letter-spacing: -0.04em;
+  line-height: 1.1;
+}
+
+.mh-dash__head p {
+  margin: 0.45rem 0 0;
+  color: var(--mh-muted);
+  font-size: 0.95rem;
+}
+
+.mh-pro {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  height: 36px;
+  padding: 0 0.85rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+  color: white;
+  font-size: 0.82rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+
+.mh-dash__stack {
+  display: grid;
+  gap: 0.85rem;
+}
+
+.mh-dcard {
+  border-radius: 18px;
+  padding: 1rem 1.05rem 1.15rem;
+  background:
+    linear-gradient(90deg, rgba(167, 139, 250, 0.55), rgba(91, 163, 255, 0.22), rgba(94, 234, 212, 0.5));
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.28);
+}
+
+.mh-dcard__inner {
+  border-radius: 17px;
+  padding: 1rem 1rem 1.15rem;
+  background: linear-gradient(90deg, #171428 0%, #0c1014 48%, #0b1614 100%);
+}
+
+.mh-dcard--insight {
+  background: #0c1210;
+  border: 1px solid rgba(84, 216, 167, 0.45);
+  box-shadow: 0 10px 28px rgba(84, 216, 167, 0.12);
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.mh-dcard--insight .mh-ico {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  color: #54d8a7;
+  background: rgba(84, 216, 167, 0.14);
+}
+
+.mh-insight__copy {
+  flex: 1;
+  min-width: 0;
+}
+
+.mh-insight__copy strong {
+  display: block;
+  font-size: 0.92rem;
+}
+
+.mh-insight__copy span {
+  display: block;
+  margin-top: 0.15rem;
+  color: #54d8a7;
+  font-size: 0.88rem;
+  font-weight: 800;
+}
+
+.mh-insight__stat {
+  text-align: right;
+}
+
+.mh-insight__stat b {
+  display: block;
+  color: #54d8a7;
+  font-size: 1.25rem;
+  letter-spacing: -0.03em;
+}
+
+.mh-insight__stat small {
+  color: var(--mh-muted);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.mh-dcard__top {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  margin-bottom: 1rem;
+}
+
+.mh-dcard__top h2 {
+  margin: 0;
+  font-size: 0.98rem;
+  letter-spacing: -0.02em;
+}
+
+.mh-dcard__top p {
+  margin: 0.15rem 0 0;
+  color: var(--mh-muted);
+  font-size: 0.72rem;
+}
+
+.mh-dcard__top svg {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  margin-top: 0.15rem;
+}
+
+.mh-chevron {
+  margin-left: auto;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.85rem;
+  line-height: 1;
+}
+
+.mh-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.4rem;
+  text-align: center;
+}
+
+.mh-metric__period {
+  margin: 0 0 0.4rem;
+  color: var(--mh-muted);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.mh-metric__ring {
+  width: min(100%, 104px);
+  height: auto;
+  display: block;
+  margin: 0 auto;
+}
+
+.mh-metric__ring text {
+  fill: white;
+  font-family: var(--mh-font);
+  font-size: 14px;
+  font-weight: 800;
+}
+
+.mh-metric__signed {
+  margin: 0.45rem 0 0;
+  color: #54d8a7;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.mh-metric__sym,
+.mh-metric__cap {
+  margin: 0.15rem 0 0;
+  font-size: 0.82rem;
+  font-weight: 800;
+}
+
+.mh-metric__status,
+.mh-metric__cap {
+  margin: 0.1rem 0 0;
+  color: var(--mh-dim);
+  font-size: 0.68rem;
+  font-weight: 600;
+}
+
+.mh-rankline {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.2rem;
+  margin-bottom: 0.35rem;
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+
+.mh-rankline--1 { color: #e8c36a; }
+.mh-rankline--2 { color: #9eb0c2; }
+.mh-rankline--3 { color: #8b9399; }
+
+.mh-value {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-top: 1.1rem;
+}
+
+.mh-value p {
+  margin: 0;
+  color: var(--mh-muted);
+  font-size: 0.72rem;
+}
+
+.mh-value strong {
+  display: block;
+  margin-top: 0.2rem;
+  font-size: 1.05rem;
+  letter-spacing: -0.02em;
+}
+
+.mh-value b {
+  color: #54d8a7;
+  font-size: 0.95rem;
+}
+
+.mh-dash__note {
+  margin: 0;
+  color: var(--mh-muted);
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.mh-dash__note a {
+  color: var(--mh-mint);
+  font-weight: 700;
+}
+
+@media (max-width: 720px) {
+  .mh-insight__stat b {
+    font-size: 1.05rem;
+  }
+
+  .mh-dash__head {
+    align-items: flex-start;
+  }
+}

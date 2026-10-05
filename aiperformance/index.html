@@ -1,0 +1,416 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-6G0ZX6DKHR"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-6G0ZX6DKHR');
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#05080f" />
+    <meta name="author" content="Xyrra" />
+    <meta
+      name="description"
+      content="Public view of the Xyrra AI dashboard: stock and crypto performers, and 24H, 7D and 30D performance."
+    />
+    <title>AI Performance | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/new-home.css" />
+    <link rel="stylesheet" href="/src/ai-performance.css" />
+  </head>
+  <body class="mh-body">
+    <svg class="mh-defs" aria-hidden="true">
+      <defs>
+        <linearGradient id="mh-violet" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0%" stop-color="#c4b5fd" />
+          <stop offset="100%" stop-color="#7c3aed" />
+        </linearGradient>
+        <linearGradient id="mh-blue" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0%" stop-color="#93c5fd" />
+          <stop offset="100%" stop-color="#2563eb" />
+        </linearGradient>
+        <linearGradient id="mh-green" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0%" stop-color="#6ee7b7" />
+          <stop offset="100%" stop-color="#059669" />
+        </linearGradient>
+        <linearGradient id="mh-cyan" x1="0" y1="1" x2="1" y2="0">
+          <stop offset="0%" stop-color="#99f6e4" />
+          <stop offset="100%" stop-color="#14b8a6" />
+        </linearGradient>
+      </defs>
+    </svg>
+
+    <div class="mh">
+      <header class="mh-header">
+        <a class="mh-brand" href="/" aria-label="Xyrra home">
+          <img
+            class="mh-brand__logo"
+            src="/images/new/xyrra-wordmark.png"
+            alt=""
+            width="922"
+            height="125"
+            decoding="async"
+          />
+        </a>
+        <nav class="mh-nav" id="mh-nav" data-open="false" aria-label="Primary">
+          <a class="mh-nav__signin" href="/login/">Sign In</a>
+          <a href="/aiperformance/" aria-current="page">Performance</a>
+          <a href="/ai_stocks/">AI Stocks</a>
+          <a href="/ai_crypto/">AI Cryptos</a>
+          <a href="/ai_portfolios/">AI Portfolios</a>
+          <a href="/how-xyrra-ai-works/">How it Works</a>
+          <a href="/#features">Features</a>
+          <a href="/pricing/">Pricing</a>
+          <a href="/about-xyrra/">About</a>
+        </nav>
+        <div class="mh-actions">
+          <a class="mh-btn mh-btn--ghost" href="/login/">Sign In</a>
+          <a class="mh-btn mh-btn--mint" href="/login/">Get Started</a>
+          <button
+            type="button"
+            class="mh-menu"
+            id="mh-menu"
+            aria-expanded="false"
+            aria-controls="mh-nav"
+            aria-label="Open menu"
+          >
+            <span></span><span></span><span></span>
+          </button>
+        </div>
+      </header>
+
+      <main class="mh-dash">
+        <div class="mh-wrap">
+          <div class="mh-dash__head">
+            <div>
+              <h1>Your AI Edge Today</h1>
+              <p>Markets move. AI finds opportunities.</p>
+            </div>
+            <a class="mh-pro" href="/login/">◆ Pro</a>
+          </div>
+
+          <div class="mh-dash__stack">
+            <section class="mh-dcard mh-dcard--insight" aria-label="Top AI insight this week">
+              <span class="mh-ico" aria-hidden="true">
+                <svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 4h10v2.2c0 2.2-1.2 3.6-3 4.5 1.8.9 3 2.3 3 4.5V18H7v-2.8c0-2.2 1.2-3.6 3-4.5-1.8-.9-3-2.3-3-4.5V4zm2 1.5v.7c0 1.3.7 2.2 2 2.8h2c1.3-.6 2-1.5 2-2.8v-.7H9zm0 12.5h6v-.8c0-1.3-.7-2.2-2-2.8H11c-1.3.6-2 1.5-2 2.8v.8z"/></svg>
+              </span>
+              <div class="mh-insight__copy">
+                <strong>Top AI Insight this week — Stocks</strong>
+                <span>$1,000 → $1,120</span>
+              </div>
+              <div class="mh-insight__stat">
+                <b>+12.0%</b>
+                <small>Best return (7D)</small>
+              </div>
+            </section>
+
+            <section class="mh-dcard" aria-labelledby="stock-performers">
+              <div class="mh-dcard__inner">
+                <div class="mh-dcard__top">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" aria-hidden="true"><path d="M4 16l5-5 3 3 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <div>
+                    <h2 id="stock-performers">Top AI Stock Performers</h2>
+                    <p>Best open trade, or best close from the last 30 days</p>
+                  </div>
+                  <span class="mh-chevron" aria-hidden="true">›</span>
+                </div>
+                <div class="mh-metrics">
+                  <div>
+                    <div class="mh-rankline mh-rankline--1">★ #1</div>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="PANW 148.99 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-violet)" stroke-dasharray="289 289" />
+                      <text x="60" y="64" text-anchor="middle">148.99%</text>
+                    </svg>
+                    <p class="mh-metric__signed">+148.99%</p>
+                    <p class="mh-metric__sym">PANW</p>
+                    <p class="mh-metric__status">Closed</p>
+                  </div>
+                  <div>
+                    <div class="mh-rankline mh-rankline--2">★ #2</div>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="MATX 91.33 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-blue)" stroke-dasharray="289 289" />
+                      <text x="60" y="64" text-anchor="middle">91.33%</text>
+                    </svg>
+                    <p class="mh-metric__signed">+91.33%</p>
+                    <p class="mh-metric__sym">MATX</p>
+                    <p class="mh-metric__status">Closed</p>
+                  </div>
+                  <div>
+                    <div class="mh-rankline mh-rankline--3">★ #3</div>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="HPQ 62.88 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-cyan)" stroke-dasharray="289 289" />
+                      <text x="60" y="64" text-anchor="middle">62.88%</text>
+                    </svg>
+                    <p class="mh-metric__signed">+62.88%</p>
+                    <p class="mh-metric__sym">HPQ</p>
+                    <p class="mh-metric__status">Closed</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="mh-dcard" aria-labelledby="crypto-performers">
+              <div class="mh-dcard__inner">
+                <div class="mh-dcard__top">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M10 10.5h3.2a1.6 1.6 0 0 1 0 3.2H10" stroke-linecap="round"/></svg>
+                  <div>
+                    <h2 id="crypto-performers">Top AI Crypto Performers</h2>
+                    <p>Best open trade, or best close from the last 30 days</p>
+                  </div>
+                  <span class="mh-chevron" aria-hidden="true">›</span>
+                </div>
+                <div class="mh-metrics">
+                  <div>
+                    <div class="mh-rankline mh-rankline--1">★ #1</div>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="LINK 31.09 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-violet)" stroke-dasharray="224 289" />
+                      <text x="60" y="64" text-anchor="middle">31.09%</text>
+                    </svg>
+                    <p class="mh-metric__signed">+31.09%</p>
+                    <p class="mh-metric__sym">LINK</p>
+                    <p class="mh-metric__status">Closed</p>
+                  </div>
+                  <div>
+                    <div class="mh-rankline mh-rankline--2">★ #2</div>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="SOL 29.81 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-blue)" stroke-dasharray="215 289" />
+                      <text x="60" y="64" text-anchor="middle">29.81%</text>
+                    </svg>
+                    <p class="mh-metric__signed">+29.81%</p>
+                    <p class="mh-metric__sym">SOL</p>
+                    <p class="mh-metric__status">Closed</p>
+                  </div>
+                  <div>
+                    <div class="mh-rankline mh-rankline--3">★ #3</div>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="ETH 27.42 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-cyan)" stroke-dasharray="198 289" />
+                      <text x="60" y="64" text-anchor="middle">27.42%</text>
+                    </svg>
+                    <p class="mh-metric__signed">+27.42%</p>
+                    <p class="mh-metric__sym">ETH</p>
+                    <p class="mh-metric__status">Closed</p>
+                  </div>
+                </div>
+              </div>
+            </section>
+
+            <section class="mh-dcard" aria-labelledby="stock-performance">
+              <div class="mh-dcard__inner">
+                <div class="mh-dcard__top">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" aria-hidden="true"><path d="M4 16l5-5 3 3 8-8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <div>
+                    <h2 id="stock-performance">AI Stock Performance</h2>
+                    <p>Top U.S. &amp; Global stocks</p>
+                  </div>
+                  <span class="mh-chevron" aria-hidden="true">›</span>
+                </div>
+                <div class="mh-metrics">
+                  <div>
+                    <p class="mh-metric__period">24H</p>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="24 hour stock gain 5.38 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-violet)" stroke-dasharray="39 289" />
+                      <text x="60" y="64" text-anchor="middle">5.38%</text>
+                    </svg>
+                    <p class="mh-metric__cap">24H Gain</p>
+                  </div>
+                  <div>
+                    <p class="mh-metric__period">7D</p>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="7 day stock gain 12 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-blue)" stroke-dasharray="87 289" />
+                      <text x="60" y="64" text-anchor="middle">12.00%</text>
+                    </svg>
+                    <p class="mh-metric__cap">7 Day Gain</p>
+                  </div>
+                  <div>
+                    <p class="mh-metric__period">30D</p>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="30 day stock gain 3.15 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-cyan)" stroke-dasharray="23 289" />
+                      <text x="60" y="64" text-anchor="middle">3.15%</text>
+                    </svg>
+                    <p class="mh-metric__cap">30 Day Gain</p>
+                  </div>
+                </div>
+                <div class="mh-value">
+                  <div>
+                    <p>Value change (7D)</p>
+                    <strong>$1,000 → $1,120</strong>
+                  </div>
+                  <b>▲ +12.00%</b>
+                </div>
+              </div>
+            </section>
+
+            <section class="mh-dcard" aria-labelledby="crypto-performance">
+              <div class="mh-dcard__inner">
+                <div class="mh-dcard__top">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" aria-hidden="true"><circle cx="12" cy="12" r="8"/><path d="M12 8v8M10 10.5h3.2a1.6 1.6 0 0 1 0 3.2H10" stroke-linecap="round"/></svg>
+                  <div>
+                    <h2 id="crypto-performance">AI Crypto Performance</h2>
+                    <p>BTC, ETH &amp; top alts</p>
+                  </div>
+                  <span class="mh-chevron" aria-hidden="true">›</span>
+                </div>
+                <div class="mh-metrics">
+                  <div>
+                    <p class="mh-metric__period">24H</p>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="24 hour crypto gain 7.75 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-violet)" stroke-dasharray="56 289" />
+                      <text x="60" y="64" text-anchor="middle">7.75%</text>
+                    </svg>
+                    <p class="mh-metric__cap">24H Gain</p>
+                  </div>
+                  <div>
+                    <p class="mh-metric__period">7D</p>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="7 day crypto gain 10.12 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-blue)" stroke-dasharray="73 289" />
+                      <text x="60" y="64" text-anchor="middle">10.12%</text>
+                    </svg>
+                    <p class="mh-metric__cap">7 Day Gain</p>
+                  </div>
+                  <div>
+                    <p class="mh-metric__period">30D</p>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="30 day crypto gain 27.42 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-cyan)" stroke-dasharray="198 289" />
+                      <text x="60" y="64" text-anchor="middle">27.42%</text>
+                    </svg>
+                    <p class="mh-metric__cap">30 Day Gain</p>
+                  </div>
+                </div>
+                <div class="mh-value">
+                  <div>
+                    <p>Value change (7D)</p>
+                    <strong>$1,000 → $1,101</strong>
+                  </div>
+                  <b>▲ +10.12%</b>
+                </div>
+              </div>
+            </section>
+
+            <section class="mh-dcard" aria-labelledby="investing-performance">
+              <div class="mh-dcard__inner">
+                <div class="mh-dcard__top">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.8" aria-hidden="true"><path d="M12 3 20 8v8l-8 5-8-5V8l8-5z" stroke-linejoin="round"/></svg>
+                  <div>
+                    <h2 id="investing-performance">AI Investing Performance</h2>
+                    <p>Managed portfolio strategies</p>
+                  </div>
+                  <span class="mh-chevron" aria-hidden="true">›</span>
+                </div>
+                <div class="mh-metrics">
+                  <div>
+                    <p class="mh-metric__period">24H</p>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="24 hour investing gain 5.53 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-violet)" stroke-dasharray="40 289" />
+                      <text x="60" y="64" text-anchor="middle">5.53%</text>
+                    </svg>
+                    <p class="mh-metric__cap">24H Gain</p>
+                  </div>
+                  <div>
+                    <p class="mh-metric__period">7D</p>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="7 day investing gain 19.44 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-blue)" stroke-dasharray="140 289" />
+                      <text x="60" y="64" text-anchor="middle">19.44%</text>
+                    </svg>
+                    <p class="mh-metric__cap">7 Day Gain</p>
+                  </div>
+                  <div>
+                    <p class="mh-metric__period">30D</p>
+                    <svg class="mh-metric__ring" viewBox="0 0 120 120" role="img" aria-label="30 day investing gain 24.89 percent">
+                      <circle class="mh-ring__track" cx="60" cy="60" r="46" />
+                      <circle class="mh-ring__value" cx="60" cy="60" r="46" stroke="url(#mh-cyan)" stroke-dasharray="180 289" />
+                      <text x="60" y="64" text-anchor="middle">24.89%</text>
+                    </svg>
+                    <p class="mh-metric__cap">30 Day Gain</p>
+                  </div>
+                </div>
+                <div class="mh-value">
+                  <div>
+                    <p>Value change (7D)</p>
+                    <strong>$1,000 → $1,194</strong>
+                  </div>
+                  <b>▲ +19.44%</b>
+                </div>
+              </div>
+            </section>
+          </div>
+        </div>
+      </main>
+
+      <footer class="mh-footer">
+        <a class="mh-brand" href="/" aria-label="Xyrra home">
+          <img
+            class="mh-footer__logo"
+            src="/images/new/xyrra-wordmark.png"
+            alt=""
+            width="922"
+            height="125"
+            decoding="async"
+          />
+        </a>
+        <div class="mh-footer__links">
+          <a href="/ai-financial-strategies/">AI Strategies</a>
+          <a href="/contact.html">Contact</a>
+          <a href="/private-policy/">Privacy</a>
+          <a href="/terms-and-conditions/">Terms</a>
+          <a href="/disclaimer/">Disclaimer</a>
+        </div>
+        <nav class="mh-footer__more" aria-label="More">
+          <a href="/xyrra-pc/">Xyrra PC</a>
+          <a href="/xyrra-agent/ai-agent/">Xyrra Agent</a>
+          <a href="/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine/">Why AI Demands a New Kind of Machine</a>
+          <a href="/features/">Features</a>
+          <a href="/faq/">FAQ</a>
+        </nav>
+        <p>© <span id="mh-year">2026</span> Xyrra. All rights reserved.</p>
+      </footer>
+    </div>
+
+    <script>
+      const year = document.getElementById("mh-year");
+      if (year) year.textContent = String(new Date().getFullYear());
+
+      const menu = document.getElementById("mh-menu");
+      const nav = document.getElementById("mh-nav");
+      menu?.addEventListener("click", () => {
+        const open = nav?.dataset.open === "true";
+        if (nav) nav.dataset.open = open ? "false" : "true";
+        menu.setAttribute("aria-expanded", String(!open));
+        menu.setAttribute("aria-label", open ? "Open menu" : "Close menu");
+      });
+      nav?.querySelectorAll("a").forEach((link) => {
+        link.addEventListener("click", () => {
+          if (!nav) return;
+          nav.dataset.open = "false";
+          menu?.setAttribute("aria-expanded", "false");
+          menu?.setAttribute("aria-label", "Open menu");
+        });
+      });
+    </script>
+    <script type="module" src="/src/cookie-notice.ts"></script>
+  </body>
+</html>

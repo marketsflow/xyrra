@@ -1,0 +1,31 @@
+# Xyrra
+
+> Xyrra is an AI insights app for stocks, crypto and portfolios. It shows performance, individual insights, and alerts that point back to the research. Insights are educational and are not financial advice.
+
+Xyrra is published by XYRRA LTD. Support email: hello@xyrra.ai. The iOS and Android apps are on the App Store and Google Play. Web sign-in is at https://xyrra.ai/login/.
+
+## Pages
+
+- [Home](https://xyrra.ai/): Product overview for AI stock, crypto and portfolio insights.
+- [Performance](https://xyrra.ai/aiperformance/): Public AI dashboard for stock, crypto and investing performance.
+- [AI Stocks](https://xyrra.ai/ai_stocks/): Current public AI stock insights, with performance and historical views.
+- [AI Crypto](https://xyrra.ai/ai_crypto/): Current public AI crypto insights, with performance and historical views.
+- [AI Portfolios](https://xyrra.ai/ai_portfolios/): AI portfolios, including best performing, trending, recommended and lower risk.
+- [How Xyrra AI works](https://xyrra.ai/how-xyrra-ai-works/): How the dashboard, insights and alerts fit together.
+- [Pricing](https://xyrra.ai/pricing/): Xyrra Pro yearly and monthly plans.
+- [Features](https://xyrra.ai/features/): Product features.
+- [FAQ](https://xyrra.ai/faq/): Common questions.
+- [About](https://xyrra.ai/about-xyrra/): About Xyrra.
+- [Privacy](https://xyrra.ai/private-policy/): Privacy policy, including cookies.
+- [Terms](https://xyrra.ai/terms-and-conditions/): Terms and conditions.
+- [Disclaimer](https://xyrra.ai/disclaimer/): Risk disclaimer.
+
+## Apps
+
+- [App Store](https://apps.apple.com/gb/app/xyrra-ai-trading-insights/id6499525423): Xyrra for iPhone and iPad.
+- [Google Play](https://play.google.com/store/apps/details?id=com.marketsflow.mobileapp&hl=en_GB): Xyrra for Android.
+
+## Also published
+
+- [Xyrra PC](https://xyrra.ai/xyrra-pc/): AI workstation.
+- [Xyrra Agent](https://xyrra.ai/xyrra-agent/ai-agent/): Local AI agent.

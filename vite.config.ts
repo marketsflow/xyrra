@@ -285,7 +285,7 @@ function cleanLegalPathPlugin(): Plugin {
       const raw = req.url ?? "";
       const path = raw.split("?")[0] ?? "";
       const search = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
-      if (path === "/new" || path === "/new/") {
+      if (path === "/new" || path === "/new/" || path === "/new_home" || path === "/new_home/") {
         res.writeHead(301, { Location: `/${search}` });
         res.end();
         return;
@@ -353,6 +353,18 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/xyrra-pc/" + search;
       } else if (path === "/xyrra-agent") {
         (req as IncomingMessage & { url?: string }).url = "/xyrra-agent/" + search;
+      } else if (path === "/pricing") {
+        (req as IncomingMessage & { url?: string }).url = "/pricing/" + search;
+      } else if (path === "/how-xyrra-ai-works") {
+        (req as IncomingMessage & { url?: string }).url = "/how-xyrra-ai-works/" + search;
+      } else if (path === "/aiperformance") {
+        (req as IncomingMessage & { url?: string }).url = "/aiperformance/" + search;
+      } else if (path === "/ai_stocks") {
+        (req as IncomingMessage & { url?: string }).url = "/ai_stocks/" + search;
+      } else if (path === "/ai_crypto") {
+        (req as IncomingMessage & { url?: string }).url = "/ai_crypto/" + search;
+      } else if (path === "/ai_portfolios") {
+        (req as IncomingMessage & { url?: string }).url = "/ai_portfolios/" + search;
       } else if (path === "/login") {
         (req as IncomingMessage & { url?: string }).url = "/login/" + search;
       } else if (path === "/pre-order") {
@@ -410,10 +422,24 @@ export default defineConfig(({ mode }) => {
   return {
     root: ".",
     publicDir: "public",
+    server: {
+      proxy: {
+        "/api/website": {
+          target: "http://127.0.0.1:8000",
+          changeOrigin: true,
+        },
+      },
+    },
     build: {
       rollupOptions: {
         input: {
           main: resolve(__dirname, "index.html"),
+          pricing: resolve(__dirname, "pricing/index.html"),
+          howXyrraAiWorks: resolve(__dirname, "how-xyrra-ai-works/index.html"),
+          aiPerformance: resolve(__dirname, "aiperformance/index.html"),
+          aiStocks: resolve(__dirname, "ai_stocks/index.html"),
+          aiCrypto: resolve(__dirname, "ai_crypto/index.html"),
+          aiPortfolios: resolve(__dirname, "ai_portfolios/index.html"),
           about: resolve(__dirname, "about-us.html"),
           feature: resolve(__dirname, "feature.html"),
           faq: resolve(__dirname, "faq.html"),

@@ -1,0 +1,169 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-6G0ZX6DKHR"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-6G0ZX6DKHR');
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#05080f" />
+    <meta name="author" content="Xyrra" />
+    <meta
+      name="description"
+      content="AI-generated portfolios ranked by performance, momentum, and risk."
+    />
+    <title>AI Portfolios | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/new-home.css" />
+    <link rel="stylesheet" href="/src/ai-portfolios.css" />
+  </head>
+  <body class="mh-body">
+    <div class="mh">
+      <header class="mh-header">
+        <a class="mh-brand" href="/" aria-label="Xyrra home">
+          <img
+            class="mh-brand__logo"
+            src="/images/new/xyrra-wordmark.png"
+            alt=""
+            width="922"
+            height="125"
+            decoding="async"
+          />
+        </a>
+        <nav class="mh-nav" id="mh-nav" data-open="false" aria-label="Primary">
+          <a class="mh-nav__signin" href="/login/">Sign In</a>
+          <a href="/aiperformance/">Performance</a>
+          <a href="/ai_stocks/">AI Stocks</a>
+          <a href="/ai_crypto/">AI Cryptos</a>
+          <a href="/ai_portfolios/" aria-current="page">AI Portfolios</a>
+          <a href="/how-xyrra-ai-works/">How it Works</a>
+          <a href="/#features">Features</a>
+          <a href="/pricing/">Pricing</a>
+          <a href="/about-xyrra/">About</a>
+        </nav>
+        <div class="mh-actions">
+          <a class="mh-btn mh-btn--ghost" href="/login/">Sign In</a>
+          <a class="mh-btn mh-btn--mint" href="/login/">Get Started</a>
+          <button
+            type="button"
+            class="mh-menu"
+            id="mh-menu"
+            aria-expanded="false"
+            aria-controls="mh-nav"
+            aria-label="Open menu"
+          >
+            <span></span><span></span><span></span>
+          </button>
+        </div>
+      </header>
+
+      <main class="ap-main">
+        <div class="mh-wrap">
+          <p class="ap-kicker">AI GENERATED PORTFOLIOS</p>
+          <div class="ap-hero">
+            <div>
+              <h1>Invest Smarter with AI Portfolios</h1>
+              <p>Diversified. Data-driven. Always optimizing.</p>
+            </div>
+            <aside class="ap-badge">
+              <div class="ap-badge__icon" aria-hidden="true">
+                <svg viewBox="0 0 24 24"><path d="M12 3a5 5 0 0 0-3.2 8.8V14h6.4v-2.2A5 5 0 0 0 12 3zm-1.4 13h2.8v1.4h-2.8V16zM8 18.6h8V20H8v-1.4z"/></svg>
+              </div>
+              <strong>Powered by AI</strong>
+              <span>Real-time analysis and rebalancing.</span>
+            </aside>
+          </div>
+          <div class="ap-filters" role="group" aria-label="Portfolio filters">
+            <button type="button" data-filter="best_performing" aria-pressed="true">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V6h2v12H4zm5 0V10h2v8H9zm5 0V8h2v10h-2zm5 0V4h2v14h-2z"/></svg>
+              Best Performing
+            </button>
+            <button type="button" data-filter="trending" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.2 2.2 8.8 10H4.2l6.2 2.2-2.4 9.6 8.2-11.2h-4.2l1.2-8.4z"/></svg>
+              Trending
+            </button>
+            <button type="button" data-filter="ai_recommended" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0-4 10.5V16h8v-2.5A6 6 0 0 0 12 3zm-2 15h4v2h-4v-2z"/></svg>
+              AI Recommended
+            </button>
+            <button type="button" data-filter="lower_risk" aria-pressed="false">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v6c0 4.2 2.8 7.2 7 9 4.2-1.8 7-4.8 7-9V6l-7-3z"/></svg>
+              Lower Risk
+            </button>
+          </div>
+          <p class="ap-caption" id="ap-caption">Showing AI portfolios with the strongest historical performance.</p>
+          <div class="ap-list" id="ap-list">
+            <article class="ap-status">
+              <h2>AI Portfolios are loading</h2>
+              <p>Pulling the latest AI-generated portfolios…</p>
+            </article>
+          </div>
+        </div>
+      </main>
+
+      <footer class="mh-footer">
+        <a class="mh-brand" href="/" aria-label="Xyrra home">
+          <img
+            class="mh-footer__logo"
+            src="/images/new/xyrra-wordmark.png"
+            alt=""
+            width="922"
+            height="125"
+            decoding="async"
+          />
+        </a>
+        <div class="mh-footer__links">
+          <a href="/ai-financial-strategies/">AI Strategies</a>
+          <a href="/contact.html">Contact</a>
+          <a href="/private-policy/">Privacy</a>
+          <a href="/terms-and-conditions/">Terms</a>
+          <a href="/disclaimer/">Disclaimer</a>
+        </div>
+        <nav class="mh-footer__more" aria-label="More">
+          <a href="/xyrra-pc/">Xyrra PC</a>
+          <a href="/xyrra-agent/ai-agent/">Xyrra Agent</a>
+          <a href="/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine/">Why AI Demands a New Kind of Machine</a>
+          <a href="/features/">Features</a>
+          <a href="/faq/">FAQ</a>
+        </nav>
+        <p>© <span id="mh-year">2026</span> Xyrra. All rights reserved.</p>
+      </footer>
+    </div>
+
+    <script>
+      const year = document.getElementById("mh-year");
+      if (year) year.textContent = String(new Date().getFullYear());
+
+      const menu = document.getElementById("mh-menu");
+      const nav = document.getElementById("mh-nav");
+      menu?.addEventListener("click", () => {
+        const open = nav?.dataset.open === "true";
+        if (nav) nav.dataset.open = open ? "false" : "true";
+        menu.setAttribute("aria-expanded", String(!open));
+        menu.setAttribute("aria-label", open ? "Open menu" : "Close menu");
+      });
+      nav?.querySelectorAll("a").forEach((link) => {
+        link.addEventListener("click", () => {
+          if (!nav) return;
+          nav.dataset.open = "false";
+          menu?.setAttribute("aria-expanded", "false");
+          menu?.setAttribute("aria-label", "Open menu");
+        });
+      });
+    </script>
+    <script type="module" src="/src/ai-portfolios.ts">    </script>
+    <script type="module" src="/src/cookie-notice.ts"></script>
+  </body>
+</html>

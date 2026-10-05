@@ -1,8 +1,38 @@
 # https://www.robotstxt.org/robotstxt.html
+# Search engines and AI answer engines may read the public site.
+# A plain-language summary for AI tools is at https://xyrra.ai/llms.txt
+
 User-agent: *
 Allow: /
 
-# Host hint (used by Yandex; optional elsewhere)
-# Host: https://xyrra.ai
+User-agent: GPTBot
+Allow: /
+
+User-agent: ChatGPT-User
+Allow: /
+
+User-agent: OAI-SearchBot
+Allow: /
+
+User-agent: ClaudeBot
+Allow: /
+
+User-agent: Claude-User
+Allow: /
+
+User-agent: Claude-SearchBot
+Allow: /
+
+User-agent: anthropic-ai
+Allow: /
+
+User-agent: Google-Extended
+Allow: /
+
+User-agent: PerplexityBot
+Allow: /
+
+User-agent: Applebot-Extended
+Allow: /
 
 Sitemap: https://xyrra.ai/sitemap.xml

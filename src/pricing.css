@@ -1,0 +1,382 @@
+/* /pricing — Xyrra Pro plans */
+
+.pr-page .mh-nav a[aria-current="page"] {
+  color: #fff;
+  text-decoration: underline;
+  text-decoration-color: var(--mh-mint);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 8px;
+}
+
+.pr-main {
+  position: relative;
+  overflow: hidden;
+  padding: 3.4rem 0 4.2rem;
+}
+
+.pr-glow {
+  position: absolute;
+  top: -180px;
+  left: 50%;
+  width: 820px;
+  height: 460px;
+  transform: translateX(-50%);
+  background: radial-gradient(closest-side, rgba(16, 150, 120, 0.42), transparent 72%);
+  pointer-events: none;
+}
+
+.pr-wave {
+  position: absolute;
+  top: 40px;
+  width: min(280px, 28vw);
+  height: 640px;
+  fill: none;
+  stroke: rgba(62, 240, 176, 0.22);
+  stroke-width: 1.4;
+  pointer-events: none;
+}
+
+.pr-wave--left {
+  left: -40px;
+}
+
+.pr-wave--right {
+  right: -40px;
+}
+
+.pr-wrap {
+  position: relative;
+  width: min(920px, calc(100% - 2.5rem));
+  text-align: center;
+}
+
+.pr-kicker {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin: 0;
+  padding: 0.38rem 0.8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(62, 240, 176, 0.45);
+  background: rgba(8, 28, 24, 0.72);
+  color: var(--mh-mint);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.pr-kicker svg {
+  width: 14px;
+  height: 14px;
+}
+
+.pr-title {
+  margin: 1.15rem 0 0;
+  font-size: clamp(2.4rem, 5vw, 3.6rem);
+  font-weight: 800;
+  letter-spacing: -0.045em;
+  line-height: 1.05;
+}
+
+.pr-title span {
+  background: linear-gradient(90deg, #f7f8ff 0%, #d9ccff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+}
+
+.pr-title em {
+  font-style: normal;
+  color: #5ef6c8;
+}
+
+.pr-lede {
+  max-width: 36rem;
+  margin: 0.9rem auto 0;
+  color: #b7c3d4;
+  font-size: 1.02rem;
+  line-height: 1.55;
+}
+
+.pr-billing {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.9rem;
+  margin-top: 1.7rem;
+}
+
+.pr-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.28rem;
+  border-radius: 999px;
+  background: rgba(8, 12, 20, 0.65);
+}
+
+.pr-toggle button {
+  height: 36px;
+  padding: 0 1.15rem;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #d5deea;
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.pr-toggle button.is-active {
+  color: #24183f;
+  background: linear-gradient(90deg, #f4f6ff 0%, #ddd0ff 100%);
+  box-shadow: 0 6px 16px rgba(160, 130, 255, 0.22);
+}
+
+.pr-save {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0;
+  color: var(--mh-mint);
+  font-size: 0.88rem;
+  font-weight: 700;
+}
+
+.pr-save svg {
+  width: 42px;
+  height: 22px;
+}
+
+.pr-plans {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.15rem;
+  margin-top: 1.7rem;
+  text-align: left;
+}
+
+.pr-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: 1.55rem 1.35rem 1.25rem;
+  border-radius: 22px;
+  background: rgba(8, 12, 18, 0.88);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.pr-card--year {
+  background:
+    linear-gradient(180deg, rgba(8, 22, 20, 0.96), rgba(7, 10, 18, 0.96)) padding-box,
+    linear-gradient(135deg, #5ef6c8 0%, #7d6bff 100%) border-box;
+  border: 1.5px solid transparent;
+  box-shadow: 0 0 0 1px rgba(94, 246, 200, 0.08), 0 18px 50px rgba(40, 180, 150, 0.12);
+}
+
+.pr-plans[data-billing="monthly"] .pr-card--month {
+  border-color: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.12), 0 16px 40px rgba(0, 0, 0, 0.28);
+}
+
+.pr-badge {
+  position: absolute;
+  top: -12px;
+  left: 18px;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.28rem;
+  margin: 0;
+  padding: 0.28rem 0.62rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #f6f7ff, #d8c8ff);
+  color: #2c2148;
+  font-size: 0.62rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.pr-badge svg {
+  width: 12px;
+  height: 12px;
+}
+
+.pr-off {
+  position: absolute;
+  top: 16px;
+  right: 14px;
+  margin: 0;
+  padding: 0.22rem 0.5rem;
+  border-radius: 999px;
+  background: #6d4ae8;
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.pr-card h2 {
+  margin: 0.35rem 0 0;
+  font-size: 1.55rem;
+  font-weight: 800;
+  letter-spacing: -0.035em;
+  line-height: 1.15;
+}
+
+.pr-card--month h2 {
+  margin-top: 0.15rem;
+}
+
+.pr-price {
+  display: flex;
+  align-items: baseline;
+  gap: 0.15rem;
+  margin: 0.85rem 0 0;
+  color: #5ef6c8;
+  font-weight: 800;
+  letter-spacing: -0.04em;
+}
+
+.pr-price span {
+  font-size: 2.15rem;
+  line-height: 1;
+}
+
+.pr-price small {
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.pr-price--month {
+  color: #f4f7fb;
+}
+
+.pr-equiv {
+  margin: 0.35rem 0 0;
+  color: #8b9bb3;
+  font-size: 0.88rem;
+}
+
+.pr-features {
+  margin: 1.15rem 0 1.25rem;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 0.62rem;
+}
+
+.pr-features li {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  color: #e7eef6;
+  font-size: 0.92rem;
+}
+
+.pr-check {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  color: #042117;
+  background: var(--mh-mint);
+}
+
+.pr-check svg {
+  width: 12px;
+  height: 12px;
+}
+
+.pr-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  height: 48px;
+  margin-top: auto;
+  border-radius: 999px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  text-decoration: none;
+  transition: transform 0.15s ease, filter 0.15s ease;
+}
+
+.pr-cta:hover {
+  transform: translateY(-1px);
+  filter: brightness(1.05);
+}
+
+.pr-cta--year {
+  color: #102033;
+  background: linear-gradient(90deg, #7dffe0 0%, #c4b5fd 100%);
+  box-shadow: 0 10px 24px rgba(90, 220, 180, 0.18);
+}
+
+.pr-cta--month {
+  color: #f4f7fb;
+  background: #0c1018;
+  border: 1px solid rgba(255, 255, 255, 0.28);
+}
+
+.pr-trust {
+  display: flex;
+  justify-content: center;
+  gap: 0;
+  margin: 2.3rem 0 0;
+  padding: 0;
+  list-style: none;
+  color: #c5d0de;
+  font-size: 0.82rem;
+  line-height: 1.25;
+}
+
+.pr-trust li {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0 1.35rem;
+  text-align: left;
+}
+
+.pr-trust li + li {
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+}
+
+.pr-trust svg {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  color: #d5deea;
+}
+
+@media (max-width: 760px) {
+  .pr-main {
+    padding-top: 2.4rem;
+  }
+
+  .pr-billing {
+    flex-wrap: wrap;
+  }
+
+  .pr-plans {
+    grid-template-columns: 1fr;
+  }
+
+  .pr-trust {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.9rem;
+    width: fit-content;
+    margin-inline: auto;
+  }
+
+  .pr-trust li,
+  .pr-trust li + li {
+    padding: 0;
+    border: 0;
+  }
+}
