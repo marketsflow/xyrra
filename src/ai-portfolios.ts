@@ -40,13 +40,6 @@ const filters: { id: FilterId; label: string; caption: string; sort: string; cat
   },
 ];
 
-const icons: Record<FilterId, string> = {
-  best_performing: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 18V6h2v12H4zm5 0V10h2v8H9zm5 0V8h2v10h-2zm5 0V4h2v14h-2z"/></svg>',
-  trending: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.2 2.2 8.8 10H4.2l6.2 2.2-2.4 9.6 8.2-11.2h-4.2l1.2-8.4z"/></svg>',
-  ai_recommended: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a6 6 0 0 0-4 10.5V16h8v-2.5A6 6 0 0 0 12 3zm-2 15h4v2h-4v-2z"/></svg>',
-  lower_risk: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3 5 6v6c0 4.2 2.8 7.2 7 9 4.2-1.8 7-4.8 7-9V6l-7-3z"/></svg>',
-};
-
 const list = document.getElementById("ap-list");
 const caption = document.getElementById("ap-caption");
 let filter: FilterId = filterFromLocation();
