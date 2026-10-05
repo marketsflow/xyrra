@@ -367,6 +367,8 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/ai_portfolios/" + search;
       } else if (path === "/login") {
         (req as IncomingMessage & { url?: string }).url = "/login/" + search;
+      } else if (path === "/app") {
+        (req as IncomingMessage & { url?: string }).url = "/app/" + search;
       } else if (path === "/pre-order") {
         (req as IncomingMessage & { url?: string }).url = "/pre-order/" + search;
       } else if (path === "/freecaps-community") {
@@ -462,6 +464,7 @@ export default defineConfig(({ mode }) => {
           xyrraAgentExplore: resolve(__dirname, "xyrra-agent/explore/index.html"),
           xyrraAgentAiAgent: resolve(__dirname, "xyrra-agent/ai-agent/index.html"),
           login: resolve(__dirname, "login/index.html"),
+          app: resolve(__dirname, "app/index.html"),
           preOrder: resolve(__dirname, "pre-order/index.html"),
           freecapsCommunity: resolve(__dirname, "freecaps-community/index.html"),
           articleAiHardware: resolve(

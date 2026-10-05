@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <script async src="https://www.googletagmanager.com/gtag/js?id=G-6G0ZX6DKHR"></script>
+    <script>
+      window.dataLayer = window.dataLayer || [];
+      function gtag(){dataLayer.push(arguments);}
+      gtag('js', new Date());
+      gtag('config', 'G-6G0ZX6DKHR');
+    </script>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="canonical" href="https://xyrra.ai/app/" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#05080f" />
+    <meta name="author" content="Xyrra" />
+    <meta
+      name="description"
+      content="Xyrra app. Sign in to open AI insights. Xyrra Pro is required."
+    />
+    <title>Xyrra App</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="apple-touch-icon" href="/favicon.png" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/new-home.css" />
+    <link rel="stylesheet" href="/src/app.css" />
+  </head>
+  <body class="mh-body app-page auth-checking">
+    <div class="mh">
+      <header class="mh-header">
+        <a class="mh-brand" href="/" aria-label="Xyrra home">
+          <img
+            class="mh-brand__logo"
+            src="/images/new/xyrra-wordmark.png"
+            alt=""
+            width="922"
+            height="125"
+            decoding="async"
+          />
+        </a>
+        <nav class="mh-nav" id="mh-nav" data-open="false" aria-label="Primary">
+          <a href="/aiperformance/">Performance</a>
+          <a href="/ai_stocks/">AI Stocks</a>
+          <a href="/ai_crypto/">AI Cryptos</a>
+          <a href="/ai_portfolios/">AI Portfolios</a>
+          <a href="/how-xyrra-ai-works/">How it Works</a>
+          <a href="/pricing/">Pricing</a>
+        </nav>
+        <div class="mh-actions">
+          <span class="app-user" id="app-user" hidden></span>
+          <button type="button" class="mh-btn mh-btn--ghost" id="app-signout" hidden>Sign out</button>
+          <button
+            type="button"
+            class="mh-menu"
+            id="mh-menu"
+            aria-expanded="false"
+            aria-controls="mh-nav"
+            aria-label="Open menu"
+          >
+            <span></span><span></span><span></span>
+          </button>
+        </div>
+      </header>
+
+      <main class="app-main">
+        <section id="app-paywall" hidden aria-labelledby="app-paywall-title">
+          <p class="app-kicker">Xyrra Pro</p>
+          <h1 class="app-title" id="app-paywall-title">Upgrade to <em>Pro</em></h1>
+          <p class="app-lede">
+            This app is locked. An active Xyrra Pro subscription opens live AI insights for stocks, crypto, and portfolios.
+          </p>
+          <div class="app-plans">
+            <article class="app-plan app-plan--year" data-plan="yearly">
+              <p class="app-plan__badge">Best value</p>
+              <p class="app-plan__save">Save 42%</p>
+              <h2>Yearly</h2>
+              <p class="app-plan__price">$69.99 <small>/yearly</small></p>
+              <p class="app-plan__equiv">Just $5.83/monthly</p>
+              <ul>
+                <li>Full access to all AI insights</li>
+                <li>Entry and exit targets</li>
+                <li>Advanced AI insights</li>
+                <li>AI stock, crypto, and portfolio pickers</li>
+                <li>Cancel anytime</li>
+              </ul>
+            </article>
+            <article class="app-plan" data-plan="monthly">
+              <p class="app-plan__badge">Flexible</p>
+              <h2>Monthly</h2>
+              <p class="app-plan__price">$9.99 <small>/monthly</small></p>
+              <ul>
+                <li>Full access to all AI insights</li>
+                <li>Entry and exit targets</li>
+                <li>Advanced AI insights</li>
+                <li>AI stock, crypto, and portfolio pickers</li>
+                <li>Cancel anytime</li>
+              </ul>
+            </article>
+          </div>
+          <p class="app-note">
+            Compare plans on <a href="/pricing/">Pricing</a>. Pro access is stored on your account and checked before this app opens.
+          </p>
+        </section>
+
+        <section id="app-home" hidden aria-labelledby="app-home-title">
+          <p class="app-kicker">Xyrra Pro</p>
+          <h1 class="app-title" id="app-home-title">Your AI Edge Today</h1>
+          <p class="app-welcome" id="app-welcome"></p>
+          <div class="app-areas">
+            <a href="/aiperformance/"><strong>Performance</strong><span>24H, 7D, and 30D</span></a>
+            <a href="/ai_stocks/"><strong>AI Stocks</strong><span>Live insights</span></a>
+            <a href="/ai_crypto/"><strong>AI Cryptos</strong><span>Live insights</span></a>
+            <a href="/ai_portfolios/"><strong>AI Portfolios</strong><span>Best performing</span></a>
+          </div>
+          <p class="app-live-label">Live stock insights</p>
+          <div class="app-live" id="app-live" aria-live="polite"></div>
+          <p class="app-disclaimer">
+            Disclaimer: We are not a financial adviser. Content is generated using AI, analytics, and research and is for informational purposes only. It is not investment advice or a recommendation. Trading involves risk, and you are responsible for your own decisions.
+          </p>
+        </section>
+      </main>
+
+      <footer class="mh-footer">
+        <a class="mh-brand" href="/" aria-label="Xyrra home">
+          <img
+            class="mh-footer__logo"
+            src="/images/new/xyrra-wordmark.png"
+            alt=""
+            width="922"
+            height="125"
+            decoding="async"
+          />
+        </a>
+        <div class="mh-footer__links">
+          <a href="/ai-financial-strategies/">AI Strategies</a>
+          <a href="/contact.html">Contact</a>
+          <a href="/private-policy/">Privacy</a>
+          <a href="/terms-and-conditions/">Terms</a>
+          <a href="/disclaimer/">Disclaimer</a>
+        </div>
+        <nav class="mh-footer__more" aria-label="More">
+          <a href="/xyrra-pc/">Xyrra PC</a>
+          <a href="/xyrra-agent/ai-agent/">Xyrra Agent</a>
+          <a href="/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine/">Why AI Demands a New Kind of Machine</a>
+          <a href="/features/">Features</a>
+          <a href="/faq/">FAQ</a>
+        </nav>
+        <p>© <span id="mh-year">2026</span> Xyrra. All rights reserved.</p>
+      </footer>
+    </div>
+
+    <script type="module" src="/src/app.ts"></script>
+    <script type="module" src="/src/cookie-notice.ts"></script>
+  </body>
+</html>

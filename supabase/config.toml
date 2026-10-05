@@ -152,10 +152,22 @@ enabled = true
 site_url = "http://localhost:5174"
 # A list of *exact* URLs that auth providers are permitted to redirect to post authentication.
 additional_redirect_urls = [
+  "http://localhost:5173",
+  "http://localhost:5173/**",
+  "http://127.0.0.1:5173",
+  "http://127.0.0.1:5173/**",
   "http://localhost:5174",
   "http://localhost:5174/**",
+  "http://localhost:5174/login/",
+  "http://localhost:5174/app/",
   "http://127.0.0.1:5174",
   "http://127.0.0.1:5174/**",
+  "http://127.0.0.1:5174/login/",
+  "http://127.0.0.1:5174/app/",
+  "https://xyrra.ai/login/",
+  "https://xyrra.ai/app/",
+  "https://www.xyrra.ai/login/",
+  "https://www.xyrra.ai/app/",
 ]
 # How long tokens are valid for, in seconds. Defaults to 3600 (1 hour), maximum 604,800 (1 week).
 jwt_expiry = 3600
@@ -308,9 +320,20 @@ max_frequency = "5s"
 # Use an external OAuth provider. The full list of providers are: `apple`, `azure`, `bitbucket`,
 # `discord`, `facebook`, `github`, `gitlab`, `google`, `keycloak`, `linkedin_oidc`, `notion`, `twitch`,
 # `twitter`, `x`, `slack`, `spotify`, `workos`, `zoom`.
+# Client ids and secrets come from supabase/.env (symlink of .env.local). Do not commit them.
+[auth.external.google]
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_CLIENT_ID)"
+secret = "env(SUPABASE_AUTH_EXTERNAL_GOOGLE_SECRET)"
+redirect_uri = ""
+url = ""
+# Required for local Google sign-in.
+skip_nonce_check = true
+email_optional = false
+
 [auth.external.apple]
-enabled = false
-client_id = ""
+enabled = true
+client_id = "env(SUPABASE_AUTH_EXTERNAL_APPLE_CLIENT_ID)"
 # DO NOT commit your OAuth provider secret to git. Use environment variable substitution instead:
 secret = "env(SUPABASE_AUTH_EXTERNAL_APPLE_SECRET)"
 # Overrides the default auth redirectUrl.
@@ -320,8 +343,8 @@ redirect_uri = ""
 url = ""
 # If enabled, the nonce check will be skipped. Required for local sign in with Google auth.
 skip_nonce_check = false
-# If enabled, it will allow the user to successfully authenticate when the provider does not return an email address.
-email_optional = false
+# Apple can omit the email after the first authorization.
+email_optional = true
 
 # Allow Solana wallet holders to sign in to your project via the Sign in with Solana (SIWS, EIP-4361) standard.
 # You can configure "web3" rate limit in the [auth.rate_limit] section and set up [auth.captcha] if self-hosting.

@@ -6,64 +6,125 @@ import {
 import { pcSystemFromSearch } from "./lib/pc-systems";
 import { getAuthenticatedUser } from "./lib/auth/session";
 import { getSupabaseClient } from "./lib/supabase/client";
+import type { Provider } from "@supabase/supabase-js";
 
 const params = new URLSearchParams(window.location.search);
 const nextKey = params.get("next");
 const continuePath = continuePathFromSearch(params);
-const requestedMode = params.get("mode") === "signin" ? "signin" : "signup";
+const modeParam = params.get("mode");
+
+type Screen = AuthMode | "forgot" | "reset";
+
+function requestedScreen(): Screen {
+  if (modeParam === "signin" || modeParam === "signup" || modeParam === "forgot" || modeParam === "reset") {
+    return modeParam;
+  }
+  if (nextKey === "pre-order" || nextKey === "agent") return "signup";
+  return "signin";
+}
+
+let customDestination = false;
+let passwordReset = requestedScreen() === "reset";
+
+function statusEl() {
+  return document.getElementById("login-form-status");
+}
 
 function showError(message: string) {
-  const el = document.getElementById("login-form-status");
+  const el = statusEl();
   if (!el) return;
   el.hidden = false;
-  el.className = "contact-form__status contact-form__status--error";
+  el.className = "auth-status auth-status--error";
   el.textContent = message;
 }
 
 function showSuccess(message: string) {
-  const el = document.getElementById("login-form-status");
+  const el = statusEl();
   if (!el) return;
   el.hidden = false;
-  el.className = "contact-form__status contact-form__status--success";
+  el.className = "auth-status auth-status--success";
   el.textContent = message;
 }
 
 function clearStatus() {
-  const el = document.getElementById("login-form-status");
+  const el = statusEl();
   if (!el) return;
   el.hidden = true;
   el.textContent = "";
-  el.className = "contact-form__status";
+  el.className = "auth-status";
 }
 
 function goToContinue() {
   window.location.replace(continuePath);
 }
 
-function setMode(mode: AuthMode) {
-  const signupForm = document.getElementById("login-signup-form");
-  const signinForm = document.getElementById("login-signin-form");
-  const signupTab = document.getElementById("login-tab-signup");
-  const signinTab = document.getElementById("login-tab-signin");
+function oauthRedirectUrl() {
+  const url = new URL("/login/", window.location.origin);
+  if (nextKey) url.searchParams.set("next", nextKey);
+  const system = params.get("system");
+  const plan = params.get("plan");
+  if (system) url.searchParams.set("system", system);
+  if (plan) url.searchParams.set("plan", plan);
+  return url.toString();
+}
 
-  const isSignup = mode === "signup";
-  signupForm?.toggleAttribute("hidden", !isSignup);
-  signinForm?.toggleAttribute("hidden", isSignup);
-  signupTab?.setAttribute("aria-selected", isSignup ? "true" : "false");
-  signinTab?.setAttribute("aria-selected", isSignup ? "false" : "true");
-  signupTab?.classList.toggle("login-tabs__btn--active", isSignup);
-  signinTab?.classList.toggle("login-tabs__btn--active", !isSignup);
+function setMode(mode: Screen) {
+  const forms: Record<Screen, string> = {
+    signin: "login-signin-form",
+    signup: "login-signup-form",
+    forgot: "login-forgot-form",
+    reset: "login-reset-form",
+  };
 
-  const title = document.getElementById("login-card-title");
-  const lede = document.getElementById("login-card-lede");
-  if (title) {
-    title.textContent = isSignup ? "Create your account" : "Sign in";
+  (Object.keys(forms) as Screen[]).forEach((key) => {
+    document.getElementById(forms[key])?.toggleAttribute("hidden", key !== mode);
+  });
+
+  const social = document.getElementById("login-social");
+  const legal = document.getElementById("login-legal");
+  const disclaimer = document.getElementById("login-disclaimer");
+  const switchRow = document.getElementById("login-switch");
+  const accountFlow = mode === "signin" || mode === "signup";
+  social?.toggleAttribute("hidden", !accountFlow);
+  disclaimer?.toggleAttribute("hidden", !accountFlow);
+  legal?.toggleAttribute("hidden", mode !== "signup");
+  switchRow?.toggleAttribute("hidden", false);
+
+  const switchLabel = document.getElementById("login-switch-label");
+  const switchAction = document.getElementById("login-switch-action");
+  if (mode === "signin") {
+    if (switchLabel) switchLabel.textContent = "Don't have an account? ";
+    if (switchAction) switchAction.textContent = "Sign Up";
+    switchAction?.setAttribute("data-mode", "signup");
+  } else if (mode === "signup") {
+    if (switchLabel) switchLabel.textContent = "Already have an account? ";
+    if (switchAction) switchAction.textContent = "Log In";
+    switchAction?.setAttribute("data-mode", "signin");
+  } else {
+    if (switchLabel) switchLabel.textContent = "";
+    if (switchAction) switchAction.textContent = "Back to sign in";
+    switchAction?.setAttribute("data-mode", "signin");
+  }
+
+  const title = document.getElementById("login-title");
+  const lede = document.getElementById("login-lede");
+  if (title && !(customDestination && accountFlow)) {
+    if (mode === "signup") title.textContent = "Sign up to use AI for Trading & Investing decisions";
+    else if (mode === "forgot") title.textContent = "Forgot Password";
+    else if (mode === "reset") title.textContent = "Choose a new password";
+    else title.textContent = "Sign in to use AI for Trading & Investing decisions";
   }
   if (lede) {
-    const dest = destinationLabel(nextKey, pcSystemFromSearch(params)?.name);
-    lede.textContent = isSignup
-      ? `Sign up to ${dest}. It only takes a moment.`
-      : `Sign in to ${dest}.`;
+    if (mode === "forgot") {
+      lede.hidden = false;
+      lede.textContent = "Enter your email address and we'll send you a link to reset your password";
+    } else if (mode === "reset") {
+      lede.hidden = false;
+      lede.textContent = "Enter a new password for your Xyrra account.";
+    } else if (!customDestination) {
+      lede.hidden = true;
+      lede.textContent = "";
+    }
   }
 
   clearStatus();
@@ -84,10 +145,30 @@ function setBusy(form: HTMLFormElement, busy: boolean, label: string) {
   form.setAttribute("aria-busy", busy ? "true" : "false");
 }
 
+function showOAuthError() {
+  const message = params.get("error_description") || params.get("error");
+  if (message) showError(message);
+}
+
 async function redirectIfSignedIn() {
   try {
     const supabase = getSupabaseClient();
+    supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") passwordReset = true;
+    });
+
     const user = await getAuthenticatedUser(supabase);
+    if (passwordReset && user) {
+      setMode("reset");
+      document.body.classList.remove("auth-checking");
+      return true;
+    }
+    if (passwordReset && !user) {
+      setMode("forgot");
+      showError("That reset link is invalid or has expired. Request a new one.");
+      document.body.classList.remove("auth-checking");
+      return true;
+    }
     if (user) {
       goToContinue();
       return true;
@@ -109,28 +190,22 @@ async function handleSignUp(event: SubmitEvent) {
   const name = (form.elements.namedItem("name") as HTMLInputElement).value.trim();
   const email = (form.elements.namedItem("email") as HTMLInputElement).value.trim();
   const password = (form.elements.namedItem("password") as HTMLInputElement).value;
-  const confirm = (form.elements.namedItem("confirm") as HTMLInputElement).value;
 
-  if (password.length < 8) {
-    showError("Password must be at least 8 characters.");
-    return;
-  }
-  if (password !== confirm) {
-    showError("Passwords do not match.");
+  if (password.length < 6) {
+    showError("Password must be at least 6 characters.");
     return;
   }
 
   clearStatus();
-  setBusy(form, true, "Create account");
+  setBusy(form, true, "Create Account");
 
   try {
     const supabase = getSupabaseClient();
-    const emailRedirectTo = `${window.location.origin}${continuePath}`;
     const { data, error } = await supabase.auth.signUp({
       email,
       password,
       options: {
-        emailRedirectTo,
+        emailRedirectTo: `${window.location.origin}${continuePath}`,
         data: { full_name: name },
       },
     });
@@ -149,10 +224,11 @@ async function handleSignUp(event: SubmitEvent) {
       `Check ${email} to confirm your account. After that you’ll continue to ${destinationLabel(nextKey, pcSystemFromSearch(params)?.name)}.`,
     );
     form.setAttribute("hidden", "");
+    document.getElementById("login-social")?.setAttribute("hidden", "");
   } catch (error) {
     showError(error instanceof Error ? error.message : "Unable to create your account.");
   } finally {
-    setBusy(form, false, "Create account");
+    setBusy(form, false, "Create Account");
   }
 }
 
@@ -190,69 +266,167 @@ async function handleSignIn(event: SubmitEvent) {
   }
 }
 
+async function handleForgot(event: SubmitEvent) {
+  event.preventDefault();
+  const form = event.currentTarget as HTMLFormElement;
+  if (!form.checkValidity()) {
+    form.reportValidity();
+    return;
+  }
+
+  const email = (form.elements.namedItem("email") as HTMLInputElement).value.trim();
+  clearStatus();
+  setBusy(form, true, "Send Reset Link");
+
+  try {
+    const supabase = getSupabaseClient();
+    const redirectTo = new URL("/login/", window.location.origin);
+    redirectTo.searchParams.set("mode", "reset");
+    if (nextKey) redirectTo.searchParams.set("next", nextKey);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectTo.toString(),
+    });
+    if (error) {
+      showError(error.message);
+      return;
+    }
+    showSuccess("Check your email. If that email exists, we sent a password reset link.");
+    form.setAttribute("hidden", "");
+  } catch (error) {
+    showError(error instanceof Error ? error.message : "Unable to send a reset link.");
+  } finally {
+    setBusy(form, false, "Send Reset Link");
+  }
+}
+
+async function handleReset(event: SubmitEvent) {
+  event.preventDefault();
+  const form = event.currentTarget as HTMLFormElement;
+  if (!form.checkValidity()) {
+    form.reportValidity();
+    return;
+  }
+
+  const password = (form.elements.namedItem("password") as HTMLInputElement).value;
+  const confirm = (form.elements.namedItem("confirm") as HTMLInputElement).value;
+  if (password.length < 6) {
+    showError("Password must be at least 6 characters.");
+    return;
+  }
+  if (password !== confirm) {
+    showError("Passwords do not match.");
+    return;
+  }
+
+  clearStatus();
+  setBusy(form, true, "Update password");
+
+  try {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.auth.updateUser({ password });
+    if (error) {
+      showError(error.message);
+      return;
+    }
+    passwordReset = false;
+    goToContinue();
+  } catch (error) {
+    showError(error instanceof Error ? error.message : "Unable to update your password.");
+  } finally {
+    setBusy(form, false, "Update password");
+  }
+}
+
+function setSocialBusy(busy: boolean) {
+  document.querySelectorAll<HTMLButtonElement>(".auth-social").forEach((button) => {
+    button.disabled = busy;
+    button.setAttribute("aria-busy", busy ? "true" : "false");
+  });
+}
+
+async function signInWithProvider(provider: Provider) {
+  clearStatus();
+  setSocialBusy(true);
+  try {
+    const supabase = getSupabaseClient();
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: { redirectTo: oauthRedirectUrl() },
+    });
+    if (error) {
+      showError(error.message);
+      setSocialBusy(false);
+    }
+  } catch (error) {
+    showError(error instanceof Error ? error.message : "Unable to continue.");
+    setSocialBusy(false);
+  }
+}
+
 function applyDestinationCopy() {
-  const eyebrow = document.getElementById("login-eyebrow");
-  const heading = document.getElementById("login-title");
+  const title = document.getElementById("login-title");
   const lede = document.getElementById("login-lede");
-  const visual = document.querySelector<HTMLImageElement>("#login-visual img");
+  if (!title || !lede) return;
 
   if (nextKey === "agent") {
-    if (eyebrow) eyebrow.textContent = "Xyrra Agent";
-    if (heading) heading.innerHTML = "Try <em>Xyrra Agent</em>";
-    if (lede) {
-      lede.textContent =
-        "Create a free account to download Xyrra Agent for your machine.";
-    }
-    if (visual) {
-      visual.src = "/images/new/xyrra-agent-ui.png";
-      visual.alt = "Xyrra Agent desktop interface";
-    }
+    customDestination = true;
+    title.textContent = "Try Xyrra Agent";
+    lede.hidden = false;
+    lede.textContent = "Create a free account to download Xyrra Agent for your machine.";
     return;
   }
 
   if (nextKey === "pre-order") {
+    customDestination = true;
     const system = pcSystemFromSearch(params);
-    if (eyebrow) eyebrow.textContent = system ? system.name : "Xyrra PC";
-    if (heading) {
-      heading.innerHTML = system
-        ? `Pre-order the <em>${system.name}</em>`
-        : "Pre-order the <em>Xyrra PC</em>";
-    }
-    if (lede) {
-      lede.textContent = system
-        ? `Create an account to reserve the ${system.name}. No payment today.`
-        : "Create an account to reserve your Xyrra PC. No payment today.";
-    }
-    if (visual) {
-      visual.src = "/images/new/xyrra-pc.png";
-      visual.alt = system?.name ?? "Xyrra PC compact AI workstation";
-    }
+    title.textContent = system ? `Pre-order the ${system.name}` : "Pre-order the Xyrra PC";
+    lede.hidden = false;
+    lede.textContent = system
+      ? `Create an account to reserve the ${system.name}. No payment today.`
+      : "Create an account to reserve your Xyrra PC. No payment today.";
   }
 }
 
+function bindMenu() {
+  const menu = document.getElementById("mh-menu");
+  const nav = document.getElementById("mh-nav");
+  menu?.addEventListener("click", () => {
+    const open = nav?.getAttribute("data-open") === "true";
+    nav?.setAttribute("data-open", open ? "false" : "true");
+    menu.setAttribute("aria-expanded", open ? "false" : "true");
+    menu.setAttribute("aria-label", open ? "Open menu" : "Close menu");
+  });
+  nav?.querySelectorAll("a").forEach((link) => {
+    link.addEventListener("click", () => {
+      nav.setAttribute("data-open", "false");
+      menu?.setAttribute("aria-expanded", "false");
+      menu?.setAttribute("aria-label", "Open menu");
+    });
+  });
+}
+
 applyDestinationCopy();
-setMode(requestedMode);
+setMode(requestedScreen());
+showOAuthError();
+bindMenu();
+
+const year = document.getElementById("mh-year");
+if (year) year.textContent = String(new Date().getFullYear());
 
 document.body.classList.add("auth-checking");
 void redirectIfSignedIn().then((redirecting) => {
-  if (!redirecting) {
-    document.body.classList.remove("auth-checking");
-  }
+  if (!redirecting) document.body.classList.remove("auth-checking");
 });
 
-document.getElementById("login-tab-signup")?.addEventListener("click", () => {
-  setMode("signup");
-});
-document.getElementById("login-tab-signin")?.addEventListener("click", () => {
-  setMode("signin");
-});
-document.getElementById("login-switch-signin")?.addEventListener("click", (event) => {
+document.getElementById("login-switch-action")?.addEventListener("click", (event) => {
   event.preventDefault();
-  setMode("signin");
+  const mode = (event.currentTarget as HTMLElement).getAttribute("data-mode");
+  if (mode === "signup" || mode === "signin") setMode(mode);
 });
-document.getElementById("login-switch-signup")?.addEventListener("click", (event) => {
+
+document.getElementById("login-forgot")?.addEventListener("click", (event) => {
   event.preventDefault();
-  setMode("signup");
+  setMode("forgot");
 });
 
 document.getElementById("login-signup-form")?.addEventListener("submit", (event) => {
@@ -260,4 +434,17 @@ document.getElementById("login-signup-form")?.addEventListener("submit", (event)
 });
 document.getElementById("login-signin-form")?.addEventListener("submit", (event) => {
   void handleSignIn(event);
+});
+document.getElementById("login-forgot-form")?.addEventListener("submit", (event) => {
+  void handleForgot(event);
+});
+document.getElementById("login-reset-form")?.addEventListener("submit", (event) => {
+  void handleReset(event);
+});
+
+document.getElementById("auth-apple")?.addEventListener("click", () => {
+  void signInWithProvider("apple");
+});
+document.getElementById("auth-google")?.addEventListener("click", () => {
+  void signInWithProvider("google");
 });
