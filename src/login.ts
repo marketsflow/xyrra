@@ -6,7 +6,6 @@ import {
 import { pcSystemFromSearch } from "./lib/pc-systems";
 import { getAuthenticatedUser } from "./lib/auth/session";
 import { getSupabaseClient } from "./lib/supabase/client";
-import type { Provider } from "@supabase/supabase-js";
 
 const params = new URLSearchParams(window.location.search);
 const nextKey = params.get("next");
@@ -58,16 +57,6 @@ function goToContinue() {
   window.location.replace(continuePath);
 }
 
-function oauthRedirectUrl() {
-  const url = new URL("/login/", window.location.origin);
-  if (nextKey) url.searchParams.set("next", nextKey);
-  const system = params.get("system");
-  const plan = params.get("plan");
-  if (system) url.searchParams.set("system", system);
-  if (plan) url.searchParams.set("plan", plan);
-  return url.toString();
-}
-
 function setMode(mode: Screen) {
   const forms: Record<Screen, string> = {
     signin: "login-signin-form",
@@ -80,12 +69,10 @@ function setMode(mode: Screen) {
     document.getElementById(forms[key])?.toggleAttribute("hidden", key !== mode);
   });
 
-  const social = document.getElementById("login-social");
   const legal = document.getElementById("login-legal");
   const disclaimer = document.getElementById("login-disclaimer");
   const switchRow = document.getElementById("login-switch");
   const accountFlow = mode === "signin" || mode === "signup";
-  social?.toggleAttribute("hidden", !accountFlow);
   disclaimer?.toggleAttribute("hidden", !accountFlow);
   legal?.toggleAttribute("hidden", mode !== "signup");
   switchRow?.toggleAttribute("hidden", false);
@@ -224,7 +211,6 @@ async function handleSignUp(event: SubmitEvent) {
       `Check ${email} to confirm your account. After that you’ll continue to ${destinationLabel(nextKey, pcSystemFromSearch(params)?.name)}.`,
     );
     form.setAttribute("hidden", "");
-    document.getElementById("login-social")?.setAttribute("hidden", "");
   } catch (error) {
     showError(error instanceof Error ? error.message : "Unable to create your account.");
   } finally {
@@ -337,32 +323,6 @@ async function handleReset(event: SubmitEvent) {
   }
 }
 
-function setSocialBusy(busy: boolean) {
-  document.querySelectorAll<HTMLButtonElement>(".auth-social").forEach((button) => {
-    button.disabled = busy;
-    button.setAttribute("aria-busy", busy ? "true" : "false");
-  });
-}
-
-async function signInWithProvider(provider: Provider) {
-  clearStatus();
-  setSocialBusy(true);
-  try {
-    const supabase = getSupabaseClient();
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: { redirectTo: oauthRedirectUrl() },
-    });
-    if (error) {
-      showError(error.message);
-      setSocialBusy(false);
-    }
-  } catch (error) {
-    showError(error instanceof Error ? error.message : "Unable to continue.");
-    setSocialBusy(false);
-  }
-}
-
 function applyDestinationCopy() {
   const title = document.getElementById("login-title");
   const lede = document.getElementById("login-lede");
@@ -440,11 +400,4 @@ document.getElementById("login-forgot-form")?.addEventListener("submit", (event)
 });
 document.getElementById("login-reset-form")?.addEventListener("submit", (event) => {
   void handleReset(event);
-});
-
-document.getElementById("auth-apple")?.addEventListener("click", () => {
-  void signInWithProvider("apple");
-});
-document.getElementById("auth-google")?.addEventListener("click", () => {
-  void signInWithProvider("google");
 });
