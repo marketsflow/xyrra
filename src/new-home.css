@@ -123,6 +123,14 @@ a {
   color: white;
 }
 
+.mh-nav a[aria-current="page"] {
+  color: #fff;
+  text-decoration: underline;
+  text-decoration-color: var(--mh-mint);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 8px;
+}
+
 .mh-nav__signin {
   display: none;
 }
