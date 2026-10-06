@@ -1,3 +1,7 @@
+.mh > .xa-pub {
+  flex: 1;
+}
+
 .xa-pub {
   margin: 0;
   background: #f4f2f1;
@@ -9,6 +13,12 @@
 
 .xa-pub a {
   color: #1a1d3a;
+}
+
+.xa-pub-prose a,
+.xa-pub-lede a {
+  text-decoration: underline;
+  text-underline-offset: 0.15em;
 }
 
 .xa-pub-skip {

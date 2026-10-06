@@ -1,4 +1,5 @@
 import { defineConfig, loadEnv, type Plugin } from "vite";
+import { copyFileSync, mkdirSync } from "node:fs";
 import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { IncomingMessage, ServerResponse } from "node:http";
@@ -457,6 +458,11 @@ function articlesPagePlugin(env: Record<string, string>): Plugin {
     name: "xyrra-articles-pages",
     configureServer: attach,
     configurePreviewServer: attach,
+    closeBundle() {
+      const destDir = resolve(__dirname, "dist/src");
+      mkdirSync(destDir, { recursive: true });
+      copyFileSync(resolve(__dirname, "src/new-home.css"), resolve(destDir, "new-home.css"));
+    },
   };
 }
 

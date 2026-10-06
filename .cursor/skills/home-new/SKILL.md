@@ -22,7 +22,7 @@ The dark marketing site lives in the `xyrra` repo.
 Keep the same header and footer on these pages:
 
 - Dark bar, wordmark at `/images/new/xyrra-wordmark.png`, Sign In and Get Started linking to `/login/`.
-- Nav: Performance → `/aiperformance/`. AI Stocks → `/ai_stocks/`. AI Cryptos → `/ai_crypto/`. AI Portfolios → `/ai_portfolios/`. How it Works → `/how-xyrra-ai-works/`. Features → `/#features`. Pricing → `/pricing/`. About stays `/about-xyrra/`. The brand links home to `/`.
+- Nav: Performance → `/aiperformance/`. AI Stocks → `/ai_stocks/`. AI Cryptos → `/ai_crypto/`. AI Portfolios → `/ai_portfolios/`. Articles → `/articles/`. How it Works → `/how-xyrra-ai-works/`. Features → `/#features`. Pricing → `/pricing/`. About stays `/about-xyrra/`. The brand links home to `/`.
 - Footer links: AI Strategies, Contact, Privacy, Terms, Disclaimer, plus a vertical list for Xyrra PC, Xyrra Agent, Articles, Why AI Demands a New Kind of Machine, Features, and FAQ, plus the copyright year. A cookie notice overlays the bottom of the screen and explains browser cookies. Accept cookies or Deny cookies stores `accepted` or `denied` in `xyrra-cookie-consent` and hides the notice.
 
 ## Articles

@@ -342,43 +342,93 @@ function documentPage(input: {
   <link rel="icon" href="/favicon.png" type="image/png">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=Sora:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/src/new-home.css">
   <link rel="stylesheet" href="/articles.css">
   ${input.extraHead}
 </head>
-<body class="xa-pub">
+<body class="mh-body">
   <a class="xa-pub-skip" href="#main">Skip to content</a>
-  <header class="xa-pub-header">
-    <a class="xa-pub-brand" href="/" aria-label="Xyrra home">
-      <img src="/images/new/xyrra-logo.png" alt="" width="954" height="115">
-    </a>
-    <nav class="xa-pub-nav" aria-label="Primary">
-      <a href="/aiperformance/">Performance</a>
-      <a href="/ai_stocks/">AI Stocks</a>
-      <a href="/articles/"${input.canonicalPath === "/articles/" ? ' aria-current="page"' : ""}>Articles</a>
-    </nav>
-  </header>
-  ${input.main}
-  <footer class="xa-pub-footer">
-    <nav aria-label="Footer">
-      <a href="/">Home</a>
-      <a href="/articles/">Articles</a>
-      <a href="/disclaimer/">Disclaimer</a>
-      <a href="/private-policy/">Privacy</a>
-    </nav>
-    <p>Insights are educational and are not financial advice.</p>
-  </footer>
+  <div class="mh">
+    <header class="mh-header">
+      <a class="mh-brand" href="/" aria-label="Xyrra home">
+        <img class="mh-brand__logo" src="/images/new/xyrra-wordmark.png" alt="" width="922" height="125" decoding="async">
+      </a>
+      <nav class="mh-nav" id="mh-nav" data-open="false" aria-label="Primary">
+        <a class="mh-nav__signin" href="/login/">Sign In</a>
+        <a href="/aiperformance/">Performance</a>
+        <a href="/ai_stocks/">AI Stocks</a>
+        <a href="/ai_crypto/">AI Cryptos</a>
+        <a href="/ai_portfolios/">AI Portfolios</a>
+        <a href="/articles/"${input.canonicalPath?.startsWith("/articles/") ? ' aria-current="page"' : ""}>Articles</a>
+        <a href="/how-xyrra-ai-works/">How it Works</a>
+        <a href="/#features">Features</a>
+        <a href="/pricing/">Pricing</a>
+        <a href="/about-xyrra/">About</a>
+      </nav>
+      <div class="mh-actions">
+        <a class="mh-btn mh-btn--ghost" href="/login/">Sign In</a>
+        <a class="mh-btn mh-btn--mint" href="/login/?mode=signup">Get Started</a>
+        <button type="button" class="mh-menu" id="mh-menu" aria-expanded="false" aria-controls="mh-nav" aria-label="Open menu">
+          <span></span><span></span><span></span>
+        </button>
+      </div>
+    </header>
+    <div class="xa-pub">
+      ${input.main}
+    </div>
+    <footer class="mh-footer">
+      <a class="mh-brand" href="/" aria-label="Xyrra home">
+        <img class="mh-footer__logo" src="/images/new/xyrra-wordmark.png" alt="" width="922" height="125" decoding="async">
+      </a>
+      <div class="mh-footer__links">
+        <a href="/ai-financial-strategies/">AI Strategies</a>
+        <a href="/contact.html">Contact</a>
+        <a href="/private-policy/">Privacy</a>
+        <a href="/terms-and-conditions/">Terms</a>
+        <a href="/disclaimer/">Disclaimer</a>
+      </div>
+      <nav class="mh-footer__more" aria-label="More">
+        <a href="/xyrra-pc/">Xyrra PC</a>
+        <a href="/xyrra-agent/ai-agent/">Xyrra Agent</a>
+        <a href="/articles/"${input.canonicalPath?.startsWith("/articles/") ? ' aria-current="page"' : ""}>Articles</a>
+        <a href="/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine/">Why AI Demands a New Kind of Machine</a>
+        <a href="/features/">Features</a>
+        <a href="/faq/">FAQ</a>
+      </nav>
+      <p>© <span id="mh-year">2026</span> Xyrra. All rights reserved.</p>
+    </footer>
+  </div>
   <script>
     (function () {
+      var year = document.getElementById("mh-year");
+      if (year) year.textContent = String(new Date().getFullYear());
+      var menu = document.getElementById("mh-menu");
+      var nav = document.getElementById("mh-nav");
+      if (menu && nav) {
+        menu.addEventListener("click", function () {
+          var open = nav.dataset.open === "true";
+          nav.dataset.open = open ? "false" : "true";
+          menu.setAttribute("aria-expanded", String(!open));
+          menu.setAttribute("aria-label", open ? "Open menu" : "Close menu");
+        });
+        nav.querySelectorAll("a").forEach(function (link) {
+          link.addEventListener("click", function () {
+            nav.dataset.open = "false";
+            menu.setAttribute("aria-expanded", "false");
+            menu.setAttribute("aria-label", "Open menu");
+          });
+        });
+      }
       var key = "xyrra-cookie-consent";
       try {
         var choice = localStorage.getItem(key);
         if (choice === "accepted" || choice === "denied") return;
       } catch (e) { return; }
       var notice = document.createElement("section");
-      notice.className = "xa-pub-cookies";
+      notice.className = "mh-cookies";
       notice.setAttribute("aria-label", "Cookies");
-      notice.innerHTML = '<p>Your browser assigns cookies for this site. A cookie is a small file stored in the browser. On a later visit the browser sends that cookie back, so the site can recognise this browser.</p><div><button type="button" data-choice="accepted">Accept cookies</button><button type="button" data-choice="denied">Deny cookies</button><a href="/private-policy/">Privacy</a></div>';
+      notice.innerHTML = '<p>Your browser assigns cookies for this site. A cookie is a small file stored in the browser. On a later visit the browser sends that cookie back, so the site can recognise this browser and keep tracking data such as which pages were opened and that you returned.</p><div class="mh-cookies__actions"><button type="button" data-choice="accepted">Accept cookies</button><button type="button" data-choice="denied">Deny cookies</button><a href="/private-policy/">Privacy</a></div>';
       notice.querySelectorAll("button").forEach(function (button) {
         button.addEventListener("click", function () {
           try { localStorage.setItem(key, button.getAttribute("data-choice") === "denied" ? "denied" : "accepted"); } catch (e) {}
