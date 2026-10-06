@@ -55,6 +55,8 @@ async function init() {
   if (titleEl) titleEl.textContent = article.title;
 
   bindArticleForm({
+    supabase: session.supabase,
+    uploadScopeId: articleId,
     publicPath: `/articles/${article.slug}/`,
     initial: {
       title: article.title,

@@ -2050,6 +2050,46 @@ body.xa-body {
   box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
 }
 
+.xa-article-hero__preview {
+  display: block;
+  width: min(100%, 28rem);
+  height: auto;
+  margin: 0 0 0.85rem;
+  border-radius: 0.75rem;
+  background: #eceaf4;
+}
+
+.xa-article-hero__preview[hidden] {
+  display: none;
+}
+
+.xa-article-hero__actions {
+  margin-bottom: 0.75rem;
+}
+
+.xa-article-hero__actions button {
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid #d8d6e8;
+  background: #fff;
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.xa-article-hero__actions button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.xa-article-editor__body img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 0.75rem 0;
+  border-radius: 0.75rem;
+}
+
 .xa-article-editor__body h2,
 .xa-article-editor__body h3 {
   font-weight: 700;

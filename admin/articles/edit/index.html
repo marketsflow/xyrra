@@ -87,7 +87,12 @@
             </section>
             <section class="xa-template-editor__section">
               <h2>Hero image</h2>
-              <p class="xa-template-editor__hint">Optional image URL, either https:// or a path starting with /.</p>
+              <p class="xa-template-editor__hint">Upload an image, or paste a URL. JPEG, PNG, WebP, AVIF, or GIF, up to 6MB.</p>
+              <img id="xa-article-hero-preview" class="xa-article-hero__preview" alt="" hidden />
+              <div class="xa-article-hero__actions">
+                <button type="button" id="xa-article-hero-upload">Upload image</button>
+                <input id="xa-article-hero-file" type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif" hidden aria-label="Upload hero image" />
+              </div>
               <input id="xa-article-hero-url" type="text" placeholder="https://…" aria-label="Hero image URL" />
               <input id="xa-article-hero-alt" type="text" maxlength="180" placeholder="Image description" aria-label="Hero image description" />
             </section>
@@ -116,6 +121,8 @@
                 <button type="button" data-xa-article-cmd="italic"><em>I</em></button>
                 <button type="button" data-xa-article-cmd="insertUnorderedList">List</button>
                 <button type="button" data-xa-article-cmd="link">Link</button>
+                <button type="button" id="xa-article-body-image">Image</button>
+                <input id="xa-article-body-image-input" type="file" accept="image/jpeg,image/png,image/webp,image/avif,image/gif" hidden aria-label="Upload article image" />
               </div>
               <div id="xa-article-body" class="xa-template-editor__body xa-article-editor__body" contenteditable="true" aria-label="Article body"></div>
             </section>

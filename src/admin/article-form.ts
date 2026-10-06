@@ -1,9 +1,13 @@
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { isArticleSlug, sanitizeArticleHtml, slugifyArticleTitle } from "../../api/articles-page";
+import { uploadArticleImage } from "../lib/articles/images";
 import type { ArticleFaq, ArticleFormValues } from "../lib/articles/save";
 
 export type { ArticleFormValues };
 
 type BindOptions = {
+  supabase: SupabaseClient;
+  uploadScopeId: string;
   initial?: Partial<ArticleFormValues> & { keywordsText?: string; keyPointsText?: string };
   publicPath?: string;
   onSave: (values: ArticleFormValues) => Promise<{ ok: true } | { ok: false; error: string }>;
@@ -73,6 +77,11 @@ export function bindArticleForm(options: BindOptions) {
   const excerptEl = document.getElementById("xa-article-excerpt") as HTMLTextAreaElement | null;
   const heroUrlEl = document.getElementById("xa-article-hero-url") as HTMLInputElement | null;
   const heroAltEl = document.getElementById("xa-article-hero-alt") as HTMLInputElement | null;
+  const heroPreview = document.getElementById("xa-article-hero-preview") as HTMLImageElement | null;
+  const heroFileEl = document.getElementById("xa-article-hero-file") as HTMLInputElement | null;
+  const heroUploadBtn = document.getElementById("xa-article-hero-upload") as HTMLButtonElement | null;
+  const bodyImageBtn = document.getElementById("xa-article-body-image") as HTMLButtonElement | null;
+  const bodyImageEl = document.getElementById("xa-article-body-image-input") as HTMLInputElement | null;
   const keywordsEl = document.getElementById("xa-article-keywords") as HTMLInputElement | null;
   const authorEl = document.getElementById("xa-article-author") as HTMLInputElement | null;
   const pointsEl = document.getElementById("xa-article-points") as HTMLTextAreaElement | null;
@@ -122,6 +131,104 @@ export function bindArticleForm(options: BindOptions) {
     syncPublicLink();
   });
 
+  const syncHeroPreview = () => {
+    if (!heroPreview) return;
+    const src = heroUrlEl?.value.trim() ?? "";
+    if (!src) {
+      heroPreview.hidden = true;
+      heroPreview.removeAttribute("src");
+      return;
+    }
+    heroPreview.hidden = false;
+    heroPreview.src = src;
+    heroPreview.alt = heroAltEl?.value.trim() || "Hero image preview";
+  };
+  syncHeroPreview();
+  heroUrlEl?.addEventListener("input", syncHeroPreview);
+  heroAltEl?.addEventListener("input", syncHeroPreview);
+
+  const showError = (message: string) => {
+    if (errorEl) errorEl.textContent = message;
+    if (statusMsg) statusMsg.textContent = "";
+  };
+
+  async function uploadImage(file: File) {
+    return uploadArticleImage(options.supabase, { scopeId: options.uploadScopeId, file });
+  }
+
+  heroUploadBtn?.addEventListener("click", () => heroFileEl?.click());
+  heroFileEl?.addEventListener("change", () => {
+    const file = heroFileEl.files?.[0];
+    heroFileEl.value = "";
+    if (!file) return;
+    if (heroUploadBtn) {
+      heroUploadBtn.disabled = true;
+      heroUploadBtn.textContent = "Uploading…";
+    }
+    showError("");
+    void uploadImage(file).then((result) => {
+      if (heroUploadBtn) {
+        heroUploadBtn.disabled = false;
+        heroUploadBtn.textContent = "Upload image";
+      }
+      if (!result.ok) {
+        showError(result.error);
+        return;
+      }
+      if (heroUrlEl) heroUrlEl.value = result.publicUrl;
+      if (heroAltEl && !heroAltEl.value.trim()) {
+        heroAltEl.value = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
+      }
+      syncHeroPreview();
+      if (statusMsg) statusMsg.textContent = "Image uploaded. Save the article to publish it.";
+    });
+  });
+
+  let savedRange: Range | null = null;
+  bodyImageBtn?.addEventListener("mousedown", () => {
+    const selection = window.getSelection();
+    if (selection && selection.rangeCount > 0 && bodyEl?.contains(selection.anchorNode)) {
+      savedRange = selection.getRangeAt(0).cloneRange();
+    }
+  });
+  bodyImageBtn?.addEventListener("click", () => bodyImageEl?.click());
+  bodyImageEl?.addEventListener("change", () => {
+    const file = bodyImageEl.files?.[0];
+    bodyImageEl.value = "";
+    if (!file || !bodyEl) return;
+    if (bodyImageBtn) {
+      bodyImageBtn.disabled = true;
+      bodyImageBtn.textContent = "Uploading…";
+    }
+    showError("");
+    void uploadImage(file).then((result) => {
+      if (bodyImageBtn) {
+        bodyImageBtn.disabled = false;
+        bodyImageBtn.textContent = "Image";
+      }
+      if (!result.ok) {
+        showError(result.error);
+        return;
+      }
+      const alt = file.name.replace(/\.[^.]+$/, "").replace(/[-_]+/g, " ");
+      const src = result.publicUrl.replace(/&/g, "&amp;").replace(/"/g, "&quot;");
+      const safeAlt = alt.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+      const html = `<img src="${src}" alt="${safeAlt}">`;
+      bodyEl.focus();
+      if (savedRange) {
+        const selection = window.getSelection();
+        selection?.removeAllRanges();
+        try {
+          selection?.addRange(savedRange);
+        } catch {
+          savedRange = null;
+        }
+      }
+      document.execCommand("insertHTML", false, html);
+      if (statusMsg) statusMsg.textContent = "Image inserted. Save the article to publish it.";
+    });
+  });
+
   document.querySelectorAll<HTMLButtonElement>("[data-xa-article-cmd]").forEach((button) => {
     button.addEventListener("click", () => {
       const command = button.dataset.xaArticleCmd ?? "";
@@ -144,11 +251,6 @@ export function bindArticleForm(options: BindOptions) {
     faqsEl?.append(faqRow());
   });
 
-  const showError = (message: string) => {
-    if (errorEl) errorEl.textContent = message;
-    if (statusMsg) statusMsg.textContent = "";
-  };
-
   saveBtn?.addEventListener("click", () => {
     const title = titleEl?.value.trim() ?? "";
     const slug = slugifyArticleTitle(slugEl?.value.trim() || title);
@@ -170,7 +272,7 @@ export function bindArticleForm(options: BindOptions) {
         showError("Add a meta description of at least 50 characters before publishing.");
         return;
       }
-      if (!bodyText) {
+      if (!bodyText && !/<img\b/i.test(bodyHtml)) {
         showError("Add the article body before publishing.");
         return;
       }

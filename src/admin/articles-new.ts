@@ -11,6 +11,8 @@ async function init() {
   setAdminLoading(false);
 
   bindArticleForm({
+    supabase: session.supabase,
+    uploadScopeId: crypto.randomUUID(),
     onSave: async (values) => {
       const { data, error } = await session.supabase
         .from("articles")
