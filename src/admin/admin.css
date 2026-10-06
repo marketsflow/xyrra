@@ -2031,3 +2031,117 @@ body.xa-body {
   color: #991b1b;
   font-size: 0.8125rem;
 }
+
+.xa-template-editor__section textarea {
+  width: 100%;
+  margin-top: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.75rem;
+  border: 1px solid #d8d6e8;
+  background: #fff;
+  font: inherit;
+  font-size: 0.875rem;
+  resize: vertical;
+}
+
+.xa-template-editor__section textarea:focus {
+  outline: none;
+  border-color: var(--xa-accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.xa-article-editor__body h2,
+.xa-article-editor__body h3 {
+  font-weight: 700;
+  line-height: 1.3;
+}
+
+.xa-article-editor__body h2 {
+  font-size: 1.35rem;
+}
+
+.xa-article-editor__body h3 {
+  font-size: 1.1rem;
+}
+
+.xa-article-faqs {
+  display: grid;
+  gap: 0.75rem;
+  margin-top: 0.85rem;
+}
+
+.xa-article-faq {
+  display: grid;
+  gap: 0.55rem;
+  padding: 0.85rem;
+  border: 1px solid #e0deed;
+  border-radius: 0.75rem;
+  background: #f8f9fd;
+}
+
+.xa-article-faq label {
+  display: grid;
+  gap: 0.35rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #5c5f7a;
+}
+
+.xa-article-faq input,
+.xa-article-faq textarea {
+  margin-top: 0;
+  text-transform: none;
+  letter-spacing: 0;
+  font-weight: 400;
+  color: #141820;
+}
+
+.xa-article-faq button,
+.xa-article-faq-add,
+.xa-article-delete {
+  width: fit-content;
+  padding: 0.45rem 0.75rem;
+  border-radius: 0.5rem;
+  border: 1px solid #d8d6e8;
+  background: #fff;
+  font: inherit;
+  font-size: 0.8125rem;
+  cursor: pointer;
+}
+
+.xa-article-faq-add {
+  margin-top: 0.75rem;
+}
+
+.xa-article-delete {
+  color: #991b1b;
+  border-color: #fecaca;
+}
+
+.xa-articles__status {
+  align-self: center;
+  padding: 0.2rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.xa-articles__status--published {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.xa-articles__status--draft {
+  background: #f1f5f9;
+  color: #475569;
+}
+
+.xa-articles__view {
+  align-self: center;
+  margin-right: 0.75rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-decoration: none;
+}

@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#f8f9fd" />
+    <title>New article | Admin | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/admin/admin.css" />
+  </head>
+  <body class="xa-body">
+    <div id="xa-admin-loading" class="xa-loading" role="status" aria-live="polite">Checking session…</div>
+    <div class="xa-admin" id="xa-admin-app" hidden>
+      <header class="xa-admin__bar">
+        <a class="xa-brand" href="/admin/" aria-label="Xyrra admin home">
+          <img src="/images/new/xyrra-logo.png" alt="" width="954" height="115" decoding="async" />
+        </a>
+        <div class="xa-admin__bar-actions">
+          <div class="xa-admin__meta">
+            <strong id="xa-admin-email">…</strong>
+            <span id="xa-admin-role">…</span>
+          </div>
+          <button type="button" id="xa-admin-signout" class="xa-admin__signout">Sign out</button>
+        </div>
+      </header>
+      <div class="xa-admin__layout">
+        <aside class="xa-admin__sidebar" aria-label="Admin navigation">
+          <nav class="xa-admin__nav">
+            <a class="xa-admin__nav-link" data-xa-nav="dashboard" href="/admin/">Dashboard</a>
+            <a class="xa-admin__nav-link" data-xa-nav="users" href="/admin/users/">Users</a>
+            <a class="xa-admin__nav-link" data-xa-nav="articles" href="/admin/articles/">Articles</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-templates" href="/admin/email-templates/">Email Templates</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-lists" href="/admin/email-lists/">Email Lists</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-outreach" href="/admin/email-outreach/">Email Outreach</a>
+            <a class="xa-admin__nav-link" data-xa-nav="emails-sent" href="/admin/emails-sent/">Emails Sent</a>
+            <a class="xa-admin__nav-link" data-xa-nav="stock-prices" href="/admin/stock-prices/">Stock Prices</a>
+          </nav>
+        </aside>
+        <main class="xa-admin__main">
+          <div class="xa-template-editor">
+            <a class="xa-template-editor__back" href="/admin/articles/">← Back to articles</a>
+            <h1 id="xa-article-page-title">New article</h1>
+            <p class="xa-template-editor__lede">
+              The slug becomes the public URL. Publishing writes a page that search engines and AI answer systems can read as HTML.
+            </p>
+            <p class="xa-template-editor__hint">
+              Public URL: <a id="xa-article-public" href="/articles/" target="_blank" rel="noopener">/articles/</a>
+            </p>
+
+            <section class="xa-template-editor__section">
+              <h2>Title</h2>
+              <input id="xa-article-title" type="text" maxlength="180" placeholder="Article title" aria-label="Title" />
+            </section>
+            <section class="xa-template-editor__section">
+              <h2>Slug</h2>
+              <p class="xa-template-editor__hint">Lowercase words separated by hyphens. This is the path after /articles/.</p>
+              <input id="xa-article-slug" type="text" maxlength="80" placeholder="how-xyrra-ai-insights-work" aria-label="Slug" />
+            </section>
+            <section class="xa-template-editor__section">
+              <h2>Status</h2>
+              <select id="xa-article-status" aria-label="Status">
+                <option value="draft">Draft</option>
+                <option value="published">Published</option>
+              </select>
+            </section>
+            <section class="xa-template-editor__section">
+              <h2>Search title</h2>
+              <p class="xa-template-editor__hint">Shown in search results. Leave blank to use the article title.</p>
+              <input id="xa-article-meta-title" type="text" maxlength="180" aria-label="Search title" />
+            </section>
+            <section class="xa-template-editor__section">
+              <h2>Meta description</h2>
+              <p class="xa-template-editor__hint">One or two sentences, at least 50 characters when you publish. This is the summary AI systems quote.</p>
+              <textarea id="xa-article-meta-description" rows="3" maxlength="320" aria-label="Meta description"></textarea>
+            </section>
+            <section class="xa-template-editor__section">
+              <h2>Intro</h2>
+              <p class="xa-template-editor__hint">Shown under the title, above the article. Plain text. Blank lines start a new paragraph.</p>
+              <textarea id="xa-article-excerpt" rows="4" maxlength="1200" aria-label="Intro"></textarea>
+            </section>
+            <section class="xa-template-editor__section">
+              <h2>Hero image</h2>
+              <p class="xa-template-editor__hint">Optional image URL, either https:// or a path starting with /.</p>
+              <input id="xa-article-hero-url" type="text" placeholder="https://…" aria-label="Hero image URL" />
+              <input id="xa-article-hero-alt" type="text" maxlength="180" placeholder="Image description" aria-label="Hero image description" />
+            </section>
+            <section class="xa-template-editor__section">
+              <h2>Keywords</h2>
+              <p class="xa-template-editor__hint">Comma-separated topics, such as AI stock insights, Xyrra.</p>
+              <input id="xa-article-keywords" type="text" aria-label="Keywords" />
+            </section>
+            <section class="xa-template-editor__section">
+              <h2>Author</h2>
+              <input id="xa-article-author" type="text" maxlength="120" value="Xyrra Editorial Team" aria-label="Author" />
+            </section>
+            <section class="xa-template-editor__section">
+              <h2>Key points</h2>
+              <p class="xa-template-editor__hint">One point per line. These appear in the sidebar.</p>
+              <textarea id="xa-article-points" rows="5" aria-label="Key points"></textarea>
+            </section>
+            <section class="xa-template-editor__section">
+              <h2>Body</h2>
+              <p class="xa-template-editor__hint">Use headings, short paragraphs, and lists. The public page keeps that structure.</p>
+              <div class="xa-template-editor__toolbar" role="toolbar" aria-label="Formatting">
+                <button type="button" data-xa-article-cmd="h2">Heading</button>
+                <button type="button" data-xa-article-cmd="h3">Subheading</button>
+                <button type="button" data-xa-article-cmd="p">Paragraph</button>
+                <button type="button" data-xa-article-cmd="bold"><strong>B</strong></button>
+                <button type="button" data-xa-article-cmd="italic"><em>I</em></button>
+                <button type="button" data-xa-article-cmd="insertUnorderedList">List</button>
+                <button type="button" data-xa-article-cmd="link">Link</button>
+              </div>
+              <div id="xa-article-body" class="xa-template-editor__body xa-article-editor__body" contenteditable="true" aria-label="Article body"></div>
+            </section>
+            <section class="xa-template-editor__section">
+              <h2>Questions</h2>
+              <p class="xa-template-editor__hint">Each question and answer is published on the page and in FAQ structured data.</p>
+              <div id="xa-article-faqs" class="xa-article-faqs"></div>
+              <button type="button" id="xa-article-faq-add" class="xa-article-faq-add">Add question</button>
+            </section>
+            <div class="xa-template-editor__actions">
+              <button type="button" id="xa-article-save" class="xa-templates__create">Save article</button>
+              <p id="xa-article-status-msg" class="xa-template__status" aria-live="polite"></p>
+              <p id="xa-article-error" class="xa-template__status xa-template__status--error" aria-live="polite"></p>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+    <script type="module" src="/src/admin/articles-new.ts"></script>
+  </body>
+</html>

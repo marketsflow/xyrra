@@ -36,3 +36,4 @@ User-agent: Applebot-Extended
 Allow: /
 
 Sitemap: https://xyrra.ai/sitemap.xml
+Sitemap: https://xyrra.ai/sitemap-articles.xml

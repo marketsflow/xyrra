@@ -9,6 +9,7 @@ import { recordEmailUnsubscribe } from "./api/unsubscribe";
 import { recordFreecapsSignup } from "./api/freecaps-signup";
 import { fetchStockPrices } from "./api/stock-prices";
 import { articleSeoPlugin } from "./vite/article-seo-plugin";
+import { renderArticlesResponse } from "./api/articles-page";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -403,6 +404,12 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/admin/emails-sent/" + search;
       } else if (path === "/admin/stock-prices") {
         (req as IncomingMessage & { url?: string }).url = "/admin/stock-prices/" + search;
+      } else if (path === "/admin/articles") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/articles/" + search;
+      } else if (path === "/admin/articles/new") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/articles/new/" + search;
+      } else if (path === "/admin/articles/edit") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/articles/edit/" + search;
       } else if (
         path === "/article/ai-hardware/Why-AI-Demands-a-New-Kind-of-Machine"
       ) {
@@ -414,6 +421,40 @@ function cleanLegalPathPlugin(): Plugin {
   };
   return {
     name: "xyrra-clean-legal-paths",
+    configureServer: attach,
+    configurePreviewServer: attach,
+  };
+}
+
+function articlesPagePlugin(env: Record<string, string>): Plugin {
+  const attach = (server: {
+    middlewares: {
+      use: (fn: (req: IncomingMessage, res: ServerResponse, next: () => void) => void) => void;
+    };
+  }) => {
+    server.middlewares.use(async (req, res, next) => {
+      const method = req.method ?? "GET";
+      if (method !== "GET" && method !== "HEAD") {
+        next();
+        return;
+      }
+      const rendered = await renderArticlesResponse(req.url ?? "/", {
+        SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+        SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+      });
+      if (!rendered) {
+        next();
+        return;
+      }
+      res.statusCode = rendered.status;
+      for (const [key, value] of Object.entries(rendered.headers)) {
+        res.setHeader(key, value);
+      }
+      res.end(method === "HEAD" ? undefined : rendered.body);
+    });
+  };
+  return {
+    name: "xyrra-articles-pages",
     configureServer: attach,
     configurePreviewServer: attach,
   };
@@ -483,9 +524,12 @@ export default defineConfig(({ mode }) => {
           adminEmailOutreach: resolve(__dirname, "admin/email-outreach/index.html"),
           adminEmailsSent: resolve(__dirname, "admin/emails-sent/index.html"),
           adminStockPrices: resolve(__dirname, "admin/stock-prices/index.html"),
+          adminArticles: resolve(__dirname, "admin/articles/index.html"),
+          adminArticlesNew: resolve(__dirname, "admin/articles/new/index.html"),
+          adminArticlesEdit: resolve(__dirname, "admin/articles/edit/index.html"),
         },
       },
     },
-    plugins: [cleanLegalPathPlugin(), resendApiPlugin(env), articleSeoPlugin()],
+    plugins: [cleanLegalPathPlugin(), resendApiPlugin(env), articleSeoPlugin(), articlesPagePlugin(env)],
   };
 });

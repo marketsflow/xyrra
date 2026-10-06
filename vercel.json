@@ -10,6 +10,12 @@
     { "source": "/new_home/", "destination": "/", "permanent": true }
   ],
   "rewrites": [
+    { "source": "/articles", "destination": "/api/articles-page?view=index" },
+    { "source": "/articles/", "destination": "/api/articles-page?view=index" },
+    { "source": "/articles/:slug", "destination": "/api/articles-page?slug=:slug" },
+    { "source": "/articles/:slug/", "destination": "/api/articles-page?slug=:slug" },
+    { "source": "/sitemap-articles.xml", "destination": "/api/articles-page?view=sitemap" },
+    { "source": "/llms-articles.txt", "destination": "/api/articles-page?view=llms" },
     { "source": "/api/webhooks/resend", "destination": "/api/resend-webhook" },
     { "source": "/api/webhooks/resend/", "destination": "/api/resend-webhook" },
     { "source": "/api/website/ai-stocks/history", "destination": "https://app.xyrra.ai/api/website/ai-stocks/history" },
@@ -66,6 +72,10 @@
     "api/stock-prices.ts": {
       "memory": 256,
       "maxDuration": 60
+    },
+    "api/articles-page.ts": {
+      "memory": 256,
+      "maxDuration": 30
     }
   }
 }

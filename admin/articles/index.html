@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#f8f9fd" />
-    <title>Admin | Xyrra</title>
+    <title>Articles | Admin | Xyrra</title>
     <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -16,10 +16,7 @@
     <link rel="stylesheet" href="/src/admin/admin.css" />
   </head>
   <body class="xa-body">
-    <div id="xa-admin-loading" class="xa-loading" role="status" aria-live="polite">
-      Checking session…
-    </div>
-
+    <div id="xa-admin-loading" class="xa-loading" role="status" aria-live="polite">Checking session…</div>
     <div class="xa-admin" id="xa-admin-app" hidden>
       <header class="xa-admin__bar">
         <a class="xa-brand" href="/admin/" aria-label="Xyrra admin home">
@@ -33,7 +30,6 @@
           <button type="button" id="xa-admin-signout" class="xa-admin__signout">Sign out</button>
         </div>
       </header>
-
       <div class="xa-admin__layout">
         <aside class="xa-admin__sidebar" aria-label="Admin navigation">
           <nav class="xa-admin__nav">
@@ -47,16 +43,24 @@
             <a class="xa-admin__nav-link" data-xa-nav="stock-prices" href="/admin/stock-prices/">Stock Prices</a>
           </nav>
         </aside>
-
         <main class="xa-admin__main">
-          <div class="xa-admin__card">
-            <h1>Admin console</h1>
-            <p>You are signed in. Use the navigation to manage Xyrra. Publish articles from <a href="/admin/articles/">Articles</a>.</p>
+          <div class="xa-admin__panel xa-templates">
+            <div class="xa-templates__header">
+              <div>
+                <h1>Articles</h1>
+                <p class="xa-templates__lede">
+                  Published articles are served at /articles/ and /articles/your-slug/ with the copy search and AI systems can read.
+                </p>
+              </div>
+              <a class="xa-templates__create" href="/admin/articles/new/">New article</a>
+            </div>
+            <p id="xa-articles-error" class="xa-template__status xa-template__status--error" aria-live="polite"></p>
+            <p id="xa-articles-empty" class="xa-templates__empty" hidden>No articles yet.</p>
+            <ul id="xa-articles-list" class="xa-templates__list"></ul>
           </div>
         </main>
       </div>
     </div>
-
-    <script type="module" src="/src/admin/index.ts"></script>
+    <script type="module" src="/src/admin/articles-list.ts"></script>
   </body>
 </html>

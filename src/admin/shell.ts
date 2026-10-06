@@ -4,6 +4,7 @@ import type { AdminSession } from "./auth-guard";
 export type AdminNavId =
   | "dashboard"
   | "users"
+  | "articles"
   | "email-templates"
   | "email-lists"
   | "email-outreach"

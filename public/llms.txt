@@ -25,6 +25,11 @@ Xyrra is published by XYRRA LTD. Support email: hello@xyrra.ai. The iOS and Andr
 - [App Store](https://apps.apple.com/gb/app/xyrra-ai-trading-insights/id6499525423): Xyrra for iPhone and iPad.
 - [Google Play](https://play.google.com/store/apps/details?id=com.marketsflow.mobileapp&hl=en_GB): Xyrra for Android.
 
+## Articles
+
+- [Articles](https://xyrra.ai/articles/): Editorial articles. Each published article has its own URL at https://xyrra.ai/articles/{slug}/.
+- [Article list for AI systems](https://xyrra.ai/llms-articles.txt): Plain-text list of published articles, titles, URLs, and summaries.
+
 ## Also published
 
 - [Xyrra PC](https://xyrra.ai/xyrra-pc/): AI workstation.
