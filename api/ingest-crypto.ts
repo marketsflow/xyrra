@@ -7,7 +7,12 @@
  * Vite: imports named `ingestCryptoPrices` for the dev middleware.
  */
 
-const BINANCE_KLINES_URL = "https://api.binance.com/api/v3/klines";
+/** Primary + fallbacks: api.binance.com is often geo-blocked from Vercel US (iad1). */
+const BINANCE_KLINES_URLS = [
+  "https://api.binance.com/api/v3/klines",
+  "https://data-api.binance.vision/api/v3/klines",
+] as const;
+const COINBASE_CANDLES_URL = "https://api.exchange.coinbase.com/products";
 const DEFAULT_SYMBOL = "BTC";
 const DEFAULT_QUOTE = "USDT";
 const TIMEFRAME_1M = 1;
@@ -209,37 +214,136 @@ async function ensureAsset(
   return created[0].id;
 }
 
-async function fetchBinance1mKline(pair: string, startMs: number, endMs: number): Promise<BinanceKline | null> {
-  const url = new URL(BINANCE_KLINES_URL);
+function isGeoBlocked(status: number, body: string): boolean {
+  if (status === 451 || status === 403) return true;
+  const lower = body.toLowerCase();
+  return lower.includes("restricted location") || lower.includes("unavailable from a restricted");
+}
+
+async function fetchBinance1mKlineFrom(
+  baseUrl: string,
+  pair: string,
+  startMs: number,
+  endMs: number,
+): Promise<{ kline: BinanceKline | null; error?: string }> {
+  const url = new URL(baseUrl);
   url.searchParams.set("symbol", pair);
   url.searchParams.set("interval", "1m");
   url.searchParams.set("startTime", String(startMs));
   url.searchParams.set("endTime", String(endMs));
   url.searchParams.set("limit", "1");
 
-  let lastStatus = 0;
-  for (let attempt = 1; attempt <= 3; attempt++) {
+  for (let attempt = 1; attempt <= 2; attempt++) {
     const res = await fetch(url.toString(), {
       headers: { Accept: "application/json" },
     });
-    lastStatus = res.status;
+    const text = await res.text();
     if (res.status === 429 || res.status === 503) {
-      await new Promise((r) => setTimeout(r, 1000 * attempt));
+      await new Promise((r) => setTimeout(r, 500 * attempt));
       continue;
     }
     if (!res.ok) {
-      const text = await res.text();
-      if (attempt < 3) {
-        await new Promise((r) => setTimeout(r, 1000 * attempt));
-        continue;
+      if (isGeoBlocked(res.status, text)) {
+        return { kline: null, error: `geo-blocked (${res.status})` };
       }
-      throw new Error(`Binance klines failed (HTTP ${lastStatus}): ${text.slice(0, 200)}`);
+      return { kline: null, error: `HTTP ${res.status}: ${text.slice(0, 160)}` };
     }
-    const json = (await res.json()) as unknown;
-    if (!Array.isArray(json) || json.length === 0) return null;
-    return json[0] as BinanceKline;
+    let json: unknown;
+    try {
+      json = JSON.parse(text) as unknown;
+    } catch {
+      return { kline: null, error: `invalid JSON from ${baseUrl}` };
+    }
+    if (!Array.isArray(json) || json.length === 0) return { kline: null };
+    return { kline: json[0] as BinanceKline };
   }
-  throw new Error(`Binance klines failed after retries (HTTP ${lastStatus}).`);
+  return { kline: null, error: `rate-limited on ${baseUrl}` };
+}
+
+/** Coinbase candle: [timeSec, low, high, open, close, volume] */
+async function fetchCoinbase1mKline(
+  symbol: string,
+  quote: string,
+  startMs: number,
+  endMs: number,
+): Promise<BinanceKline | null> {
+  const product = `${symbol}-${quote}`;
+  const url = new URL(`${COINBASE_CANDLES_URL}/${encodeURIComponent(product)}/candles`);
+  url.searchParams.set("granularity", "60");
+  url.searchParams.set("start", new Date(startMs).toISOString());
+  url.searchParams.set("end", new Date(endMs).toISOString());
+
+  const res = await fetch(url.toString(), {
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) return null;
+  const json = (await res.json()) as unknown;
+  if (!Array.isArray(json) || json.length === 0) return null;
+
+  // Coinbase returns newest-first; pick the bucket matching startMs when possible.
+  const rows = json as Array<[number, number, number, number, number, number]>;
+  const startSec = Math.floor(startMs / 1000);
+  const match = rows.find((r) => r[0] === startSec) ?? rows[0];
+  if (!match) return null;
+  const [timeSec, low, high, open, close, volume] = match;
+  return [
+    timeSec * 1000,
+    String(open),
+    String(high),
+    String(low),
+    String(close),
+    String(volume),
+    timeSec * 1000 + 59_999,
+    "0",
+    0,
+    "0",
+    "0",
+    "0",
+  ];
+}
+
+async function fetch1mKline(
+  symbol: string,
+  quote: string,
+  startMs: number,
+  endMs: number,
+): Promise<BinanceKline> {
+  const pair = `${symbol}${quote}`;
+  const errors: string[] = [];
+
+  for (const baseUrl of BINANCE_KLINES_URLS) {
+    try {
+      const result = await fetchBinance1mKlineFrom(baseUrl, pair, startMs, endMs);
+      if (result.kline) return result.kline;
+      if (result.error) errors.push(`${baseUrl}: ${result.error}`);
+    } catch (e) {
+      errors.push(`${baseUrl}: ${e instanceof Error ? e.message : "fetch failed"}`);
+    }
+  }
+
+  try {
+    const coinbase = await fetchCoinbase1mKline(symbol, quote, startMs, endMs);
+    if (coinbase) return coinbase;
+    errors.push("coinbase: no candle");
+  } catch (e) {
+    errors.push(`coinbase: ${e instanceof Error ? e.message : "fetch failed"}`);
+  }
+
+  // Last resort: previous closed minute (cron at :00 often races an empty current bucket).
+  const prevStart = startMs - 60_000;
+  const prevEnd = startMs - 1;
+  for (const baseUrl of BINANCE_KLINES_URLS) {
+    try {
+      const result = await fetchBinance1mKlineFrom(baseUrl, pair, prevStart, prevEnd);
+      if (result.kline) return result.kline;
+    } catch {
+      // continue
+    }
+  }
+  const prevCoinbase = await fetchCoinbase1mKline(symbol, quote, prevStart, prevEnd);
+  if (prevCoinbase) return prevCoinbase;
+
+  throw new Error(`No 1m kline for ${pair}. ${errors.join(" | ").slice(0, 400)}`);
 }
 
 function klineToRow(assetId: number, kline: BinanceKline): CryptoPriceRow {
@@ -310,15 +414,7 @@ export async function ingestCryptoPrices(
 
   try {
     const assetId = await ensureAsset(supabaseUrl, serviceKey, symbol);
-    const kline = await fetchBinance1mKline(pair, startMs, endMs);
-    if (!kline) {
-      return {
-        success: false,
-        message: `No Binance 1m kline for ${pair} in the current minute.`,
-        status: 404,
-      };
-    }
-
+    const kline = await fetch1mKline(symbol, quote, startMs, endMs);
     const row = klineToRow(assetId, kline);
     await upsertCryptoPrice(supabaseUrl, serviceKey, row);
     return { success: true, row, pair, created: true };
@@ -358,12 +454,14 @@ export default {
           { status: 200, headers: jsonHeaders() },
         );
       }
+      console.error("[ingest-crypto] failed", result.status, result.message);
       return Response.json(
         { success: false, message: result.message },
         { status: result.status ?? 500, headers: jsonHeaders() },
       );
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Internal error";
+      console.error("[ingest-crypto] uncaught", msg);
       return Response.json({ success: false, message: msg }, { status: 500, headers: jsonHeaders() });
     }
   },
