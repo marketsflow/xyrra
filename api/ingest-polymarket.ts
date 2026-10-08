@@ -10,7 +10,8 @@ const GAMMA_BASE = "https://gamma-api.polymarket.com";
 const CLOB_BASE = "https://clob.polymarket.com";
 const DEFAULT_ASSET = "btc";
 const DEFAULT_SYMBOL = "BTC";
-const WINDOW_MINUTES = [5, 15] as const;
+/** BTC 4-hour up/down windows only (slug: btc-updown-4h-{unix}). */
+const WINDOW_MINUTES = [240] as const;
 
 export type IngestPolymarketEnv = {
   SUPABASE_URL?: string;
@@ -52,6 +53,8 @@ type GammaMarket = {
   bestAsk?: number | string | null;
   endDate?: string;
   slug?: string;
+  active?: boolean;
+  closed?: boolean;
 };
 
 type GammaEvent = {
@@ -101,10 +104,62 @@ function windowSlugs(asset: string, nowSec = Math.floor(Date.now() / 1000)): str
   for (const minutes of WINDOW_MINUTES) {
     const windowSec = minutes * 60;
     const start = Math.floor(nowSec / windowSec) * windowSec;
-    slugs.push(`${asset}-updown-${minutes}m-${start}`);
-    slugs.push(`${asset}-updown-${minutes}m-${start - windowSec}`);
+    // Polymarket 4h BTC markets use "4h", not "240m".
+    const label = minutes === 240 ? "4h" : `${minutes}m`;
+    slugs.push(`${asset}-updown-${label}-${start}`);
+    slugs.push(`${asset}-updown-${label}-${start - windowSec}`);
   }
   return slugs;
+}
+
+function isShortWindowSlug(slug: string) {
+  const s = slug.toLowerCase();
+  return (
+    s.includes("updown-5m") ||
+    s.includes("updown-15m") ||
+    s.includes("-5m-") ||
+    s.includes("-15m-") ||
+    /(^|-)5m($|-)/.test(s) ||
+    /(^|-)15m($|-)/.test(s)
+  );
+}
+
+function isBtcFourHourEvent(event: GammaEvent, asset: string) {
+  const slug = (event.slug || "").toLowerCase();
+  const title = (event.title || "").toLowerCase();
+
+  // Never ingest ultra-short windows.
+  if (isShortWindowSlug(slug) || isShortWindowSlug(title)) return false;
+
+  // Canonical Polymarket BTC 4h slug: btc-updown-4h-{unix}
+  if (slug.startsWith(`${asset}-updown-4h-`)) return true;
+
+  const isAsset =
+    slug.startsWith(`${asset}-updown-`) ||
+    slug.startsWith(`${asset}-up-or-down-`) ||
+    (asset === "btc" && title.includes("bitcoin") && title.includes("up or down"));
+
+  const is4Hour =
+    slug.includes("updown-4h") ||
+    slug.includes("-4h-") ||
+    title.includes("4 hour") ||
+    title.includes("4-hour") ||
+    /(^|[^0-9])4h([^a-z]|$)/i.test(slug) ||
+    /(^|[^0-9])4h([^a-z]|$)/i.test(title);
+
+  return isAsset && is4Hour;
+}
+
+function pickActiveMarket(event: GammaEvent): GammaMarket | null {
+  const markets = event.markets || [];
+  for (const market of markets) {
+    const closed = market.closed === true;
+    const inactive = market.active === false;
+    if (closed || inactive) continue;
+    if (parseJsonArray(market.clobTokenIds).length >= 2) return market;
+  }
+  // Fallback: first market with token ids (some Gamma payloads omit active flags).
+  return markets.find((market) => parseJsonArray(market.clobTokenIds).length >= 2) ?? null;
 }
 
 async function fetchJson(url: string): Promise<unknown> {
@@ -165,30 +220,38 @@ export class PolymarketSupabaseIngestor {
   }
 
   async findActiveEvent(): Promise<GammaEvent | null> {
+    // Prefer exact current/previous 4h window slugs: btc-updown-4h-{unix}
     for (const slug of windowSlugs(this.asset)) {
       const data = (await fetchJson(
         `${GAMMA_BASE}/events?slug=${encodeURIComponent(slug)}&limit=1`,
       )) as GammaEvent[] | null;
       const event = Array.isArray(data) ? data[0] : null;
-      if (event?.markets?.length) return event;
+      if (event && isBtcFourHourEvent(event, this.asset) && pickActiveMarket(event)) {
+        return event;
+      }
     }
 
-    // Fallback: newest active events, pick first matching asset updown slug.
+    // Fallback: scan recent active events, keep only BTC 4h (never 5m/15m).
     const recent = (await fetchJson(
-      `${GAMMA_BASE}/events?limit=40&active=true&closed=false&order=id&ascending=false`,
+      `${GAMMA_BASE}/events?limit=80&active=true&closed=false&order=id&ascending=false`,
     )) as GammaEvent[] | null;
     if (!Array.isArray(recent)) return null;
-    const prefix = `${this.asset}-updown-`;
-    return recent.find((event) => (event.slug || "").startsWith(prefix) && (event.markets?.length ?? 0) > 0) ?? null;
+
+    for (const event of recent) {
+      if (!isBtcFourHourEvent(event, this.asset)) continue;
+      if (pickActiveMarket(event)) return event;
+    }
+    return null;
   }
 
   async fetchTick(): Promise<PolymarketTick | null> {
     const event = await this.findActiveEvent();
     if (!event?.id || !event.slug) return null;
 
-    const market = event.markets?.[0];
+    const market = pickActiveMarket(event);
     if (!market) return null;
 
+    // clobTokenIds: [UP/YES token, DOWN/NO token]
     const tokenIds = parseJsonArray(market.clobTokenIds);
     if (tokenIds.length < 2) return null;
 
@@ -204,6 +267,11 @@ export class PolymarketSupabaseIngestor {
       fetchSidePrice(downTokenId, "sell"),
     ]);
 
+    const upPrice = upMid ?? parseNumber(outcomePrices[0]);
+    // Binary market: DOWN ≈ 1 - UP when the DOWN midpoint is unavailable.
+    const downPrice =
+      downMid ?? parseNumber(outcomePrices[1]) ?? (upPrice === null ? null : Number((1 - upPrice).toFixed(6)));
+
     return {
       asset: this.asset,
       symbol: this.symbol,
@@ -214,8 +282,8 @@ export class PolymarketSupabaseIngestor {
       condition_id: market.conditionId ?? null,
       up_token_id: upTokenId,
       down_token_id: downTokenId,
-      up_price: upMid ?? parseNumber(outcomePrices[0]),
-      down_price: downMid ?? parseNumber(outcomePrices[1]),
+      up_price: upPrice,
+      down_price: downPrice,
       up_bid: upBid ?? parseNumber(market.bestBid),
       up_ask: upAsk ?? parseNumber(market.bestAsk),
       down_bid: downBid,
