@@ -13,6 +13,7 @@ create table public.polymarket_events (
   condition_id text,
   up_token_id text,
   down_token_id text,
+  price_to_beat numeric(18, 6),
   start_at timestamptz,
   end_at timestamptz,
   updated_at timestamptz not null default now(),
@@ -42,6 +43,13 @@ create table public.polymarket_ticks (
   up_ask numeric(12, 6),
   down_bid numeric(12, 6),
   down_ask numeric(12, 6),
+  price_to_beat numeric(18, 6),
+  spot_price numeric(18, 6),
+  seconds_remaining integer,
+  bid_depth_top5 numeric(18, 6),
+  ask_depth_top5 numeric(18, 6),
+  order_book_imbalance numeric(12, 6),
+  market_start_at timestamptz,
   market_end_at timestamptz,
   recorded_at timestamptz not null default now()
 );

@@ -28,11 +28,35 @@ function formatDateTime(value: string | null | undefined) {
   });
 }
 
-function formatPrice(value: unknown) {
+function formatPrice(value: unknown, digits = 3) {
   if (value === null || value === undefined || value === "") return "—";
   const n = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(n)) return escapeHtml(String(value));
-  return n.toFixed(3);
+  return n.toFixed(digits);
+}
+
+function formatUsd(value: unknown) {
+  if (value === null || value === undefined || value === "") return "—";
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return escapeHtml(String(value));
+  return n.toLocaleString(undefined, {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 2,
+  });
+}
+
+function formatSeconds(value: unknown) {
+  if (value === null || value === undefined || value === "") return "—";
+  const n = typeof value === "number" ? value : Number(value);
+  if (!Number.isFinite(n)) return escapeHtml(String(value));
+  const total = Math.max(0, Math.floor(n));
+  const hours = Math.floor(total / 3600);
+  const minutes = Math.floor((total % 3600) / 60);
+  const seconds = total % 60;
+  if (hours > 0) return `${hours}h ${minutes}m`;
+  if (minutes > 0) return `${minutes}m ${seconds}s`;
+  return `${seconds}s`;
 }
 
 function display(value: unknown) {
@@ -108,19 +132,24 @@ function renderLatest(tick: Row | null) {
       <p class="xa-polymarket__card-meta">${escapeHtml(formatDateTime(asString(tick.recorded_at)))}</p>
     </article>
     <article class="xa-polymarket__card">
-      <p class="xa-polymarket__card-label">Up price</p>
-      <p class="xa-polymarket__card-value">${formatPrice(tick.up_price)}</p>
+      <p class="xa-polymarket__card-label">BTC price to beat</p>
+      <p class="xa-polymarket__card-value">${escapeHtml(formatUsd(tick.price_to_beat))}</p>
+      <p class="xa-polymarket__card-meta">spot ${escapeHtml(formatUsd(tick.spot_price))}</p>
+    </article>
+    <article class="xa-polymarket__card">
+      <p class="xa-polymarket__card-label">Up / Down</p>
+      <p class="xa-polymarket__card-value">${formatPrice(tick.up_price)} / ${formatPrice(tick.down_price)}</p>
       <p class="xa-polymarket__card-meta">bid ${formatPrice(tick.up_bid)} / ask ${formatPrice(tick.up_ask)}</p>
     </article>
     <article class="xa-polymarket__card">
-      <p class="xa-polymarket__card-label">Down price</p>
-      <p class="xa-polymarket__card-value">${formatPrice(tick.down_price)}</p>
-      <p class="xa-polymarket__card-meta">bid ${formatPrice(tick.down_bid)} / ask ${formatPrice(tick.down_ask)}</p>
+      <p class="xa-polymarket__card-label">Order book</p>
+      <p class="xa-polymarket__card-value">OBI ${formatPrice(tick.order_book_imbalance, 3)}</p>
+      <p class="xa-polymarket__card-meta">depth ${formatPrice(tick.bid_depth_top5, 1)} / ${formatPrice(tick.ask_depth_top5, 1)}</p>
     </article>
     <article class="xa-polymarket__card">
-      <p class="xa-polymarket__card-label">Window ends</p>
-      <p class="xa-polymarket__card-value">${escapeHtml(formatDateTime(asString(tick.market_end_at)))}</p>
-      <p class="xa-polymarket__card-meta">${display(tick.symbol)} · ${display(tick.asset)}</p>
+      <p class="xa-polymarket__card-label">Time left</p>
+      <p class="xa-polymarket__card-value">${escapeHtml(formatSeconds(tick.seconds_remaining))}</p>
+      <p class="xa-polymarket__card-meta">ends ${escapeHtml(formatDateTime(asString(tick.market_end_at)))}</p>
     </article>
   `;
 }
@@ -165,7 +194,7 @@ function renderEvents(events: Row[]) {
       <tr>
         <th scope="col">Slug</th>
         <th scope="col">Title</th>
-        <th scope="col">Asset</th>
+        <th scope="col">Price to beat</th>
         <th scope="col">Ends</th>
         <th scope="col">Updated</th>
       </tr>
@@ -178,7 +207,7 @@ function renderEvents(events: Row[]) {
         <tr>
           <td>${display(event.slug)}</td>
           <td>${display(event.title)}</td>
-          <td>${display(event.asset)}</td>
+          <td>${escapeHtml(formatUsd(event.price_to_beat))}</td>
           <td>${escapeHtml(formatDateTime(asString(event.end_at)))}</td>
           <td>${escapeHtml(formatDateTime(asString(event.updated_at)))}</td>
         </tr>
@@ -193,7 +222,7 @@ function renderTicks(ticks: Row[]) {
   if (!tbody) return;
 
   if (ticks.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="7" class="xa-users__empty">No ticks stored yet.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" class="xa-users__empty">No ticks stored yet.</td></tr>';
     return;
   }
 
@@ -206,12 +235,14 @@ function renderTicks(ticks: Row[]) {
     thead.innerHTML = `
       <tr>
         <th scope="col">Recorded</th>
-        <th scope="col">Asset</th>
         <th scope="col">Event</th>
-        <th scope="col">Up</th>
-        <th scope="col">Down</th>
-        <th scope="col">Up bid/ask</th>
-        <th scope="col">Market end</th>
+        <th scope="col">Strike</th>
+        <th scope="col">Spot</th>
+        <th scope="col">Up / Down</th>
+        <th scope="col">OBI</th>
+        <th scope="col">Depth bid/ask</th>
+        <th scope="col">Time left</th>
+        <th scope="col">Ends</th>
       </tr>
     `;
   }
@@ -221,11 +252,13 @@ function renderTicks(ticks: Row[]) {
       (tick) => `
         <tr>
           <td>${escapeHtml(formatDateTime(asString(tick.recorded_at)))}</td>
-          <td>${display(tick.asset)}</td>
           <td>${display(tick.event_slug || tick.question)}</td>
-          <td>${formatPrice(tick.up_price)}</td>
-          <td>${formatPrice(tick.down_price)}</td>
-          <td>${formatPrice(tick.up_bid)} / ${formatPrice(tick.up_ask)}</td>
+          <td>${escapeHtml(formatUsd(tick.price_to_beat))}</td>
+          <td>${escapeHtml(formatUsd(tick.spot_price))}</td>
+          <td>${formatPrice(tick.up_price)} / ${formatPrice(tick.down_price)}</td>
+          <td>${formatPrice(tick.order_book_imbalance, 3)}</td>
+          <td>${formatPrice(tick.bid_depth_top5, 1)} / ${formatPrice(tick.ask_depth_top5, 1)}</td>
+          <td>${escapeHtml(formatSeconds(tick.seconds_remaining))}</td>
           <td>${escapeHtml(formatDateTime(asString(tick.market_end_at)))}</td>
         </tr>
       `,

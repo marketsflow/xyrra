@@ -8,10 +8,13 @@
 
 const GAMMA_BASE = "https://gamma-api.polymarket.com";
 const CLOB_BASE = "https://clob.polymarket.com";
+const BINANCE_PRICE_URL = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT";
+const COINBASE_PRICE_URL = "https://api.coinbase.com/v2/prices/BTC-USD/spot";
 const DEFAULT_ASSET = "btc";
 const DEFAULT_SYMBOL = "BTC";
 /** BTC 4-hour up/down windows only (slug: btc-updown-4h-{unix}). */
 const WINDOW_MINUTES = [240] as const;
+const BOOK_DEPTH_LEVELS = 5;
 
 export type IngestPolymarketEnv = {
   SUPABASE_URL?: string;
@@ -38,13 +41,23 @@ export type PolymarketTick = {
   up_ask: number | null;
   down_bid: number | null;
   down_ask: number | null;
+  price_to_beat: number | null;
+  spot_price: number | null;
+  seconds_remaining: number | null;
+  bid_depth_top5: number | null;
+  ask_depth_top5: number | null;
+  order_book_imbalance: number | null;
+  market_start_at: string | null;
   market_end_at: string | null;
   recorded_at: string;
 };
 
+type BookLevel = { price?: string | number; size?: string | number };
+
 type GammaMarket = {
   id?: string;
   question?: string;
+  description?: string;
   conditionId?: string;
   clobTokenIds?: string | string[];
   outcomes?: string | string[];
@@ -52,6 +65,7 @@ type GammaMarket = {
   bestBid?: number | string | null;
   bestAsk?: number | string | null;
   endDate?: string;
+  eventStartTime?: string;
   slug?: string;
   active?: boolean;
   closed?: boolean;
@@ -61,8 +75,11 @@ type GammaEvent = {
   id?: string;
   slug?: string;
   title?: string;
+  description?: string;
   startDate?: string;
+  startTime?: string;
   endDate?: string;
+  eventMetadata?: { priceToBeat?: number | string | null } | null;
   markets?: GammaMarket[];
 };
 
@@ -196,6 +213,96 @@ async function fetchSidePrice(tokenId: string, side: "buy" | "sell"): Promise<nu
   }
 }
 
+function parseStrikeFromText(text: string | null | undefined): number | null {
+  if (!text) return null;
+  const patterns = [
+    /price to beat[^$0-9]{0,40}\$?([0-9,]+\.?\d*)/i,
+    /(?:above|over|greater than)\s*\$?([0-9,]+\.?\d*)/i,
+    /\$([0-9]{2,}(?:,[0-9]{3})*(?:\.\d+)?)/,
+  ];
+  for (const pattern of patterns) {
+    const match = text.match(pattern);
+    if (!match?.[1]) continue;
+    const value = parseFloat(match[1].replace(/,/g, ""));
+    if (Number.isFinite(value) && value > 0) return value;
+  }
+  return null;
+}
+
+function extractPriceToBeat(event: GammaEvent, market: GammaMarket): number | null {
+  const fromMetadata = parseNumber(event.eventMetadata?.priceToBeat);
+  if (fromMetadata !== null) return fromMetadata;
+  return (
+    parseStrikeFromText(market.description) ??
+    parseStrikeFromText(event.description) ??
+    parseStrikeFromText(market.question) ??
+    parseStrikeFromText(event.title)
+  );
+}
+
+function topDepth(levels: BookLevel[] | undefined, side: "bid" | "ask", n = BOOK_DEPTH_LEVELS) {
+  if (!levels?.length) return 0;
+  const sorted = [...levels].sort((a, b) => {
+    const pa = Number(a.price);
+    const pb = Number(b.price);
+    if (!Number.isFinite(pa) || !Number.isFinite(pb)) return 0;
+    return side === "bid" ? pb - pa : pa - pb;
+  });
+  return sorted.slice(0, n).reduce((sum, level) => {
+    const size = Number(level.size);
+    return sum + (Number.isFinite(size) ? size : 0);
+  }, 0);
+}
+
+async function fetchUpBookDepth(tokenId: string): Promise<{
+  bidDepthTop5: number | null;
+  askDepthTop5: number | null;
+  orderBookImbalance: number | null;
+}> {
+  try {
+    const book = (await fetchJson(`${CLOB_BASE}/book?token_id=${encodeURIComponent(tokenId)}`)) as {
+      bids?: BookLevel[];
+      asks?: BookLevel[];
+    } | null;
+    const bidDepthTop5 = topDepth(book?.bids, "bid");
+    const askDepthTop5 = topDepth(book?.asks, "ask");
+    const total = bidDepthTop5 + askDepthTop5;
+    const orderBookImbalance = total > 0 ? Number(((bidDepthTop5 - askDepthTop5) / total).toFixed(6)) : null;
+    return {
+      bidDepthTop5: Number(bidDepthTop5.toFixed(6)),
+      askDepthTop5: Number(askDepthTop5.toFixed(6)),
+      orderBookImbalance,
+    };
+  } catch {
+    return { bidDepthTop5: null, askDepthTop5: null, orderBookImbalance: null };
+  }
+}
+
+async function fetchBtcSpotPrice(): Promise<number | null> {
+  try {
+    const data = (await fetchJson(BINANCE_PRICE_URL)) as { price?: string | number } | null;
+    const binance = parseNumber(data?.price);
+    if (binance !== null) return binance;
+  } catch {
+    // fall through to Coinbase
+  }
+  try {
+    const data = (await fetchJson(COINBASE_PRICE_URL)) as {
+      data?: { amount?: string | number };
+    } | null;
+    return parseNumber(data?.data?.amount);
+  } catch {
+    return null;
+  }
+}
+
+function secondsRemaining(endAt: string | null | undefined, nowMs = Date.now()): number | null {
+  if (!endAt) return null;
+  const endMs = new Date(endAt).getTime();
+  if (Number.isNaN(endMs)) return null;
+  return Math.max(0, Math.floor((endMs - nowMs) / 1000));
+}
+
 export class PolymarketSupabaseIngestor {
   private readonly supabaseUrl: string;
   private readonly serviceRoleKey: string;
@@ -257,14 +364,19 @@ export class PolymarketSupabaseIngestor {
 
     const [upTokenId, downTokenId] = tokenIds;
     const outcomePrices = parseJsonArray(market.outcomePrices);
+    const recordedAt = new Date();
+    const marketEndAt = market.endDate ?? event.endDate ?? null;
+    const marketStartAt = market.eventStartTime ?? event.startTime ?? event.startDate ?? null;
 
-    const [upMid, downMid, upBid, upAsk, downBid, downAsk] = await Promise.all([
+    const [upMid, downMid, upBid, upAsk, downBid, downAsk, book, spotPrice] = await Promise.all([
       fetchMidpoint(upTokenId),
       fetchMidpoint(downTokenId),
       fetchSidePrice(upTokenId, "buy"),
       fetchSidePrice(upTokenId, "sell"),
       fetchSidePrice(downTokenId, "buy"),
       fetchSidePrice(downTokenId, "sell"),
+      fetchUpBookDepth(upTokenId),
+      fetchBtcSpotPrice(),
     ]);
 
     const upPrice = upMid ?? parseNumber(outcomePrices[0]);
@@ -288,8 +400,15 @@ export class PolymarketSupabaseIngestor {
       up_ask: upAsk ?? parseNumber(market.bestAsk),
       down_bid: downBid,
       down_ask: downAsk,
-      market_end_at: market.endDate ?? event.endDate ?? null,
-      recorded_at: new Date().toISOString(),
+      price_to_beat: extractPriceToBeat(event, market),
+      spot_price: spotPrice,
+      seconds_remaining: secondsRemaining(marketEndAt, recordedAt.getTime()),
+      bid_depth_top5: book.bidDepthTop5,
+      ask_depth_top5: book.askDepthTop5,
+      order_book_imbalance: book.orderBookImbalance,
+      market_start_at: marketStartAt,
+      market_end_at: marketEndAt,
+      recorded_at: recordedAt.toISOString(),
     };
   }
 
@@ -303,6 +422,8 @@ export class PolymarketSupabaseIngestor {
       condition_id: tick.condition_id,
       up_token_id: tick.up_token_id,
       down_token_id: tick.down_token_id,
+      price_to_beat: tick.price_to_beat,
+      start_at: tick.market_start_at,
       end_at: tick.market_end_at,
       updated_at: new Date().toISOString(),
     };
