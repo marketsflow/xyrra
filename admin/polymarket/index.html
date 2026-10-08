@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#f8f9fd" />
-    <title>Create Email List | Admin | Xyrra</title>
+    <title>Polymarket | Admin | Xyrra</title>
     <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -50,70 +50,83 @@
         </aside>
 
         <main class="xa-admin__main">
-          <div class="xa-template-editor">
-            <a class="xa-template-editor__back" href="/admin/email-lists/">← Back to email lists</a>
-            <h1>Create email list</h1>
-            <p class="xa-template-editor__lede">
-              Name your list to create it. Adding members now is optional — you can also add them later.
-            </p>
-
-            <section class="xa-template-editor__section">
-              <h2>List name</h2>
-              <input id="xa-email-list-name" type="text" placeholder="e.g. Beta testers" aria-label="List name" />
-            </section>
-
-            <section class="xa-template-editor__section">
-              <h2>Add member</h2>
-              <form id="xa-email-list-add-form" class="xa-email-list__add-form">
-                <div class="xa-email-list__add-grid">
-                  <label>
-                    <span>Name</span>
-                    <input name="member-name" type="text" placeholder="Full name" autocomplete="off" />
-                  </label>
-                  <label>
-                    <span>Email</span>
-                    <input name="member-email" type="email" placeholder="name@example.com" autocomplete="off" />
-                  </label>
-                </div>
-                <button type="submit" class="xa-admin__signout">Add member</button>
-              </form>
-            </section>
-
-            <section class="xa-template-editor__section">
-              <div class="xa-users__header">
-                <div>
-                  <h2>Members</h2>
-                  <p id="xa-email-list-member-count" class="xa-templates__lede">0 members</p>
-                </div>
+          <div class="xa-admin__panel">
+            <div class="xa-users__header">
+              <div>
+                <h1>Polymarket</h1>
+                <p class="xa-templates__lede">
+                  Latest event and pricing rows from
+                  <code>polymarket_events</code> and <code>polymarket_ticks</code>.
+                </p>
               </div>
+              <div class="xa-polymarket__actions">
+                <button type="button" id="xa-polymarket-refresh" class="xa-sent__ghost">Refresh</button>
+                <button type="button" id="xa-polymarket-ingest" class="xa-admin__signout">
+                  Ingest tick now
+                </button>
+              </div>
+            </div>
+
+            <p id="xa-polymarket-status" class="xa-users__status" aria-live="polite"></p>
+            <p id="xa-polymarket-summary" class="xa-users__summary">Loading…</p>
+
+            <section class="xa-polymarket__latest" aria-labelledby="xa-polymarket-latest-title">
+              <h2 id="xa-polymarket-latest-title" class="xa-polymarket__section-title">Latest tick</h2>
+              <div id="xa-polymarket-latest" class="xa-polymarket__cards">
+                <p class="xa-muted">No ticks yet.</p>
+              </div>
+            </section>
+
+            <section aria-labelledby="xa-polymarket-events-title">
+              <h2 id="xa-polymarket-events-title" class="xa-polymarket__section-title">Recent events</h2>
               <div class="xa-users__table-wrap">
                 <table class="xa-users__table">
-                  <thead>
+                  <thead id="xa-polymarket-events-head">
                     <tr>
-                      <th scope="col">Name</th>
-                      <th scope="col">Email</th>
-                      <th scope="col">Actions</th>
+                      <th scope="col">Slug</th>
+                      <th scope="col">Title</th>
+                      <th scope="col">Asset</th>
+                      <th scope="col">Ends</th>
+                      <th scope="col">Updated</th>
                     </tr>
                   </thead>
-                  <tbody id="xa-email-list-members-body">
+                  <tbody id="xa-polymarket-events-body">
                     <tr>
-                      <td colspan="3" class="xa-users__empty">No members added yet.</td>
+                      <td colspan="5" class="xa-users__empty">Loading…</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
             </section>
 
-            <div class="xa-template-editor__actions">
-              <button type="button" id="xa-email-list-create" class="xa-templates__create">Create list</button>
-              <p id="xa-email-list-status" class="xa-template__status" aria-live="polite"></p>
-              <p id="xa-email-list-error" class="xa-template__status xa-template__status--error" aria-live="polite"></p>
-            </div>
+            <section aria-labelledby="xa-polymarket-ticks-title">
+              <h2 id="xa-polymarket-ticks-title" class="xa-polymarket__section-title">Latest ticks</h2>
+              <div class="xa-users__table-wrap">
+                <table class="xa-users__table">
+                  <thead id="xa-polymarket-ticks-head">
+                    <tr>
+                      <th scope="col">Recorded</th>
+                      <th scope="col">Asset</th>
+                      <th scope="col">Event</th>
+                      <th scope="col">Up</th>
+                      <th scope="col">Down</th>
+                      <th scope="col">Up bid/ask</th>
+                      <th scope="col">Market end</th>
+                    </tr>
+                  </thead>
+                  <tbody id="xa-polymarket-ticks-body">
+                    <tr>
+                      <td colspan="7" class="xa-users__empty">Loading…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </section>
           </div>
         </main>
       </div>
     </div>
 
-    <script type="module" src="/src/admin/email-lists-new.ts"></script>
+    <script type="module" src="/src/admin/polymarket.ts"></script>
   </body>
 </html>

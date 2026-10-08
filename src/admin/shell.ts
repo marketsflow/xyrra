@@ -9,7 +9,8 @@ export type AdminNavId =
   | "email-lists"
   | "email-outreach"
   | "emails-sent"
-  | "stock-prices";
+  | "stock-prices"
+  | "polymarket";
 
 export function initAdminShell(session: AdminSession, activeNav: AdminNavId) {
   const emailEl = document.getElementById("xa-admin-email");

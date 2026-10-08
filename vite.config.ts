@@ -9,6 +9,7 @@ import { handleResendWebhook } from "./api/resend-webhook";
 import { recordEmailUnsubscribe } from "./api/unsubscribe";
 import { recordFreecapsSignup } from "./api/freecaps-signup";
 import { fetchStockPrices } from "./api/stock-prices";
+import { ingestPolymarketTick } from "./api/ingest-polymarket";
 import { articleSeoPlugin } from "./vite/article-seo-plugin";
 import { renderArticlesResponse } from "./api/articles-page";
 
@@ -185,6 +186,33 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
           });
           if (result.success) {
             writeJson(res, 200, { success: true, id: result.id });
+            return;
+          }
+          writeJson(res, result.status ?? 500, { success: false, message: result.message });
+          return;
+        }
+        if (path === "/api/ingest-polymarket") {
+          if (req.method !== "GET" && req.method !== "POST") {
+            writeJson(res, 405, { success: false, message: "Method not allowed" });
+            return;
+          }
+          const result = await ingestPolymarketTick(
+            {
+              SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+              SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY,
+              SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+              CRON_SECRET: env.CRON_SECRET,
+              POLYMARKET_ASSET: env.POLYMARKET_ASSET,
+              POLYMARKET_SYMBOL: env.POLYMARKET_SYMBOL,
+            },
+            headerValue(req.headers.authorization),
+          );
+          if (result.success) {
+            writeJson(res, 200, {
+              success: true,
+              tick: result.tick,
+              eventUpserted: result.eventUpserted,
+            });
             return;
           }
           writeJson(res, result.status ?? 500, { success: false, message: result.message });
@@ -405,6 +433,8 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/admin/emails-sent/" + search;
       } else if (path === "/admin/stock-prices") {
         (req as IncomingMessage & { url?: string }).url = "/admin/stock-prices/" + search;
+      } else if (path === "/admin/polymarket") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/polymarket/" + search;
       } else if (path === "/admin/articles") {
         (req as IncomingMessage & { url?: string }).url = "/admin/articles/" + search;
       } else if (path === "/admin/articles/new") {
@@ -530,6 +560,7 @@ export default defineConfig(({ mode }) => {
           adminEmailOutreach: resolve(__dirname, "admin/email-outreach/index.html"),
           adminEmailsSent: resolve(__dirname, "admin/emails-sent/index.html"),
           adminStockPrices: resolve(__dirname, "admin/stock-prices/index.html"),
+          adminPolymarket: resolve(__dirname, "admin/polymarket/index.html"),
           adminArticles: resolve(__dirname, "admin/articles/index.html"),
           adminArticlesNew: resolve(__dirname, "admin/articles/new/index.html"),
           adminArticlesEdit: resolve(__dirname, "admin/articles/edit/index.html"),
