@@ -10,6 +10,7 @@ import { recordEmailUnsubscribe } from "./api/unsubscribe";
 import { recordFreecapsSignup } from "./api/freecaps-signup";
 import { fetchStockPrices } from "./api/stock-prices";
 import { ingestPolymarketTick } from "./api/ingest-polymarket";
+import { ingestCryptoPrices } from "./api/ingest-crypto";
 import { articleSeoPlugin } from "./vite/article-seo-plugin";
 import { renderArticlesResponse } from "./api/articles-page";
 
@@ -212,6 +213,33 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
               success: true,
               tick: result.tick,
               eventUpserted: result.eventUpserted,
+            });
+            return;
+          }
+          writeJson(res, result.status ?? 500, { success: false, message: result.message });
+          return;
+        }
+        if (path === "/api/ingest-crypto") {
+          if (req.method !== "GET" && req.method !== "POST") {
+            writeJson(res, 405, { success: false, message: "Method not allowed" });
+            return;
+          }
+          const result = await ingestCryptoPrices(
+            {
+              SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+              SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY,
+              SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+              CRON_SECRET: env.CRON_SECRET,
+              CRYPTO_INGEST_SYMBOL: env.CRYPTO_INGEST_SYMBOL,
+              CRYPTO_INGEST_QUOTE: env.CRYPTO_INGEST_QUOTE,
+            },
+            headerValue(req.headers.authorization),
+          );
+          if (result.success === true) {
+            writeJson(res, 200, {
+              success: true,
+              pair: result.pair,
+              row: result.row,
             });
             return;
           }

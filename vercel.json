@@ -77,6 +77,10 @@
       "memory": 256,
       "maxDuration": 10
     },
+    "api/ingest-crypto.ts": {
+      "memory": 256,
+      "maxDuration": 10
+    },
     "api/articles-page.ts": {
       "memory": 256,
       "maxDuration": 30
@@ -85,6 +89,10 @@
   "crons": [
     {
       "path": "/api/ingest-polymarket",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/ingest-crypto",
       "schedule": "* * * * *"
     }
   ]
