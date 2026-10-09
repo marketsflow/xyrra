@@ -81,6 +81,10 @@
       "memory": 256,
       "maxDuration": 10
     },
+    "api/compute-crypto-ma.ts": {
+      "memory": 256,
+      "maxDuration": 30
+    },
     "api/articles-page.ts": {
       "memory": 256,
       "maxDuration": 30
@@ -93,6 +97,10 @@
     },
     {
       "path": "/api/ingest-crypto",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/compute-crypto-ma",
       "schedule": "* * * * *"
     }
   ]
