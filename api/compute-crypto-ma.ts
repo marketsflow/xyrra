@@ -1,9 +1,10 @@
 /**
- * Vercel Cron + admin-triggered crypto SMA/EMA compute.
+ * Vercel Cron + admin-triggered crypto SMA/EMA + bar-characteristics compute.
  *
- * Default (cron): upsert the latest MA row per timeframe for each enabled asset.
+ * Default (cron): upsert the latest MA row and bar characteristics per timeframe
+ * for each enabled asset.
  * Backfill (?backfill=1): walk all 1m candles from the first price and write MA
- * rows for every candle on 1m / 5m / 15m / 1h / 4h / 1D.
+ * + bar-characteristic rows for every candle on 1m / 5m / 15m / 1h / 4h / 1D.
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
@@ -25,8 +26,15 @@ export type ComputeCryptoMaEnv = {
 };
 
 export type ComputeCryptoMaOptions = {
-  /** When true, recompute MA history from the first 1m candle onward. */
+  /** When true, recompute MA history from stored candles (and 1m fallback). */
   backfill?: boolean;
+  /** Limit backfill to these timeframes (minutes). Default: all. */
+  timeframes?: number[];
+  /**
+   * When true (default for backfill), prefer stored higher-TF candles in crypto_prices
+   * instead of re-aggregating from 1m (preserves Binance historical higher-TF backfills).
+   */
+  preferStoredHigherTf?: boolean;
 };
 
 type Candle = {
@@ -53,6 +61,22 @@ type MaRow = {
   ema_20_50_factor: number | null;
 };
 
+type BarCharacteristicRow = {
+  asset_id: number;
+  timeframe: number;
+  timestamp: string;
+  price_change_pct: number | null;
+  direction: number;
+  body: number;
+  body_pct: number | null;
+  range: number;
+  range_pct: number | null;
+  upper_wick: number;
+  lower_wick: number;
+  body_to_range: number | null;
+  close_position: number | null;
+};
+
 type AssetRow = { id: number; symbol: string };
 
 type ComputeResult =
@@ -62,6 +86,7 @@ type ComputeResult =
       assets: number;
       rowsUpserted: number;
       priceRowsUpserted: number;
+      characteristicRowsUpserted: number;
       rows: MaRow[];
     }
   | { success: false; message: string; status?: number };
@@ -312,6 +337,74 @@ function computeMaRow(assetId: number, timeframe: number, candlesAsc: Candle[]):
   });
 }
 
+function pctOf(numerator: number, denominator: number): number | null {
+  if (denominator === 0) return null;
+  return (numerator / denominator) * 100;
+}
+
+function ratio(numerator: number, denominator: number): number | null {
+  if (denominator === 0) return null;
+  return numerator / denominator;
+}
+
+function computeBarCharacteristic(
+  assetId: number,
+  timeframe: number,
+  candle: Candle,
+  previousClose: number | null,
+): BarCharacteristicRow {
+  const body = Math.abs(candle.close - candle.open);
+  const range = candle.high - candle.low;
+  const upper = Math.max(candle.open, candle.close);
+  const lower = Math.min(candle.open, candle.close);
+  let direction = 0;
+  if (candle.close > candle.open) direction = 1;
+  else if (candle.close < candle.open) direction = -1;
+
+  return {
+    asset_id: assetId,
+    timeframe,
+    timestamp: candle.bucket_start,
+    price_change_pct:
+      previousClose === null ? null : pctOf(candle.close - previousClose, previousClose),
+    direction,
+    body,
+    body_pct: pctOf(body, candle.open),
+    range,
+    range_pct: pctOf(range, candle.open),
+    upper_wick: candle.high - upper,
+    lower_wick: lower - candle.low,
+    body_to_range: ratio(body, range),
+    close_position: ratio(candle.close - candle.low, range),
+  };
+}
+
+function computeBarCharacteristicSeries(
+  assetId: number,
+  timeframe: number,
+  candlesAsc: Candle[],
+): BarCharacteristicRow[] {
+  const rows: BarCharacteristicRow[] = [];
+  for (let i = 0; i < candlesAsc.length; i++) {
+    const candle = candlesAsc[i]!;
+    const previousClose = i > 0 ? candlesAsc[i - 1]!.close : null;
+    rows.push(computeBarCharacteristic(assetId, timeframe, candle, previousClose));
+  }
+  return rows;
+}
+
+function computeBarCharacteristicRow(
+  assetId: number,
+  timeframe: number,
+  candlesAsc: Candle[],
+): BarCharacteristicRow | null {
+  if (candlesAsc.length === 0) return null;
+  const latest = candlesAsc[candlesAsc.length - 1]!;
+  const previousClose =
+    candlesAsc.length > 1 ? candlesAsc[candlesAsc.length - 2]!.close : null;
+  return computeBarCharacteristic(assetId, timeframe, latest, previousClose);
+}
+
 function toCandle(row: Record<string, unknown>): Candle | null {
   const bucket = typeof row.bucket_start === "string" ? row.bucket_start : null;
   const open = parseNumber(row.open);
@@ -409,6 +502,43 @@ async function fetchTimeframeCandlesAsc(
   return newestFirst.reverse();
 }
 
+async function fetchAllTimeframeCandlesAsc(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+  timeframe: number,
+): Promise<Candle[]> {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const candles: Candle[] = [];
+  let offset = 0;
+
+  while (true) {
+    const end = offset + ONE_M_PAGE - 1;
+    const res = await fetch(
+      `${base}/rest/v1/crypto_prices?select=bucket_start,open,high,low,close,volume&asset_id=eq.${assetId}&timeframe=eq.${timeframe}&order=bucket_start.asc`,
+      {
+        headers: restHeaders(serviceKey, {
+          Prefer: "count=exact",
+          Range: `${offset}-${end}`,
+        }),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to load crypto_prices tf=${timeframe}: ${text.slice(0, 300)}`);
+    }
+    const page = ((await res.json()) as Record<string, unknown>[])
+      .map(toCandle)
+      .filter((c): c is Candle => c !== null);
+    if (page.length === 0) break;
+    candles.push(...page);
+    if (page.length < ONE_M_PAGE) break;
+    offset += ONE_M_PAGE;
+  }
+
+  return candles;
+}
+
 async function upsertCryptoPrices(
   supabaseUrl: string,
   serviceKey: string,
@@ -483,20 +613,56 @@ async function upsertMovingAverages(
   return upserted;
 }
 
+async function upsertBarCharacteristics(
+  supabaseUrl: string,
+  serviceKey: string,
+  rows: BarCharacteristicRow[],
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  const base = supabaseUrl.replace(/\/$/, "");
+  let upserted = 0;
+
+  for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
+    const chunk = rows.slice(i, i + UPSERT_CHUNK);
+    const res = await fetch(
+      `${base}/rest/v1/crypto_bar_characteristics?on_conflict=asset_id,timeframe,timestamp`,
+      {
+        method: "POST",
+        headers: restHeaders(serviceKey, {
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        }),
+        body: JSON.stringify(chunk),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to upsert crypto_bar_characteristics: ${text.slice(0, 300)}`);
+    }
+    upserted += chunk.length;
+  }
+
+  return upserted;
+}
+
 async function computeForAssetIncremental(
   supabaseUrl: string,
   serviceKey: string,
   asset: AssetRow,
-): Promise<{ maRows: MaRow[]; priceRowsUpserted: number }> {
+): Promise<{
+  maRows: MaRow[];
+  priceRowsUpserted: number;
+  characteristicRowsUpserted: number;
+}> {
   const oneMinuteNewestFirst = await fetchOneMinuteCandles(supabaseUrl, serviceKey, asset.id, {
     limit: ONE_M_LOOKBACK,
   });
   if (oneMinuteNewestFirst.length === 0) {
-    return { maRows: [], priceRowsUpserted: 0 };
+    return { maRows: [], priceRowsUpserted: 0, characteristicRowsUpserted: 0 };
   }
 
   const maRows: MaRow[] = [];
   let priceRowsUpserted = 0;
+  let characteristicRowsUpserted = 0;
 
   for (const timeframe of TIMEFRAMES) {
     if (timeframe > 1) {
@@ -521,32 +687,95 @@ async function computeForAssetIncremental(
     if (!ma) continue;
     await upsertMovingAverages(supabaseUrl, serviceKey, [ma]);
     maRows.push(ma);
+
+    const bar = computeBarCharacteristicRow(asset.id, timeframe, closesAsc);
+    if (bar) {
+      characteristicRowsUpserted += await upsertBarCharacteristics(
+        supabaseUrl,
+        serviceKey,
+        [bar],
+      );
+    }
   }
 
-  return { maRows, priceRowsUpserted };
+  return { maRows, priceRowsUpserted, characteristicRowsUpserted };
 }
 
 async function computeForAssetBackfill(
   supabaseUrl: string,
   serviceKey: string,
   asset: AssetRow,
-): Promise<{ maRows: MaRow[]; priceRowsUpserted: number; rowsUpserted: number }> {
-  const oneMinuteAsc = await fetchOneMinuteCandles(supabaseUrl, serviceKey, asset.id, {
-    ascending: true,
-  });
-  if (oneMinuteAsc.length === 0) {
-    return { maRows: [], priceRowsUpserted: 0, rowsUpserted: 0 };
+  options: {
+    timeframes?: number[];
+    preferStoredHigherTf?: boolean;
+  } = {},
+): Promise<{
+  maRows: MaRow[];
+  priceRowsUpserted: number;
+  rowsUpserted: number;
+  characteristicRowsUpserted: number;
+}> {
+  const preferStored = options.preferStoredHigherTf !== false;
+  const timeframes = (options.timeframes?.length ? options.timeframes : [...TIMEFRAMES]).filter(
+    (tf): tf is (typeof TIMEFRAMES)[number] =>
+      (TIMEFRAMES as readonly number[]).includes(tf),
+  );
+
+  let oneMinuteAsc: Candle[] | null = null;
+  async function loadOneMinute() {
+    if (oneMinuteAsc) return oneMinuteAsc;
+    oneMinuteAsc = await fetchOneMinuteCandles(supabaseUrl, serviceKey, asset.id, {
+      ascending: true,
+    });
+    return oneMinuteAsc;
+  }
+
+  if (timeframes.includes(1)) {
+    const ones = await loadOneMinute();
+    if (ones.length === 0) {
+      return {
+        maRows: [],
+        priceRowsUpserted: 0,
+        rowsUpserted: 0,
+        characteristicRowsUpserted: 0,
+      };
+    }
   }
 
   let priceRowsUpserted = 0;
   let rowsUpserted = 0;
+  let characteristicRowsUpserted = 0;
   const latestRows: MaRow[] = [];
 
-  for (const timeframe of TIMEFRAMES) {
-    const candlesAsc =
-      timeframe === 1 ? oneMinuteAsc : aggregateCandles(oneMinuteAsc, timeframe);
+  for (const timeframe of timeframes) {
+    let candlesAsc: Candle[] = [];
 
-    if (timeframe > 1) {
+    if (timeframe === 1) {
+      candlesAsc = await loadOneMinute();
+    } else if (preferStored) {
+      candlesAsc = await fetchAllTimeframeCandlesAsc(
+        supabaseUrl,
+        serviceKey,
+        asset.id,
+        timeframe,
+      );
+      // Fallback only when this TF has never been stored.
+      if (candlesAsc.length === 0) {
+        const ones = await loadOneMinute();
+        if (ones.length > 0) {
+          candlesAsc = aggregateCandles(ones, timeframe);
+          priceRowsUpserted += await upsertCryptoPrices(
+            supabaseUrl,
+            serviceKey,
+            asset.id,
+            timeframe,
+            candlesAsc,
+          );
+        }
+      }
+    } else {
+      const ones = await loadOneMinute();
+      candlesAsc = aggregateCandles(ones, timeframe);
       priceRowsUpserted += await upsertCryptoPrices(
         supabaseUrl,
         serviceKey,
@@ -556,14 +785,23 @@ async function computeForAssetBackfill(
       );
     }
 
+    if (candlesAsc.length === 0) continue;
+
     const series = computeMaSeries(asset.id, timeframe, candlesAsc);
     rowsUpserted += await upsertMovingAverages(supabaseUrl, serviceKey, series);
     if (series.length > 0) {
       latestRows.push(series[series.length - 1]!);
     }
+
+    const barSeries = computeBarCharacteristicSeries(asset.id, timeframe, candlesAsc);
+    characteristicRowsUpserted += await upsertBarCharacteristics(
+      supabaseUrl,
+      serviceKey,
+      barSeries,
+    );
   }
 
-  return { maRows: latestRows, priceRowsUpserted, rowsUpserted };
+  return { maRows: latestRows, priceRowsUpserted, rowsUpserted, characteristicRowsUpserted };
 }
 
 /**
@@ -599,18 +837,24 @@ export async function computeCryptoMovingAverages(
     const allLatestRows: MaRow[] = [];
     let rowsUpserted = 0;
     let priceRowsUpserted = 0;
+    let characteristicRowsUpserted = 0;
 
     for (const asset of assets) {
       if (options.backfill) {
-        const result = await computeForAssetBackfill(supabaseUrl, serviceKey, asset);
+        const result = await computeForAssetBackfill(supabaseUrl, serviceKey, asset, {
+          timeframes: options.timeframes,
+          preferStoredHigherTf: options.preferStoredHigherTf,
+        });
         allLatestRows.push(...result.maRows);
         rowsUpserted += result.rowsUpserted;
         priceRowsUpserted += result.priceRowsUpserted;
+        characteristicRowsUpserted += result.characteristicRowsUpserted;
       } else {
         const result = await computeForAssetIncremental(supabaseUrl, serviceKey, asset);
         allLatestRows.push(...result.maRows);
         rowsUpserted += result.maRows.length;
         priceRowsUpserted += result.priceRowsUpserted;
+        characteristicRowsUpserted += result.characteristicRowsUpserted;
       }
     }
 
@@ -620,6 +864,7 @@ export async function computeCryptoMovingAverages(
       assets: assets.length,
       rowsUpserted,
       priceRowsUpserted,
+      characteristicRowsUpserted,
       rows: allLatestRows,
     };
   } catch (error) {
@@ -668,6 +913,7 @@ export default {
             assets: result.assets,
             rowsUpserted: result.rowsUpserted,
             priceRowsUpserted: result.priceRowsUpserted,
+            characteristicRowsUpserted: result.characteristicRowsUpserted,
             rows: result.rows,
           },
           { status: 200, headers: jsonHeaders() },
