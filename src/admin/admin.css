@@ -2341,6 +2341,23 @@ body.xa-body {
   border-color: #dc2626;
 }
 
+.xa-crypto__pct {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.xa-crypto__pct--up {
+  color: #15803d;
+}
+
+.xa-crypto__pct--down {
+  color: #dc2626;
+}
+
+.xa-crypto__pct--flat {
+  color: #6b7280;
+}
+
 .xa-crypto__factor--flat {
   background: #f97316;
   border-color: #ea580c;

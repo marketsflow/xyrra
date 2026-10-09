@@ -354,6 +354,14 @@ function renderFactorBox(value: unknown) {
   return `<span class="xa-crypto__factor xa-crypto__factor--${tone}" title="${label}" aria-label="${label}"></span>`;
 }
 
+/** Close-change % → green up / red down / muted flat or missing. */
+function renderPercentage(value: unknown) {
+  const n = asNumber(value);
+  if (n === null) return '<span class="xa-muted">—</span>';
+  const tone = n > 0 ? "up" : n < 0 ? "down" : "flat";
+  return `<span class="xa-crypto__pct xa-crypto__pct--${tone}">${escapeHtml(formatPct(n))}</span>`;
+}
+
 async function fetchStoredCandles(
   supabase: SupabaseClient,
   assetId: number,
@@ -609,7 +617,7 @@ function renderPrices(candles: Candle[]) {
           <td>${escapeHtml(formatPrice(candle.high))}</td>
           <td>${escapeHtml(formatPrice(candle.low))}</td>
           <td>${escapeHtml(formatPrice(candle.close))}</td>
-          <td>${escapeHtml(formatPct(candle.percentage))}</td>
+          <td>${renderPercentage(candle.percentage)}</td>
           <td>${escapeHtml(formatVolume(candle.volume))}</td>
         </tr>
       `,
