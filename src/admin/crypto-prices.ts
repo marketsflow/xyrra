@@ -203,10 +203,15 @@ function toMaRow(row: Record<string, unknown>): MaRow | null {
   };
 }
 
-function formatFactor(value: unknown) {
+/** 1 → green, -1 → red, 0 → orange, missing → muted empty. */
+function renderFactorBox(value: unknown) {
   const n = asNumber(value);
-  if (n === null) return "—";
-  return String(Math.trunc(n));
+  if (n === null) {
+    return '<span class="xa-crypto__factor xa-crypto__factor--empty" title="—" aria-label="No factor"></span>';
+  }
+  const tone = n > 0 ? "up" : n < 0 ? "down" : "flat";
+  const label = n > 0 ? "Bullish (1)" : n < 0 ? "Bearish (-1)" : "Neutral (0)";
+  return `<span class="xa-crypto__factor xa-crypto__factor--${tone}" title="${label}" aria-label="${label}"></span>`;
 }
 
 async function fetchStoredCandles(
@@ -437,9 +442,9 @@ function renderMovingAverages(rows: MaRow[]) {
           <td>${escapeHtml(formatPrice(row.ema_9))}</td>
           <td>${escapeHtml(formatPrice(row.ema_20))}</td>
           <td>${escapeHtml(formatPrice(row.ema_50))}</td>
-          <td>${escapeHtml(formatFactor(row.sma_20_50_factor))}</td>
-          <td>${escapeHtml(formatFactor(row.ema_9_20_factor))}</td>
-          <td>${escapeHtml(formatFactor(row.ema_20_50_factor))}</td>
+          <td>${renderFactorBox(row.sma_20_50_factor)}</td>
+          <td>${renderFactorBox(row.ema_9_20_factor)}</td>
+          <td>${renderFactorBox(row.ema_20_50_factor)}</td>
         </tr>
       `,
     )

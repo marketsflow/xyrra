@@ -2321,3 +2321,32 @@ body.xa-body {
   border-color: #93c5fd;
   color: #1d4ed8;
 }
+
+.xa-crypto__factor {
+  display: inline-block;
+  width: 1.35rem;
+  height: 0.85rem;
+  border-radius: 0.2rem;
+  vertical-align: middle;
+  border: 1px solid transparent;
+}
+
+.xa-crypto__factor--up {
+  background: #22c55e;
+  border-color: #16a34a;
+}
+
+.xa-crypto__factor--down {
+  background: #ef4444;
+  border-color: #dc2626;
+}
+
+.xa-crypto__factor--flat {
+  background: #f97316;
+  border-color: #ea580c;
+}
+
+.xa-crypto__factor--empty {
+  background: #e5e7eb;
+  border-color: #d1d5db;
+}
