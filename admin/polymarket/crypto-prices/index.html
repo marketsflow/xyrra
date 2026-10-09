@@ -62,8 +62,8 @@
                 <div>
                   <h1>Crypto Prices</h1>
                   <p class="xa-templates__lede">
-                    Tokens from <code>crypto_assets</code>. Open a token to view OHLCV candles from
-                    <code>crypto_prices</code>.
+                    Tokens from <code>crypto_assets</code>. Open a token to view OHLCV candles or
+                    moving averages (<code>crypto_prices</code> / <code>crypto_moving_averages</code>).
                   </p>
                 </div>
                 <div class="xa-polymarket__actions">
@@ -86,11 +86,12 @@
                       <th scope="col">Exchange</th>
                       <th scope="col">Last 1m close</th>
                       <th scope="col">Last bucket</th>
+                      <th scope="col">View</th>
                     </tr>
                   </thead>
                   <tbody id="xa-crypto-assets-body">
                     <tr>
-                      <td colspan="5" class="xa-users__empty">Loading…</td>
+                      <td colspan="6" class="xa-users__empty">Loading…</td>
                     </tr>
                   </tbody>
                 </table>
@@ -114,16 +115,28 @@
               </div>
 
               <div
+                class="xa-crypto__view-modes"
+                id="xa-crypto-view-modes"
+                role="group"
+                aria-label="Data type"
+              >
+                <button type="button" class="xa-crypto__tf xa-crypto__tf--active" data-view="prices">
+                  Prices
+                </button>
+                <button type="button" class="xa-crypto__tf" data-view="ma">Moving averages</button>
+              </div>
+
+              <div
                 class="xa-crypto__timeframes"
                 id="xa-crypto-timeframes"
                 role="group"
-                aria-label="Price timeframe"
+                aria-label="Timeframe"
               ></div>
 
               <p id="xa-crypto-detail-status" class="xa-users__status" aria-live="polite"></p>
               <p id="xa-crypto-detail-summary" class="xa-users__summary"></p>
 
-              <div class="xa-users__table-wrap">
+              <div id="xa-crypto-prices-panel" class="xa-users__table-wrap">
                 <table class="xa-users__table">
                   <thead>
                     <tr>
@@ -136,6 +149,26 @@
                     </tr>
                   </thead>
                   <tbody id="xa-crypto-prices-body">
+                    <tr>
+                      <td colspan="6" class="xa-users__empty">Loading…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div id="xa-crypto-ma-panel" class="xa-users__table-wrap" hidden>
+                <table class="xa-users__table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Timestamp (UTC)</th>
+                      <th scope="col">SMA 20</th>
+                      <th scope="col">SMA 50</th>
+                      <th scope="col">EMA 9</th>
+                      <th scope="col">EMA 20</th>
+                      <th scope="col">EMA 50</th>
+                    </tr>
+                  </thead>
+                  <tbody id="xa-crypto-ma-body">
                     <tr>
                       <td colspan="6" class="xa-users__empty">Loading…</td>
                     </tr>

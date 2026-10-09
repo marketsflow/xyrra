@@ -1,7 +1,9 @@
 /**
  * Vercel Cron + admin-triggered crypto SMA/EMA compute.
- * Reads crypto_prices (1m source of truth), materializes the latest higher-TF
- * candle into crypto_prices, then upserts one MA row per timeframe.
+ *
+ * Default (cron): upsert the latest MA row per timeframe for each enabled asset.
+ * Backfill (?backfill=1): walk all 1m candles from the first price and write MA
+ * rows for every candle on 1m / 5m / 15m / 1h / 4h / 1D.
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
@@ -11,14 +13,20 @@ const MAX_PERIOD = 50;
 /** Enough 1m bars to build the current 1D bucket + a small buffer. */
 const ONE_M_LOOKBACK = 1500;
 const ONE_M_PAGE = 1000;
-/** Closes needed from each TF to seed SMA50 / EMA50. */
+/** Closes needed from each TF to seed SMA50 / EMA50 (incremental cron). */
 const CLOSE_LOOKBACK = MAX_PERIOD + 5;
+const UPSERT_CHUNK = 500;
 
 export type ComputeCryptoMaEnv = {
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
   CRON_SECRET?: string;
+};
+
+export type ComputeCryptoMaOptions = {
+  /** When true, recompute MA history from the first 1m candle onward. */
+  backfill?: boolean;
 };
 
 type Candle = {
@@ -46,8 +54,10 @@ type AssetRow = { id: number; symbol: string };
 type ComputeResult =
   | {
       success: true;
+      mode: "incremental" | "backfill";
       assets: number;
       rowsUpserted: number;
+      priceRowsUpserted: number;
       rows: MaRow[];
     }
   | { success: false; message: string; status?: number };
@@ -204,6 +214,61 @@ function ema(closes: number[], period: number): number | null {
   return value;
 }
 
+/** O(n) SMA/EMA series for every candle from the start of history. */
+function computeMaSeries(assetId: number, timeframe: number, candlesAsc: Candle[]): MaRow[] {
+  if (candlesAsc.length === 0) return [];
+
+  const closes = candlesAsc.map((c) => c.close);
+  const rows: MaRow[] = [];
+  let sum20 = 0;
+  let sum50 = 0;
+  let ema9: number | null = null;
+  let ema20: number | null = null;
+  let ema50: number | null = null;
+  const k9 = 2 / (9 + 1);
+  const k20 = 2 / (20 + 1);
+  const k50 = 2 / (50 + 1);
+
+  for (let i = 0; i < closes.length; i++) {
+    const close = closes[i]!;
+    sum20 += close;
+    sum50 += close;
+    if (i >= 20) sum20 -= closes[i - 20]!;
+    if (i >= 50) sum50 -= closes[i - 50]!;
+
+    if (i === 8) {
+      ema9 = closes.slice(0, 9).reduce((a, b) => a + b, 0) / 9;
+    } else if (i > 8 && ema9 !== null) {
+      ema9 = close * k9 + ema9 * (1 - k9);
+    }
+
+    if (i === 19) {
+      ema20 = closes.slice(0, 20).reduce((a, b) => a + b, 0) / 20;
+    } else if (i > 19 && ema20 !== null) {
+      ema20 = close * k20 + ema20 * (1 - k20);
+    }
+
+    if (i === 49) {
+      ema50 = closes.slice(0, 50).reduce((a, b) => a + b, 0) / 50;
+    } else if (i > 49 && ema50 !== null) {
+      ema50 = close * k50 + ema50 * (1 - k50);
+    }
+
+    rows.push({
+      asset_id: assetId,
+      timeframe,
+      timestamp: candlesAsc[i]!.bucket_start,
+      sma_20: i >= 19 ? sum20 / 20 : null,
+      sma_50: i >= 49 ? sum50 / 50 : null,
+      ema_9: ema9,
+      ema_20: ema20,
+      ema_50: ema50,
+    });
+  }
+
+  return rows;
+}
+
 function computeMaRow(assetId: number, timeframe: number, candlesAsc: Candle[]): MaRow | null {
   if (candlesAsc.length === 0) return null;
   const latest = candlesAsc[candlesAsc.length - 1]!;
@@ -257,16 +322,18 @@ async function fetchOneMinuteCandles(
   supabaseUrl: string,
   serviceKey: string,
   assetId: number,
-  limit: number,
+  options: { limit?: number; ascending?: boolean } = {},
 ): Promise<Candle[]> {
   const base = supabaseUrl.replace(/\/$/, "");
   const candles: Candle[] = [];
   let offset = 0;
+  const order = options.ascending ? "asc" : "desc";
+  const hardLimit = options.limit ?? Number.POSITIVE_INFINITY;
 
-  while (candles.length < limit) {
+  while (candles.length < hardLimit) {
     const end = offset + ONE_M_PAGE - 1;
     const res = await fetch(
-      `${base}/rest/v1/crypto_prices?select=bucket_start,open,high,low,close,volume&asset_id=eq.${assetId}&timeframe=eq.1&order=bucket_start.desc`,
+      `${base}/rest/v1/crypto_prices?select=bucket_start,open,high,low,close,volume&asset_id=eq.${assetId}&timeframe=eq.1&order=bucket_start.${order}`,
       {
         headers: restHeaders(serviceKey, {
           Prefer: "count=exact",
@@ -287,7 +354,10 @@ async function fetchOneMinuteCandles(
     offset += ONE_M_PAGE;
   }
 
-  return candles.slice(0, limit);
+  if (Number.isFinite(hardLimit)) {
+    return candles.slice(0, hardLimit);
+  }
+  return candles;
 }
 
 async function fetchTimeframeCandlesAsc(
@@ -318,77 +388,93 @@ async function upsertCryptoPrices(
   assetId: number,
   timeframe: number,
   candles: Candle[],
-): Promise<void> {
-  if (candles.length === 0) return;
+): Promise<number> {
+  if (candles.length === 0) return 0;
   const base = supabaseUrl.replace(/\/$/, "");
-  const payload = candles.map((candle) => ({
-    asset_id: assetId,
-    timeframe,
-    bucket_start: candle.bucket_start,
-    open: candle.open,
-    high: candle.high,
-    low: candle.low,
-    close: candle.close,
-    volume: candle.volume,
-  }));
-  const res = await fetch(
-    `${base}/rest/v1/crypto_prices?on_conflict=asset_id,timeframe,bucket_start`,
-    {
-      method: "POST",
-      headers: restHeaders(serviceKey, {
-        Prefer: "resolution=merge-duplicates,return=minimal",
-      }),
-      body: JSON.stringify(payload),
-    },
-  );
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to upsert crypto_prices tf=${timeframe}: ${text.slice(0, 300)}`);
+  let upserted = 0;
+
+  for (let i = 0; i < candles.length; i += UPSERT_CHUNK) {
+    const chunk = candles.slice(i, i + UPSERT_CHUNK);
+    const payload = chunk.map((candle) => ({
+      asset_id: assetId,
+      timeframe,
+      bucket_start: candle.bucket_start,
+      open: candle.open,
+      high: candle.high,
+      low: candle.low,
+      close: candle.close,
+      volume: candle.volume,
+    }));
+    const res = await fetch(
+      `${base}/rest/v1/crypto_prices?on_conflict=asset_id,timeframe,bucket_start`,
+      {
+        method: "POST",
+        headers: restHeaders(serviceKey, {
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        }),
+        body: JSON.stringify(payload),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to upsert crypto_prices tf=${timeframe}: ${text.slice(0, 300)}`);
+    }
+    upserted += chunk.length;
   }
+
+  return upserted;
 }
 
-async function upsertMovingAverage(
+async function upsertMovingAverages(
   supabaseUrl: string,
   serviceKey: string,
-  row: MaRow,
-): Promise<void> {
+  rows: MaRow[],
+): Promise<number> {
+  if (rows.length === 0) return 0;
   const base = supabaseUrl.replace(/\/$/, "");
-  const res = await fetch(
-    `${base}/rest/v1/crypto_moving_averages?on_conflict=asset_id,timeframe,timestamp`,
-    {
-      method: "POST",
-      headers: restHeaders(serviceKey, {
-        Prefer: "resolution=merge-duplicates,return=minimal",
-      }),
-      body: JSON.stringify(row),
-    },
-  );
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to upsert crypto_moving_averages: ${text.slice(0, 300)}`);
+  let upserted = 0;
+
+  for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
+    const chunk = rows.slice(i, i + UPSERT_CHUNK);
+    const res = await fetch(
+      `${base}/rest/v1/crypto_moving_averages?on_conflict=asset_id,timeframe,timestamp`,
+      {
+        method: "POST",
+        headers: restHeaders(serviceKey, {
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        }),
+        body: JSON.stringify(chunk),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to upsert crypto_moving_averages: ${text.slice(0, 300)}`);
+    }
+    upserted += chunk.length;
   }
+
+  return upserted;
 }
 
-async function computeForAsset(
+async function computeForAssetIncremental(
   supabaseUrl: string,
   serviceKey: string,
   asset: AssetRow,
-): Promise<MaRow[]> {
-  const oneMinuteNewestFirst = await fetchOneMinuteCandles(
-    supabaseUrl,
-    serviceKey,
-    asset.id,
-    ONE_M_LOOKBACK,
-  );
-  if (oneMinuteNewestFirst.length === 0) return [];
+): Promise<{ maRows: MaRow[]; priceRowsUpserted: number }> {
+  const oneMinuteNewestFirst = await fetchOneMinuteCandles(supabaseUrl, serviceKey, asset.id, {
+    limit: ONE_M_LOOKBACK,
+  });
+  if (oneMinuteNewestFirst.length === 0) {
+    return { maRows: [], priceRowsUpserted: 0 };
+  }
 
-  const rows: MaRow[] = [];
+  const maRows: MaRow[] = [];
+  let priceRowsUpserted = 0;
 
   for (const timeframe of TIMEFRAMES) {
-    // Materialize recent higher-TF candles from 1m so MA history can seed without a separate backfill.
     if (timeframe > 1) {
       const aggregated = aggregateCandles(oneMinuteNewestFirst, timeframe);
-      await upsertCryptoPrices(
+      priceRowsUpserted += await upsertCryptoPrices(
         supabaseUrl,
         serviceKey,
         asset.id,
@@ -406,20 +492,67 @@ async function computeForAsset(
     );
     const ma = computeMaRow(asset.id, timeframe, closesAsc);
     if (!ma) continue;
-    await upsertMovingAverage(supabaseUrl, serviceKey, ma);
-    rows.push(ma);
+    await upsertMovingAverages(supabaseUrl, serviceKey, [ma]);
+    maRows.push(ma);
   }
 
-  return rows;
+  return { maRows, priceRowsUpserted };
 }
 
+async function computeForAssetBackfill(
+  supabaseUrl: string,
+  serviceKey: string,
+  asset: AssetRow,
+): Promise<{ maRows: MaRow[]; priceRowsUpserted: number; rowsUpserted: number }> {
+  const oneMinuteAsc = await fetchOneMinuteCandles(supabaseUrl, serviceKey, asset.id, {
+    ascending: true,
+  });
+  if (oneMinuteAsc.length === 0) {
+    return { maRows: [], priceRowsUpserted: 0, rowsUpserted: 0 };
+  }
+
+  let priceRowsUpserted = 0;
+  let rowsUpserted = 0;
+  const latestRows: MaRow[] = [];
+
+  for (const timeframe of TIMEFRAMES) {
+    const candlesAsc =
+      timeframe === 1 ? oneMinuteAsc : aggregateCandles(oneMinuteAsc, timeframe);
+
+    if (timeframe > 1) {
+      priceRowsUpserted += await upsertCryptoPrices(
+        supabaseUrl,
+        serviceKey,
+        asset.id,
+        timeframe,
+        candlesAsc,
+      );
+    }
+
+    const series = computeMaSeries(asset.id, timeframe, candlesAsc);
+    rowsUpserted += await upsertMovingAverages(supabaseUrl, serviceKey, series);
+    if (series.length > 0) {
+      latestRows.push(series[series.length - 1]!);
+    }
+  }
+
+  return { maRows: latestRows, priceRowsUpserted, rowsUpserted };
+}
+
+/**
+ * Core runner used by HTTP handler and local backfill script.
+ * Pass `skipAuth: true` only from trusted local scripts that already hold the service role key.
+ */
 export async function computeCryptoMovingAverages(
   env: ComputeCryptoMaEnv,
   authHeader: string | null,
+  options: ComputeCryptoMaOptions & { skipAuth?: boolean } = {},
 ): Promise<ComputeResult> {
-  const auth = await authorize(env, authHeader);
-  if (auth.ok === false) {
-    return { success: false, message: auth.message, status: auth.status };
+  if (!options.skipAuth) {
+    const auth = await authorize(env, authHeader);
+    if (auth.ok === false) {
+      return { success: false, message: auth.message, status: auth.status };
+    }
   }
 
   const supabaseUrl = env.SUPABASE_URL;
@@ -432,20 +565,35 @@ export async function computeCryptoMovingAverages(
     };
   }
 
+  const mode = options.backfill ? "backfill" : "incremental";
+
   try {
     const assets = await listEnabledAssets(supabaseUrl, serviceKey);
-    const allRows: MaRow[] = [];
+    const allLatestRows: MaRow[] = [];
+    let rowsUpserted = 0;
+    let priceRowsUpserted = 0;
 
     for (const asset of assets) {
-      const rows = await computeForAsset(supabaseUrl, serviceKey, asset);
-      allRows.push(...rows);
+      if (options.backfill) {
+        const result = await computeForAssetBackfill(supabaseUrl, serviceKey, asset);
+        allLatestRows.push(...result.maRows);
+        rowsUpserted += result.rowsUpserted;
+        priceRowsUpserted += result.priceRowsUpserted;
+      } else {
+        const result = await computeForAssetIncremental(supabaseUrl, serviceKey, asset);
+        allLatestRows.push(...result.maRows);
+        rowsUpserted += result.maRows.length;
+        priceRowsUpserted += result.priceRowsUpserted;
+      }
     }
 
     return {
       success: true,
+      mode,
       assets: assets.length,
-      rowsUpserted: allRows.length,
-      rows: allRows,
+      rowsUpserted,
+      priceRowsUpserted,
+      rows: allLatestRows,
     };
   } catch (error) {
     const message = error instanceof Error ? error.message : "Compute failed";
@@ -454,7 +602,7 @@ export async function computeCryptoMovingAverages(
 }
 
 export const config = {
-  maxDuration: 30,
+  maxDuration: 300,
 };
 
 export default {
@@ -467,6 +615,12 @@ export default {
         );
       }
 
+      const url = new URL(request.url);
+      const backfill =
+        url.searchParams.get("backfill") === "1" ||
+        url.searchParams.get("backfill") === "true" ||
+        url.searchParams.get("mode") === "backfill";
+
       const env: ComputeCryptoMaEnv = {
         SUPABASE_URL: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
         SUPABASE_ANON_KEY: process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY,
@@ -474,13 +628,19 @@ export default {
         CRON_SECRET: process.env.CRON_SECRET,
       };
 
-      const result = await computeCryptoMovingAverages(env, request.headers.get("authorization"));
+      const result = await computeCryptoMovingAverages(
+        env,
+        request.headers.get("authorization"),
+        { backfill },
+      );
       if (result.success === true) {
         return Response.json(
           {
             success: true,
+            mode: result.mode,
             assets: result.assets,
             rowsUpserted: result.rowsUpserted,
+            priceRowsUpserted: result.priceRowsUpserted,
             rows: result.rows,
           },
           { status: 200, headers: jsonHeaders() },

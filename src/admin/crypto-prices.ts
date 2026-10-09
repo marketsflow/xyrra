@@ -19,10 +19,21 @@ type Candle = {
   volume: number | null;
 };
 
+type MaRow = {
+  timestamp: string;
+  sma_20: number | null;
+  sma_50: number | null;
+  ema_9: number | null;
+  ema_20: number | null;
+  ema_50: number | null;
+};
+
 type TimeframeOption = {
   label: string;
   minutes: number;
 };
+
+type DetailView = "prices" | "ma";
 
 const TIMEFRAMES: TimeframeOption[] = [
   { label: "1m", minutes: 1 },
@@ -86,6 +97,10 @@ function formatVolume(value: unknown) {
 function parseTimeframe(raw: string | null): number {
   const match = TIMEFRAMES.find((tf) => tf.label === raw || String(tf.minutes) === raw);
   return match?.minutes ?? 1;
+}
+
+function parseView(raw: string | null): DetailView {
+  return raw === "ma" || raw === "moving-averages" ? "ma" : "prices";
 }
 
 function timeframeLabel(minutes: number) {
@@ -166,6 +181,19 @@ function toCandle(row: Record<string, unknown>): Candle | null {
     low,
     close,
     volume: asNumber(row.volume),
+  };
+}
+
+function toMaRow(row: Record<string, unknown>): MaRow | null {
+  const timestamp = asString(row.timestamp);
+  if (!timestamp) return null;
+  return {
+    timestamp,
+    sma_20: asNumber(row.sma_20),
+    sma_50: asNumber(row.sma_50),
+    ema_9: asNumber(row.ema_9),
+    ema_20: asNumber(row.ema_20),
+    ema_50: asNumber(row.ema_50),
   };
 }
 
@@ -254,6 +282,29 @@ async function loadCandlesForTimeframe(
   };
 }
 
+async function loadMovingAverages(
+  supabase: SupabaseClient,
+  assetId: number,
+  timeframeMinutes: number,
+): Promise<{ rows: MaRow[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from("crypto_moving_averages")
+    .select("timestamp, sma_20, sma_50, ema_9, ema_20, ema_50")
+    .eq("asset_id", assetId)
+    .eq("timeframe", timeframeMinutes)
+    .order("timestamp", { ascending: false })
+    .limit(DISPLAY_LIMIT);
+
+  if (error) {
+    return { rows: [], error: error.message };
+  }
+
+  const rows = ((data as Record<string, unknown>[] | null) ?? [])
+    .map(toMaRow)
+    .filter((row): row is MaRow => row !== null);
+  return { rows, error: null };
+}
+
 function renderAssets(
   assets: Array<
     CryptoAsset & {
@@ -267,22 +318,29 @@ function renderAssets(
 
   if (assets.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="5" class="xa-users__empty">No crypto assets yet. Run ingest or seed crypto_assets.</td></tr>';
+      '<tr><td colspan="6" class="xa-users__empty">No crypto assets yet. Run ingest or seed crypto_assets.</td></tr>';
     return;
   }
 
   tbody.innerHTML = assets
     .map((asset) => {
-      const href = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}`;
+      const pricesHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=prices`;
+      const maHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=ma`;
       return `
         <tr class="xa-crypto__asset-row" data-symbol="${escapeHtml(asset.symbol)}">
           <td>
-            <a class="xa-crypto__symbol-link" href="${href}">${escapeHtml(asset.symbol)}</a>
+            <a class="xa-crypto__symbol-link" href="${pricesHref}">${escapeHtml(asset.symbol)}</a>
           </td>
           <td>${asset.name ? escapeHtml(asset.name) : '<span class="xa-muted">—</span>'}</td>
           <td>${asset.exchange ? escapeHtml(asset.exchange) : '<span class="xa-muted">—</span>'}</td>
           <td>${escapeHtml(formatPrice(asset.lastClose))}</td>
           <td>${escapeHtml(formatDateTime(asset.lastBucket))}</td>
+          <td>
+            <div class="xa-crypto__view-links">
+              <a href="${pricesHref}">Prices</a>
+              <a href="${maHref}">MA</a>
+            </div>
+          </td>
         </tr>
       `;
     })
@@ -306,6 +364,17 @@ function renderTimeframeButtons(activeMinutes: number) {
       </button>
     `;
   }).join("");
+}
+
+function renderViewModeButtons(activeView: DetailView) {
+  const el = document.getElementById("xa-crypto-view-modes");
+  if (!el) return;
+
+  el.querySelectorAll<HTMLButtonElement>("button[data-view]").forEach((button) => {
+    const isActive = button.dataset.view === activeView;
+    button.classList.toggle("xa-crypto__tf--active", isActive);
+    button.setAttribute("aria-pressed", isActive ? "true" : "false");
+  });
 }
 
 function renderPrices(candles: Candle[]) {
@@ -334,6 +403,32 @@ function renderPrices(candles: Candle[]) {
     .join("");
 }
 
+function renderMovingAverages(rows: MaRow[]) {
+  const tbody = document.getElementById("xa-crypto-ma-body");
+  if (!tbody) return;
+
+  if (rows.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="6" class="xa-users__empty">No moving averages for this timeframe yet.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows
+    .map(
+      (row) => `
+        <tr>
+          <td>${escapeHtml(formatDateTime(row.timestamp))}</td>
+          <td>${escapeHtml(formatPrice(row.sma_20))}</td>
+          <td>${escapeHtml(formatPrice(row.sma_50))}</td>
+          <td>${escapeHtml(formatPrice(row.ema_9))}</td>
+          <td>${escapeHtml(formatPrice(row.ema_20))}</td>
+          <td>${escapeHtml(formatPrice(row.ema_50))}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
 function showListView() {
   document.getElementById("xa-crypto-list-view")?.removeAttribute("hidden");
   document.getElementById("xa-crypto-detail-view")?.setAttribute("hidden", "");
@@ -342,6 +437,18 @@ function showListView() {
 function showDetailView() {
   document.getElementById("xa-crypto-list-view")?.setAttribute("hidden", "");
   document.getElementById("xa-crypto-detail-view")?.removeAttribute("hidden");
+}
+
+function showDetailPanels(view: DetailView) {
+  const pricesPanel = document.getElementById("xa-crypto-prices-panel");
+  const maPanel = document.getElementById("xa-crypto-ma-panel");
+  if (view === "ma") {
+    pricesPanel?.setAttribute("hidden", "");
+    maPanel?.removeAttribute("hidden");
+  } else {
+    maPanel?.setAttribute("hidden", "");
+    pricesPanel?.removeAttribute("hidden");
+  }
 }
 
 async function init() {
@@ -355,6 +462,7 @@ async function init() {
   const params = new URLSearchParams(window.location.search);
   const symbolParam = params.get("symbol")?.trim().toUpperCase() || null;
   let activeTimeframe = parseTimeframe(params.get("tf"));
+  let activeView = parseView(params.get("view"));
 
   const refreshBtn = document.getElementById("xa-crypto-refresh") as HTMLButtonElement | null;
   const ingestBtn = document.getElementById("xa-crypto-ingest") as HTMLButtonElement | null;
@@ -366,6 +474,7 @@ async function init() {
   const detailTitleEl = document.getElementById("xa-crypto-detail-title");
   const detailLedeEl = document.getElementById("xa-crypto-detail-lede");
   const timeframesEl = document.getElementById("xa-crypto-timeframes");
+  const viewModesEl = document.getElementById("xa-crypto-view-modes");
 
   let listLoading = false;
   let detailLoading = false;
@@ -413,26 +522,49 @@ async function init() {
 
     listLoading = false;
     if (summaryEl) {
-      summaryEl.textContent = `${withLast.length.toLocaleString()} token${withLast.length === 1 ? "" : "s"}. Click a symbol to view prices.`;
+      summaryEl.textContent = `${withLast.length.toLocaleString()} token${withLast.length === 1 ? "" : "s"}. Open Prices or MA for a symbol.`;
     }
     renderAssets(withLast);
     setListStatus(`Updated ${new Date().toLocaleTimeString()}.`);
   }
 
-  function updateUrl(symbol: string, timeframeMinutes: number) {
+  function updateUrl(symbol: string, timeframeMinutes: number, view: DetailView) {
     const next = new URLSearchParams();
     next.set("symbol", symbol);
+    next.set("view", view);
     next.set("tf", timeframeLabel(timeframeMinutes));
     const url = `${window.location.pathname}?${next.toString()}`;
     window.history.replaceState({}, "", url);
   }
 
-  async function loadDetailPrices() {
+  async function loadDetailData() {
     if (!selectedAsset || detailLoading) return;
     detailLoading = true;
-    setDetailStatus(`Loading ${timeframeLabel(activeTimeframe)} prices…`);
+    renderViewModeButtons(activeView);
     renderTimeframeButtons(activeTimeframe);
+    showDetailPanels(activeView);
 
+    if (activeView === "ma") {
+      setDetailStatus(`Loading ${timeframeLabel(activeTimeframe)} moving averages…`);
+      const result = await loadMovingAverages(supabase, selectedAsset.id, activeTimeframe);
+      detailLoading = false;
+
+      if (result.error) {
+        setDetailStatus(result.error, true);
+        renderMovingAverages([]);
+        if (detailSummaryEl) detailSummaryEl.textContent = "";
+        return;
+      }
+
+      renderMovingAverages(result.rows);
+      if (detailSummaryEl) {
+        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} MA row${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} (SMA 20/50, EMA 9/20/50).`;
+      }
+      setDetailStatus(`Updated ${new Date().toLocaleTimeString()}.`);
+      return;
+    }
+
+    setDetailStatus(`Loading ${timeframeLabel(activeTimeframe)} prices…`);
     const result = await loadCandlesForTimeframe(supabase, selectedAsset.id, activeTimeframe);
     detailLoading = false;
 
@@ -458,6 +590,9 @@ async function init() {
     showDetailView();
     setDetailStatus("Loading token…");
     renderPrices([]);
+    renderMovingAverages([]);
+    showDetailPanels(activeView);
+    renderViewModeButtons(activeView);
 
     const { data, error } = await supabase
       .from("crypto_assets")
@@ -481,13 +616,33 @@ async function init() {
       const parts = [
         selectedAsset.name?.trim() || null,
         selectedAsset.exchange ? `Exchange: ${selectedAsset.exchange}` : null,
+        activeView === "ma" ? "Moving averages" : "OHLCV candles",
       ].filter(Boolean);
-      detailLedeEl.textContent = parts.join(" · ") || "OHLCV candles";
+      detailLedeEl.textContent = parts.join(" · ");
     }
 
-    updateUrl(selectedAsset.symbol, activeTimeframe);
-    await loadDetailPrices();
+    updateUrl(selectedAsset.symbol, activeTimeframe, activeView);
+    await loadDetailData();
   }
+
+  viewModesEl?.addEventListener("click", (event) => {
+    const target = event.target as HTMLElement | null;
+    const button = target?.closest<HTMLButtonElement>("button[data-view]");
+    if (!button || !selectedAsset) return;
+    const nextView = parseView(button.dataset.view ?? null);
+    if (nextView === activeView) return;
+    activeView = nextView;
+    if (detailLedeEl) {
+      const parts = [
+        selectedAsset.name?.trim() || null,
+        selectedAsset.exchange ? `Exchange: ${selectedAsset.exchange}` : null,
+        activeView === "ma" ? "Moving averages" : "OHLCV candles",
+      ].filter(Boolean);
+      detailLedeEl.textContent = parts.join(" · ");
+    }
+    updateUrl(selectedAsset.symbol, activeTimeframe, activeView);
+    void loadDetailData();
+  });
 
   timeframesEl?.addEventListener("click", (event) => {
     const target = event.target as HTMLElement | null;
@@ -496,8 +651,8 @@ async function init() {
     const minutes = Number(button.dataset.tf);
     if (!Number.isFinite(minutes) || minutes === activeTimeframe) return;
     activeTimeframe = minutes;
-    updateUrl(selectedAsset.symbol, activeTimeframe);
-    void loadDetailPrices();
+    updateUrl(selectedAsset.symbol, activeTimeframe, activeView);
+    void loadDetailData();
   });
 
   refreshBtn?.addEventListener("click", () => {
@@ -505,7 +660,7 @@ async function init() {
   });
 
   detailRefreshBtn?.addEventListener("click", () => {
-    void loadDetailPrices();
+    void loadDetailData();
   });
 
   ingestBtn?.addEventListener("click", () => {
@@ -548,7 +703,7 @@ async function init() {
 
         setListStatus(`Ingested ${body.pair ?? "1m candle"}.`);
         await loadAssetList();
-        if (selectedAsset) await loadDetailPrices();
+        if (selectedAsset) await loadDetailData();
       } catch (error) {
         setListStatus(error instanceof Error ? error.message : "Unable to ingest.", true);
       } finally {

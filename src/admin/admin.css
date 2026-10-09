@@ -2266,11 +2266,35 @@ body.xa-body {
   text-decoration: underline;
 }
 
+.xa-crypto__view-modes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.25rem 0 0.75rem;
+}
+
 .xa-crypto__timeframes {
   display: flex;
   flex-wrap: wrap;
   gap: 0.4rem;
-  margin: 0.75rem 0 1rem;
+  margin: 0 0 1rem;
+}
+
+.xa-crypto__view-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+}
+
+.xa-crypto__view-links a {
+  color: #1d4ed8;
+  font-weight: 600;
+  text-decoration: none;
+  font-size: 0.8125rem;
+}
+
+.xa-crypto__view-links a:hover {
+  text-decoration: underline;
 }
 
 .xa-crypto__tf {

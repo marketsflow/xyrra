@@ -82,8 +82,8 @@
       "maxDuration": 10
     },
     "api/compute-crypto-ma.ts": {
-      "memory": 256,
-      "maxDuration": 30
+      "memory": 1024,
+      "maxDuration": 300
     },
     "api/articles-page.ts": {
       "memory": 256,

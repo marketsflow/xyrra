@@ -252,6 +252,11 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
             writeJson(res, 405, { success: false, message: "Method not allowed" });
             return;
           }
+          const reqUrl = new URL(req.url || "/", "http://localhost");
+          const backfill =
+            reqUrl.searchParams.get("backfill") === "1" ||
+            reqUrl.searchParams.get("backfill") === "true" ||
+            reqUrl.searchParams.get("mode") === "backfill";
           const result = await computeCryptoMovingAverages(
             {
               SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
@@ -260,12 +265,15 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
               CRON_SECRET: env.CRON_SECRET,
             },
             headerValue(req.headers.authorization),
+            { backfill },
           );
           if (result.success === true) {
             writeJson(res, 200, {
               success: true,
+              mode: result.mode,
               assets: result.assets,
               rowsUpserted: result.rowsUpserted,
+              priceRowsUpserted: result.priceRowsUpserted,
               rows: result.rows,
             });
             return;
