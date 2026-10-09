@@ -17,6 +17,7 @@ type Candle = {
   low: number;
   close: number;
   volume: number | null;
+  percentage: number | null;
 };
 
 type MaRow = {
@@ -225,6 +226,7 @@ function aggregateCandles(oneMinute: Candle[], timeframeMinutes: number, limit: 
         low: bar.low,
         close: bar.close,
         volume: bar.volume,
+        percentage: null,
       });
       continue;
     }
@@ -238,7 +240,17 @@ function aggregateCandles(oneMinute: Candle[], timeframeMinutes: number, limit: 
     }
   }
 
-  return [...buckets.values()]
+  const ascending = [...buckets.values()].sort(
+    (a, b) => new Date(a.bucket_start).getTime() - new Date(b.bucket_start).getTime(),
+  );
+  for (let i = 0; i < ascending.length; i++) {
+    const candle = ascending[i]!;
+    const prev = i > 0 ? ascending[i - 1]! : null;
+    candle.percentage =
+      prev && prev.close !== 0 ? ((candle.close - prev.close) / prev.close) * 100 : null;
+  }
+
+  return ascending
     .sort((a, b) => new Date(b.bucket_start).getTime() - new Date(a.bucket_start).getTime())
     .slice(0, limit);
 }
@@ -257,6 +269,7 @@ function toCandle(row: Record<string, unknown>): Candle | null {
     low,
     close,
     volume: asNumber(row.volume),
+    percentage: asNumber(row.percentage),
   };
 }
 
@@ -349,7 +362,7 @@ async function fetchStoredCandles(
 ): Promise<{ candles: Candle[]; error: string | null }> {
   const { data, error } = await supabase
     .from("crypto_prices")
-    .select("bucket_start, open, high, low, close, volume")
+    .select("bucket_start, open, high, low, close, volume, percentage")
     .eq("asset_id", assetId)
     .eq("timeframe", timeframeMinutes)
     .order("bucket_start", { ascending: false })
@@ -378,7 +391,7 @@ async function fetchOneMinuteCandles(
     const end = offset + ONE_M_PAGE - 1;
     const { data, error } = await supabase
       .from("crypto_prices")
-      .select("bucket_start, open, high, low, close, volume")
+      .select("bucket_start, open, high, low, close, volume, percentage")
       .eq("asset_id", assetId)
       .eq("timeframe", 1)
       .order("bucket_start", { ascending: false })
@@ -583,7 +596,7 @@ function renderPrices(candles: Candle[]) {
 
   if (candles.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="6" class="xa-users__empty">No prices for this timeframe yet.</td></tr>';
+      '<tr><td colspan="7" class="xa-users__empty">No prices for this timeframe yet.</td></tr>';
     return;
   }
 
@@ -596,6 +609,7 @@ function renderPrices(candles: Candle[]) {
           <td>${escapeHtml(formatPrice(candle.high))}</td>
           <td>${escapeHtml(formatPrice(candle.low))}</td>
           <td>${escapeHtml(formatPrice(candle.close))}</td>
+          <td>${escapeHtml(formatPct(candle.percentage))}</td>
           <td>${escapeHtml(formatVolume(candle.volume))}</td>
         </tr>
       `,
