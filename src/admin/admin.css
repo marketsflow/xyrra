@@ -385,6 +385,12 @@ body.xa-body {
   color: #1d4ed8;
 }
 
+.xa-admin__nav-link--child {
+  margin-left: 0.75rem;
+  padding: 0.5rem 0.85rem;
+  font-size: 0.8125rem;
+}
+
 .xa-admin__main {
   flex: 1;
   padding: 2rem clamp(1.25rem, 3vw, 2.75rem);
@@ -2235,4 +2241,59 @@ body.xa-body {
   margin: 0.35rem 0 0;
   font-size: 0.8125rem;
   color: var(--xa-muted);
+}
+
+.xa-crypto__back {
+  display: inline-block;
+  margin-bottom: 0.5rem;
+  color: #1d4ed8;
+  font-size: 0.875rem;
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.xa-crypto__back:hover {
+  text-decoration: underline;
+}
+
+.xa-crypto__symbol-link {
+  color: #1d4ed8;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.xa-crypto__symbol-link:hover {
+  text-decoration: underline;
+}
+
+.xa-crypto__timeframes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.xa-crypto__tf {
+  appearance: none;
+  border: 1px solid #d5d8e8;
+  background: #fff;
+  color: #4a4d66;
+  border-radius: 0.55rem;
+  padding: 0.4rem 0.75rem;
+  font: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.xa-crypto__tf:hover {
+  background: #f3f4f8;
+  border-color: #c5c9dc;
+}
+
+.xa-crypto__tf--active {
+  background: #eff6ff;
+  border-color: #93c5fd;
+  color: #1d4ed8;
 }

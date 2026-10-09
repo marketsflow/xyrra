@@ -463,6 +463,8 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/admin/stock-prices/" + search;
       } else if (path === "/admin/polymarket") {
         (req as IncomingMessage & { url?: string }).url = "/admin/polymarket/" + search;
+      } else if (path === "/admin/polymarket/crypto-prices") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/polymarket/crypto-prices/" + search;
       } else if (path === "/admin/articles") {
         (req as IncomingMessage & { url?: string }).url = "/admin/articles/" + search;
       } else if (path === "/admin/articles/new") {
@@ -589,6 +591,10 @@ export default defineConfig(({ mode }) => {
           adminEmailsSent: resolve(__dirname, "admin/emails-sent/index.html"),
           adminStockPrices: resolve(__dirname, "admin/stock-prices/index.html"),
           adminPolymarket: resolve(__dirname, "admin/polymarket/index.html"),
+          adminPolymarketCryptoPrices: resolve(
+            __dirname,
+            "admin/polymarket/crypto-prices/index.html",
+          ),
           adminArticles: resolve(__dirname, "admin/articles/index.html"),
           adminArticlesNew: resolve(__dirname, "admin/articles/new/index.html"),
           adminArticlesEdit: resolve(__dirname, "admin/articles/edit/index.html"),

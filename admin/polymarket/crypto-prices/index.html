@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <meta name="robots" content="noindex, nofollow" />
     <meta name="theme-color" content="#f8f9fd" />
-    <title>Create Email List | Admin | Xyrra</title>
+    <title>Crypto Prices | Admin | Xyrra</title>
     <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -56,70 +56,98 @@
         </aside>
 
         <main class="xa-admin__main">
-          <div class="xa-template-editor">
-            <a class="xa-template-editor__back" href="/admin/email-lists/">← Back to email lists</a>
-            <h1>Create email list</h1>
-            <p class="xa-template-editor__lede">
-              Name your list to create it. Adding members now is optional — you can also add them later.
-            </p>
-
-            <section class="xa-template-editor__section">
-              <h2>List name</h2>
-              <input id="xa-email-list-name" type="text" placeholder="e.g. Beta testers" aria-label="List name" />
-            </section>
-
-            <section class="xa-template-editor__section">
-              <h2>Add member</h2>
-              <form id="xa-email-list-add-form" class="xa-email-list__add-form">
-                <div class="xa-email-list__add-grid">
-                  <label>
-                    <span>Name</span>
-                    <input name="member-name" type="text" placeholder="Full name" autocomplete="off" />
-                  </label>
-                  <label>
-                    <span>Email</span>
-                    <input name="member-email" type="email" placeholder="name@example.com" autocomplete="off" />
-                  </label>
-                </div>
-                <button type="submit" class="xa-admin__signout">Add member</button>
-              </form>
-            </section>
-
-            <section class="xa-template-editor__section">
+          <div class="xa-admin__panel">
+            <div id="xa-crypto-list-view">
               <div class="xa-users__header">
                 <div>
-                  <h2>Members</h2>
-                  <p id="xa-email-list-member-count" class="xa-templates__lede">0 members</p>
+                  <h1>Crypto Prices</h1>
+                  <p class="xa-templates__lede">
+                    Tokens from <code>crypto_assets</code>. Open a token to view OHLCV candles from
+                    <code>crypto_prices</code>.
+                  </p>
+                </div>
+                <div class="xa-polymarket__actions">
+                  <button type="button" id="xa-crypto-refresh" class="xa-sent__ghost">Refresh</button>
+                  <button type="button" id="xa-crypto-ingest" class="xa-admin__signout">
+                    Ingest 1m now
+                  </button>
                 </div>
               </div>
+
+              <p id="xa-crypto-status" class="xa-users__status" aria-live="polite"></p>
+              <p id="xa-crypto-summary" class="xa-users__summary">Loading…</p>
+
               <div class="xa-users__table-wrap">
                 <table class="xa-users__table">
                   <thead>
                     <tr>
+                      <th scope="col">Symbol</th>
                       <th scope="col">Name</th>
-                      <th scope="col">Email</th>
-                      <th scope="col">Actions</th>
+                      <th scope="col">Exchange</th>
+                      <th scope="col">Last 1m close</th>
+                      <th scope="col">Last bucket</th>
                     </tr>
                   </thead>
-                  <tbody id="xa-email-list-members-body">
+                  <tbody id="xa-crypto-assets-body">
                     <tr>
-                      <td colspan="3" class="xa-users__empty">No members added yet.</td>
+                      <td colspan="5" class="xa-users__empty">Loading…</td>
                     </tr>
                   </tbody>
                 </table>
               </div>
-            </section>
+            </div>
 
-            <div class="xa-template-editor__actions">
-              <button type="button" id="xa-email-list-create" class="xa-templates__create">Create list</button>
-              <p id="xa-email-list-status" class="xa-template__status" aria-live="polite"></p>
-              <p id="xa-email-list-error" class="xa-template__status xa-template__status--error" aria-live="polite"></p>
+            <div id="xa-crypto-detail-view" hidden>
+              <div class="xa-users__header">
+                <div>
+                  <a class="xa-crypto__back" id="xa-crypto-back" href="/admin/polymarket/crypto-prices/"
+                    >← Back to tokens</a
+                  >
+                  <h1 id="xa-crypto-detail-title">Token</h1>
+                  <p id="xa-crypto-detail-lede" class="xa-templates__lede"></p>
+                </div>
+                <div class="xa-polymarket__actions">
+                  <button type="button" id="xa-crypto-detail-refresh" class="xa-sent__ghost">
+                    Refresh
+                  </button>
+                </div>
+              </div>
+
+              <div
+                class="xa-crypto__timeframes"
+                id="xa-crypto-timeframes"
+                role="group"
+                aria-label="Price timeframe"
+              ></div>
+
+              <p id="xa-crypto-detail-status" class="xa-users__status" aria-live="polite"></p>
+              <p id="xa-crypto-detail-summary" class="xa-users__summary"></p>
+
+              <div class="xa-users__table-wrap">
+                <table class="xa-users__table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Bucket start (UTC)</th>
+                      <th scope="col">Open</th>
+                      <th scope="col">High</th>
+                      <th scope="col">Low</th>
+                      <th scope="col">Close</th>
+                      <th scope="col">Volume</th>
+                    </tr>
+                  </thead>
+                  <tbody id="xa-crypto-prices-body">
+                    <tr>
+                      <td colspan="6" class="xa-users__empty">Loading…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
             </div>
           </div>
         </main>
       </div>
     </div>
 
-    <script type="module" src="/src/admin/email-lists-new.ts"></script>
+    <script type="module" src="/src/admin/crypto-prices.ts"></script>
   </body>
 </html>
