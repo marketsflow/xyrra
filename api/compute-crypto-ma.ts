@@ -2,8 +2,9 @@
  * Vercel Cron + admin-triggered crypto SMA/EMA + bar-characteristics +
  * price-action compute.
  *
- * Default (cron): upsert the latest MA, bar-characteristic, and price-action
- * rows per timeframe for each enabled asset (same request → minimal lag).
+ * Default (cron): materialize higher-TF crypto_prices (incl. percentage vs
+ * previous close), then upsert the latest MA, bar-characteristic, and
+ * price-action rows per timeframe for each enabled asset.
  * Backfill (?backfill=1): walk candles and write MA + bar + price-action rows
  * for every candle on 1m / 5m / 15m / 1h / 4h / 1D.
  *
@@ -55,6 +56,8 @@ type Candle = {
   low: number;
   close: number;
   volume: number | null;
+  /** ((close - prev_close) / prev_close) * 100 on the same timeframe. */
+  percentage?: number | null;
 };
 
 type MaRow = {
@@ -373,6 +376,20 @@ function computeMaRow(assetId: number, timeframe: number, candlesAsc: Candle[]):
 function pctOf(numerator: number, denominator: number): number | null {
   if (denominator === 0) return null;
   return (numerator / denominator) * 100;
+}
+
+/** Percent change of close vs previous candle close on the same timeframe. */
+function closeChangePct(close: number, previousClose: number | null): number | null {
+  if (previousClose === null) return null;
+  return pctOf(close - previousClose, previousClose);
+}
+
+/** Attach percentage from lag(close) for an ascending candle series. */
+function withClosePercentages(candlesAsc: Candle[]): Candle[] {
+  return candlesAsc.map((candle, i) => ({
+    ...candle,
+    percentage: closeChangePct(candle.close, i > 0 ? candlesAsc[i - 1]!.close : null),
+  }));
 }
 
 function ratio(numerator: number, denominator: number): number | null {
@@ -773,6 +790,7 @@ async function upsertCryptoPrices(
       low: candle.low,
       close: candle.close,
       volume: candle.volume,
+      percentage: candle.percentage ?? null,
     }));
     const res = await fetch(
       `${base}/rest/v1/crypto_prices?on_conflict=asset_id,timeframe,bucket_start`,
@@ -932,7 +950,7 @@ async function computeForAssetIncremental(
   // Materialize higher-TF candles concurrently, then derive all tables in parallel.
   const higherTfPriceResults = await Promise.all(
     TIMEFRAMES.filter((tf) => tf > 1).map(async (timeframe) => {
-      const aggregated = aggregateCandles(oneMinuteNewestFirst, timeframe);
+      const aggregated = withClosePercentages(aggregateCandles(oneMinuteNewestFirst, timeframe));
       const upserted = await upsertCryptoPrices(
         supabaseUrl,
         serviceKey,
@@ -1058,7 +1076,7 @@ async function computeForAssetBackfill(
       if (candlesAsc.length === 0) {
         const ones = await loadOneMinute();
         if (ones.length > 0) {
-          candlesAsc = aggregateCandles(ones, timeframe);
+          candlesAsc = withClosePercentages(aggregateCandles(ones, timeframe));
           priceRowsUpserted += await upsertCryptoPrices(
             supabaseUrl,
             serviceKey,
@@ -1070,7 +1088,7 @@ async function computeForAssetBackfill(
       }
     } else {
       const ones = await loadOneMinute();
-      candlesAsc = aggregateCandles(ones, timeframe);
+      candlesAsc = withClosePercentages(aggregateCandles(ones, timeframe));
       priceRowsUpserted += await upsertCryptoPrices(
         supabaseUrl,
         serviceKey,

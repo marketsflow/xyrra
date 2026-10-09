@@ -109,6 +109,11 @@ async function fetchAllKlines(pair, interval, startMs, endMs) {
   return all;
 }
 
+function closeChangePct(close, previousClose) {
+  if (previousClose === null || previousClose === 0) return null;
+  return ((close - previousClose) / previousClose) * 100;
+}
+
 function klinesToCandles(raw) {
   const candles = [];
   for (const row of raw) {
@@ -127,6 +132,10 @@ function klinesToCandles(raw) {
       volume,
     });
   }
+  // Ascending by open time from Binance; attach close-vs-previous percentage.
+  for (let i = 0; i < candles.length; i++) {
+    candles[i].percentage = closeChangePct(candles[i].close, i > 0 ? candles[i - 1].close : null);
+  }
   return candles;
 }
 
@@ -142,6 +151,7 @@ async function upsertCandles(base, serviceKey, assetId, timeframe, candles) {
       low: c.low,
       close: c.close,
       volume: c.volume,
+      percentage: c.percentage ?? null,
     }));
     const res = await fetch(
       `${base}/rest/v1/crypto_prices?on_conflict=asset_id,timeframe,bucket_start`,

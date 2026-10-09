@@ -35,6 +35,8 @@ export type CryptoPriceRow = {
   low: number;
   close: number;
   volume: number | null;
+  /** ((close - prev_close) / prev_close) * 100 vs previous 1m candle. */
+  percentage: number | null;
 };
 
 type BinanceKline = [
@@ -346,7 +348,16 @@ async function fetch1mKline(
   throw new Error(`No 1m kline for ${pair}. ${errors.join(" | ").slice(0, 400)}`);
 }
 
-function klineToRow(assetId: number, kline: BinanceKline): CryptoPriceRow {
+function closeChangePct(close: number, previousClose: number | null): number | null {
+  if (previousClose === null || previousClose === 0) return null;
+  return ((close - previousClose) / previousClose) * 100;
+}
+
+function klineToRow(
+  assetId: number,
+  kline: BinanceKline,
+  previousClose: number | null = null,
+): CryptoPriceRow {
   const open = parseNumber(kline[1]);
   const high = parseNumber(kline[2]);
   const low = parseNumber(kline[3]);
@@ -364,7 +375,27 @@ function klineToRow(assetId: number, kline: BinanceKline): CryptoPriceRow {
     low,
     close,
     volume,
+    percentage: closeChangePct(close, previousClose),
   };
+}
+
+async function fetchPreviousClose(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+  bucketStartIso: string,
+): Promise<number | null> {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const res = await fetch(
+    `${base}/rest/v1/crypto_prices?select=close&asset_id=eq.${assetId}&timeframe=eq.${TIMEFRAME_1M}&bucket_start=lt.${encodeURIComponent(bucketStartIso)}&order=bucket_start.desc&limit=1`,
+    { headers: restHeaders(serviceKey) },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to load previous crypto_prices close: ${text.slice(0, 300)}`);
+  }
+  const rows = (await res.json()) as Array<{ close?: unknown }>;
+  return parseNumber(rows[0]?.close);
 }
 
 async function upsertCryptoPrice(
@@ -415,7 +446,9 @@ export async function ingestCryptoPrices(
   try {
     const assetId = await ensureAsset(supabaseUrl, serviceKey, symbol);
     const kline = await fetch1mKline(symbol, quote, startMs, endMs);
-    const row = klineToRow(assetId, kline);
+    const bucketStart = new Date(kline[0]).toISOString();
+    const previousClose = await fetchPreviousClose(supabaseUrl, serviceKey, assetId, bucketStart);
+    const row = klineToRow(assetId, kline, previousClose);
     await upsertCryptoPrice(supabaseUrl, serviceKey, row);
     return { success: true, row, pair, created: true };
   } catch (error) {
