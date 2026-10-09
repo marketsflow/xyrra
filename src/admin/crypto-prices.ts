@@ -26,6 +26,9 @@ type MaRow = {
   ema_9: number | null;
   ema_20: number | null;
   ema_50: number | null;
+  sma_20_50_factor: number | null;
+  ema_9_20_factor: number | null;
+  ema_20_50_factor: number | null;
 };
 
 type TimeframeOption = {
@@ -194,7 +197,16 @@ function toMaRow(row: Record<string, unknown>): MaRow | null {
     ema_9: asNumber(row.ema_9),
     ema_20: asNumber(row.ema_20),
     ema_50: asNumber(row.ema_50),
+    sma_20_50_factor: asNumber(row.sma_20_50_factor),
+    ema_9_20_factor: asNumber(row.ema_9_20_factor),
+    ema_20_50_factor: asNumber(row.ema_20_50_factor),
   };
+}
+
+function formatFactor(value: unknown) {
+  const n = asNumber(value);
+  if (n === null) return "—";
+  return String(Math.trunc(n));
 }
 
 async function fetchStoredCandles(
@@ -289,7 +301,9 @@ async function loadMovingAverages(
 ): Promise<{ rows: MaRow[]; error: string | null }> {
   const { data, error } = await supabase
     .from("crypto_moving_averages")
-    .select("timestamp, sma_20, sma_50, ema_9, ema_20, ema_50")
+    .select(
+      "timestamp, sma_20, sma_50, ema_9, ema_20, ema_50, sma_20_50_factor, ema_9_20_factor, ema_20_50_factor",
+    )
     .eq("asset_id", assetId)
     .eq("timeframe", timeframeMinutes)
     .order("timestamp", { ascending: false })
@@ -409,7 +423,7 @@ function renderMovingAverages(rows: MaRow[]) {
 
   if (rows.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="6" class="xa-users__empty">No moving averages for this timeframe yet.</td></tr>';
+      '<tr><td colspan="9" class="xa-users__empty">No moving averages for this timeframe yet.</td></tr>';
     return;
   }
 
@@ -423,6 +437,9 @@ function renderMovingAverages(rows: MaRow[]) {
           <td>${escapeHtml(formatPrice(row.ema_9))}</td>
           <td>${escapeHtml(formatPrice(row.ema_20))}</td>
           <td>${escapeHtml(formatPrice(row.ema_50))}</td>
+          <td>${escapeHtml(formatFactor(row.sma_20_50_factor))}</td>
+          <td>${escapeHtml(formatFactor(row.ema_9_20_factor))}</td>
+          <td>${escapeHtml(formatFactor(row.ema_20_50_factor))}</td>
         </tr>
       `,
     )
@@ -558,7 +575,7 @@ async function init() {
 
       renderMovingAverages(result.rows);
       if (detailSummaryEl) {
-        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} MA row${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} (SMA 20/50, EMA 9/20/50).`;
+        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} MA row${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} (SMA/EMA + cross factors).`;
       }
       setDetailStatus(`Updated ${new Date().toLocaleTimeString()}.`);
       return;

@@ -47,6 +47,10 @@ type MaRow = {
   ema_9: number | null;
   ema_20: number | null;
   ema_50: number | null;
+  /** 1 if short > long, -1 if short < long, 0 if equal, null if either missing. */
+  sma_20_50_factor: number | null;
+  ema_9_20_factor: number | null;
+  ema_20_50_factor: number | null;
 };
 
 type AssetRow = { id: number; symbol: string };
@@ -200,6 +204,25 @@ function sma(closes: number[], period: number): number | null {
   return sum / period;
 }
 
+/** Compare short vs long MA → 1 / -1 / 0 / null. */
+function maFactor(shortMa: number | null, longMa: number | null): number | null {
+  if (shortMa === null || longMa === null) return null;
+  if (shortMa > longMa) return 1;
+  if (shortMa < longMa) return -1;
+  return 0;
+}
+
+function withFactors(
+  row: Omit<MaRow, "sma_20_50_factor" | "ema_9_20_factor" | "ema_20_50_factor">,
+): MaRow {
+  return {
+    ...row,
+    sma_20_50_factor: maFactor(row.sma_20, row.sma_50),
+    ema_9_20_factor: maFactor(row.ema_9, row.ema_20),
+    ema_20_50_factor: maFactor(row.ema_20, row.ema_50),
+  };
+}
+
 function ema(closes: number[], period: number): number | null {
   if (closes.length < period) return null;
   const k = 2 / (period + 1);
@@ -254,16 +277,20 @@ function computeMaSeries(assetId: number, timeframe: number, candlesAsc: Candle[
       ema50 = close * k50 + ema50 * (1 - k50);
     }
 
-    rows.push({
-      asset_id: assetId,
-      timeframe,
-      timestamp: candlesAsc[i]!.bucket_start,
-      sma_20: i >= 19 ? sum20 / 20 : null,
-      sma_50: i >= 49 ? sum50 / 50 : null,
-      ema_9: ema9,
-      ema_20: ema20,
-      ema_50: ema50,
-    });
+    const sma20 = i >= 19 ? sum20 / 20 : null;
+    const sma50 = i >= 49 ? sum50 / 50 : null;
+    rows.push(
+      withFactors({
+        asset_id: assetId,
+        timeframe,
+        timestamp: candlesAsc[i]!.bucket_start,
+        sma_20: sma20,
+        sma_50: sma50,
+        ema_9: ema9,
+        ema_20: ema20,
+        ema_50: ema50,
+      }),
+    );
   }
 
   return rows;
@@ -273,7 +300,7 @@ function computeMaRow(assetId: number, timeframe: number, candlesAsc: Candle[]):
   if (candlesAsc.length === 0) return null;
   const latest = candlesAsc[candlesAsc.length - 1]!;
   const closes = candlesAsc.map((c) => c.close);
-  return {
+  return withFactors({
     asset_id: assetId,
     timeframe,
     timestamp: latest.bucket_start,
@@ -282,7 +309,7 @@ function computeMaRow(assetId: number, timeframe: number, candlesAsc: Candle[]):
     ema_9: ema(closes, 9),
     ema_20: ema(closes, 20),
     ema_50: ema(closes, 50),
-  };
+  });
 }
 
 function toCandle(row: Record<string, unknown>): Candle | null {

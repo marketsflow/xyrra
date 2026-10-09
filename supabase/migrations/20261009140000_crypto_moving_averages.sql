@@ -14,6 +14,10 @@ create table if not exists public.crypto_moving_averages (
   ema_9 double precision,
   ema_20 double precision,
   ema_50 double precision,
+  -- 1 / -1 / 0 cross factors (also added by 20261009150000 for existing DBs)
+  sma_20_50_factor smallint,
+  ema_9_20_factor smallint,
+  ema_20_50_factor smallint,
   primary key (asset_id, timeframe, timestamp)
 );
 
