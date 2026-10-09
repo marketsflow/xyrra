@@ -62,8 +62,10 @@
                 <div>
                   <h1>Crypto Prices</h1>
                   <p class="xa-templates__lede">
-                    Tokens from <code>crypto_assets</code>. Open a token to view OHLCV candles or
-                    moving averages (<code>crypto_prices</code> / <code>crypto_moving_averages</code>).
+                    Tokens from <code>crypto_assets</code>. Open a token to view OHLCV candles,
+                    moving averages, or bar characteristics
+                    (<code>crypto_prices</code> / <code>crypto_moving_averages</code> /
+                    <code>crypto_bar_characteristics</code>).
                   </p>
                 </div>
                 <div class="xa-polymarket__actions">
@@ -124,6 +126,7 @@
                   Prices
                 </button>
                 <button type="button" class="xa-crypto__tf" data-view="ma">Moving averages</button>
+                <button type="button" class="xa-crypto__tf" data-view="bars">Characteristics</button>
               </div>
 
               <div
@@ -174,6 +177,31 @@
                   <tbody id="xa-crypto-ma-body">
                     <tr>
                       <td colspan="9" class="xa-users__empty">Loading…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div id="xa-crypto-bars-panel" class="xa-users__table-wrap" hidden>
+                <table class="xa-users__table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Timestamp (UTC)</th>
+                      <th scope="col">Δ%</th>
+                      <th scope="col">Dir</th>
+                      <th scope="col">Body</th>
+                      <th scope="col">Body %</th>
+                      <th scope="col">Range</th>
+                      <th scope="col">Range %</th>
+                      <th scope="col">Upper wick</th>
+                      <th scope="col">Lower wick</th>
+                      <th scope="col">Body/range</th>
+                      <th scope="col">Close pos</th>
+                    </tr>
+                  </thead>
+                  <tbody id="xa-crypto-bars-body">
+                    <tr>
+                      <td colspan="11" class="xa-users__empty">Loading…</td>
                     </tr>
                   </tbody>
                 </table>

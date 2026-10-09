@@ -31,12 +31,26 @@ type MaRow = {
   ema_20_50_factor: number | null;
 };
 
+type BarCharacteristicRow = {
+  timestamp: string;
+  price_change_pct: number | null;
+  direction: number | null;
+  body: number | null;
+  body_pct: number | null;
+  range: number | null;
+  range_pct: number | null;
+  upper_wick: number | null;
+  lower_wick: number | null;
+  body_to_range: number | null;
+  close_position: number | null;
+};
+
 type TimeframeOption = {
   label: string;
   minutes: number;
 };
 
-type DetailView = "prices" | "ma";
+type DetailView = "prices" | "ma" | "bars";
 
 const TIMEFRAMES: TimeframeOption[] = [
   { label: "1m", minutes: 1 },
@@ -97,13 +111,40 @@ function formatVolume(value: unknown) {
   return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
+function formatPct(value: unknown, digits = 2) {
+  const n = asNumber(value);
+  if (n === null) return "—";
+  return `${n.toLocaleString(undefined, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+    signDisplay: "exceptZero",
+  })}%`;
+}
+
+function formatRatio(value: unknown, digits = 3) {
+  const n = asNumber(value);
+  if (n === null) return "—";
+  return n.toLocaleString(undefined, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  });
+}
+
 function parseTimeframe(raw: string | null): number {
   const match = TIMEFRAMES.find((tf) => tf.label === raw || String(tf.minutes) === raw);
   return match?.minutes ?? 1;
 }
 
 function parseView(raw: string | null): DetailView {
-  return raw === "ma" || raw === "moving-averages" ? "ma" : "prices";
+  if (raw === "ma" || raw === "moving-averages") return "ma";
+  if (raw === "bars" || raw === "characteristics" || raw === "bar-characteristics") return "bars";
+  return "prices";
+}
+
+function viewLabel(view: DetailView) {
+  if (view === "ma") return "Moving averages";
+  if (view === "bars") return "Bar characteristics";
+  return "OHLCV candles";
 }
 
 function timeframeLabel(minutes: number) {
@@ -200,6 +241,24 @@ function toMaRow(row: Record<string, unknown>): MaRow | null {
     sma_20_50_factor: asNumber(row.sma_20_50_factor),
     ema_9_20_factor: asNumber(row.ema_9_20_factor),
     ema_20_50_factor: asNumber(row.ema_20_50_factor),
+  };
+}
+
+function toBarCharacteristicRow(row: Record<string, unknown>): BarCharacteristicRow | null {
+  const timestamp = asString(row.timestamp);
+  if (!timestamp) return null;
+  return {
+    timestamp,
+    price_change_pct: asNumber(row.price_change_pct),
+    direction: asNumber(row.direction),
+    body: asNumber(row.body),
+    body_pct: asNumber(row.body_pct),
+    range: asNumber(row.range),
+    range_pct: asNumber(row.range_pct),
+    upper_wick: asNumber(row.upper_wick),
+    lower_wick: asNumber(row.lower_wick),
+    body_to_range: asNumber(row.body_to_range),
+    close_position: asNumber(row.close_position),
   };
 }
 
@@ -324,6 +383,31 @@ async function loadMovingAverages(
   return { rows, error: null };
 }
 
+async function loadBarCharacteristics(
+  supabase: SupabaseClient,
+  assetId: number,
+  timeframeMinutes: number,
+): Promise<{ rows: BarCharacteristicRow[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from("crypto_bar_characteristics")
+    .select(
+      "timestamp, price_change_pct, direction, body, body_pct, range, range_pct, upper_wick, lower_wick, body_to_range, close_position",
+    )
+    .eq("asset_id", assetId)
+    .eq("timeframe", timeframeMinutes)
+    .order("timestamp", { ascending: false })
+    .limit(DISPLAY_LIMIT);
+
+  if (error) {
+    return { rows: [], error: error.message };
+  }
+
+  const rows = ((data as Record<string, unknown>[] | null) ?? [])
+    .map(toBarCharacteristicRow)
+    .filter((row): row is BarCharacteristicRow => row !== null);
+  return { rows, error: null };
+}
+
 function renderAssets(
   assets: Array<
     CryptoAsset & {
@@ -345,6 +429,7 @@ function renderAssets(
     .map((asset) => {
       const pricesHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=prices`;
       const maHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=ma`;
+      const barsHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=bars`;
       return `
         <tr class="xa-crypto__asset-row" data-symbol="${escapeHtml(asset.symbol)}">
           <td>
@@ -358,6 +443,7 @@ function renderAssets(
             <div class="xa-crypto__view-links">
               <a href="${pricesHref}">Prices</a>
               <a href="${maHref}">MA</a>
+              <a href="${barsHref}">Bars</a>
             </div>
           </td>
         </tr>
@@ -451,6 +537,37 @@ function renderMovingAverages(rows: MaRow[]) {
     .join("");
 }
 
+function renderBarCharacteristics(rows: BarCharacteristicRow[]) {
+  const tbody = document.getElementById("xa-crypto-bars-body");
+  if (!tbody) return;
+
+  if (rows.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="11" class="xa-users__empty">No bar characteristics for this timeframe yet.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows
+    .map(
+      (row) => `
+        <tr>
+          <td>${escapeHtml(formatDateTime(row.timestamp))}</td>
+          <td>${escapeHtml(formatPct(row.price_change_pct))}</td>
+          <td>${renderFactorBox(row.direction)}</td>
+          <td>${escapeHtml(formatPrice(row.body))}</td>
+          <td>${escapeHtml(formatPct(row.body_pct))}</td>
+          <td>${escapeHtml(formatPrice(row.range))}</td>
+          <td>${escapeHtml(formatPct(row.range_pct))}</td>
+          <td>${escapeHtml(formatPrice(row.upper_wick))}</td>
+          <td>${escapeHtml(formatPrice(row.lower_wick))}</td>
+          <td>${escapeHtml(formatRatio(row.body_to_range))}</td>
+          <td>${escapeHtml(formatRatio(row.close_position))}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
 function showListView() {
   document.getElementById("xa-crypto-list-view")?.removeAttribute("hidden");
   document.getElementById("xa-crypto-detail-view")?.setAttribute("hidden", "");
@@ -464,11 +581,15 @@ function showDetailView() {
 function showDetailPanels(view: DetailView) {
   const pricesPanel = document.getElementById("xa-crypto-prices-panel");
   const maPanel = document.getElementById("xa-crypto-ma-panel");
+  const barsPanel = document.getElementById("xa-crypto-bars-panel");
+  pricesPanel?.setAttribute("hidden", "");
+  maPanel?.setAttribute("hidden", "");
+  barsPanel?.setAttribute("hidden", "");
   if (view === "ma") {
-    pricesPanel?.setAttribute("hidden", "");
     maPanel?.removeAttribute("hidden");
+  } else if (view === "bars") {
+    barsPanel?.removeAttribute("hidden");
   } else {
-    maPanel?.setAttribute("hidden", "");
     pricesPanel?.removeAttribute("hidden");
   }
 }
@@ -544,7 +665,7 @@ async function init() {
 
     listLoading = false;
     if (summaryEl) {
-      summaryEl.textContent = `${withLast.length.toLocaleString()} token${withLast.length === 1 ? "" : "s"}. Open Prices or MA for a symbol.`;
+      summaryEl.textContent = `${withLast.length.toLocaleString()} token${withLast.length === 1 ? "" : "s"}. Open Prices, MA, or Bars for a symbol.`;
     }
     renderAssets(withLast);
     setListStatus(`Updated ${new Date().toLocaleTimeString()}.`);
@@ -586,6 +707,26 @@ async function init() {
       return;
     }
 
+    if (activeView === "bars") {
+      setDetailStatus(`Loading ${timeframeLabel(activeTimeframe)} bar characteristics…`);
+      const result = await loadBarCharacteristics(supabase, selectedAsset.id, activeTimeframe);
+      detailLoading = false;
+
+      if (result.error) {
+        setDetailStatus(result.error, true);
+        renderBarCharacteristics([]);
+        if (detailSummaryEl) detailSummaryEl.textContent = "";
+        return;
+      }
+
+      renderBarCharacteristics(result.rows);
+      if (detailSummaryEl) {
+        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} bar${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} (direction, size, wicks).`;
+      }
+      setDetailStatus(`Updated ${new Date().toLocaleTimeString()}.`);
+      return;
+    }
+
     setDetailStatus(`Loading ${timeframeLabel(activeTimeframe)} prices…`);
     const result = await loadCandlesForTimeframe(supabase, selectedAsset.id, activeTimeframe);
     detailLoading = false;
@@ -613,6 +754,7 @@ async function init() {
     setDetailStatus("Loading token…");
     renderPrices([]);
     renderMovingAverages([]);
+    renderBarCharacteristics([]);
     showDetailPanels(activeView);
     renderViewModeButtons(activeView);
 
@@ -638,7 +780,7 @@ async function init() {
       const parts = [
         selectedAsset.name?.trim() || null,
         selectedAsset.exchange ? `Exchange: ${selectedAsset.exchange}` : null,
-        activeView === "ma" ? "Moving averages" : "OHLCV candles",
+        viewLabel(activeView),
       ].filter(Boolean);
       detailLedeEl.textContent = parts.join(" · ");
     }
@@ -658,7 +800,7 @@ async function init() {
       const parts = [
         selectedAsset.name?.trim() || null,
         selectedAsset.exchange ? `Exchange: ${selectedAsset.exchange}` : null,
-        activeView === "ma" ? "Moving averages" : "OHLCV candles",
+        viewLabel(activeView),
       ].filter(Boolean);
       detailLedeEl.textContent = parts.join(" · ");
     }
