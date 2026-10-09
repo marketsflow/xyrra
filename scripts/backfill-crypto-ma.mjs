@@ -42,8 +42,14 @@ if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
   process.exit(1);
 }
 
-console.log(`Backfilling MAs from first 1m candle @ ${env.SUPABASE_URL}`);
-const result = await computeCryptoMovingAverages(env, null, { backfill: true, skipAuth: true });
+console.log(
+  `Backfilling MAs + bar characteristics + price action from stored prices @ ${env.SUPABASE_URL}`,
+);
+const result = await computeCryptoMovingAverages(env, null, {
+  backfill: true,
+  skipAuth: true,
+  preferStoredHigherTf: true,
+});
 
 if (!result.success) {
   console.error("Backfill failed:", result.message);
@@ -57,6 +63,8 @@ console.log(
       assets: result.assets,
       rowsUpserted: result.rowsUpserted,
       priceRowsUpserted: result.priceRowsUpserted,
+      characteristicRowsUpserted: result.characteristicRowsUpserted,
+      priceActionRowsUpserted: result.priceActionRowsUpserted,
       latestRows: result.rows,
     },
     null,

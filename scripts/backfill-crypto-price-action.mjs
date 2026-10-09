@@ -1,9 +1,16 @@
 /**
- * Step 2: Backfill MAs from stored higher-TF prices (15m / 1h / 4h / 1D).
- * Prefer stored candles — does not overwrite Binance history with short 1m aggregates.
+ * One-shot backfill: crypto_price_action (plus MA + bar characteristics) for
+ * every timeframe (1m / 5m / 15m / 1h / 4h / 1D).
+ *
+ * Uses the same compute path as the minute cron so classifications stay in sync.
+ * MA and bar-characteristic upserts are idempotent merge-duplicates.
  *
  * Usage:
- *   npx tsx scripts/backfill-crypto-ma-higher-tf.mjs
+ *   node --import tsx scripts/backfill-crypto-price-action.mjs
+ *   # or: npx tsx scripts/backfill-crypto-price-action.mjs
+ *
+ * Optional timeframe filter (minutes):
+ *   TIMEFRAMES=15,60 node --import tsx scripts/backfill-crypto-price-action.mjs
  */
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -42,18 +49,26 @@ if (!env.SUPABASE_URL || !env.SUPABASE_SERVICE_ROLE_KEY) {
   process.exit(1);
 }
 
+const timeframes = (process.env.TIMEFRAMES || "")
+  .split(",")
+  .map((s) => Number(s.trim()))
+  .filter((n) => Number.isFinite(n) && n > 0);
+
 console.log(
-  `Step 2: backfill MAs + bars + price action for 15m/1h/4h/1D @ ${env.SUPABASE_URL}`,
+  `Backfilling crypto_price_action` +
+    (timeframes.length ? ` (tf=${timeframes.join(",")})` : " (all timeframes)") +
+    ` @ ${env.SUPABASE_URL}`,
 );
+
 const result = await computeCryptoMovingAverages(env, null, {
   backfill: true,
   skipAuth: true,
   preferStoredHigherTf: true,
-  timeframes: [15, 60, 240, 1440],
+  ...(timeframes.length ? { timeframes } : {}),
 });
 
 if (!result.success) {
-  console.error("MA backfill failed:", result.message);
+  console.error("Backfill failed:", result.message);
   process.exit(1);
 }
 
@@ -66,7 +81,6 @@ console.log(
       priceRowsUpserted: result.priceRowsUpserted,
       characteristicRowsUpserted: result.characteristicRowsUpserted,
       priceActionRowsUpserted: result.priceActionRowsUpserted,
-      latestRows: result.rows,
     },
     null,
     2,

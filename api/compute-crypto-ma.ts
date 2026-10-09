@@ -1,10 +1,11 @@
 /**
- * Vercel Cron + admin-triggered crypto SMA/EMA + bar-characteristics compute.
+ * Vercel Cron + admin-triggered crypto SMA/EMA + bar-characteristics +
+ * price-action compute.
  *
- * Default (cron): upsert the latest MA row and bar characteristics per timeframe
- * for each enabled asset.
- * Backfill (?backfill=1): walk all 1m candles from the first price and write MA
- * + bar-characteristic rows for every candle on 1m / 5m / 15m / 1h / 4h / 1D.
+ * Default (cron): upsert the latest MA, bar-characteristic, and price-action
+ * rows per timeframe for each enabled asset (same request → minimal lag).
+ * Backfill (?backfill=1): walk candles and write MA + bar + price-action rows
+ * for every candle on 1m / 5m / 15m / 1h / 4h / 1D.
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
@@ -14,9 +15,19 @@ const MAX_PERIOD = 50;
 /** Enough 1m bars to build the current 1D bucket + a small buffer. */
 const ONE_M_LOOKBACK = 1500;
 const ONE_M_PAGE = 1000;
-/** Closes needed from each TF to seed SMA50 / EMA50 (incremental cron). */
+/** Closes needed from each TF to seed SMA50 / EMA50 + structure lookbacks. */
 const CLOSE_LOOKBACK = MAX_PERIOD + 5;
 const UPSERT_CHUNK = 500;
+
+/** Prior bars used for breakout / momentum / volume baselines. */
+const STRUCTURE_LOOKBACK = 20;
+const VOLUME_LOOKBACK = 20;
+const VOLUME_HIGH_MULTIPLIER = 1.5;
+const STRONG_BODY_TO_RANGE = 0.65;
+const DOJI_BODY_TO_RANGE = 0.1;
+const MOMENTUM_BODY_TO_RANGE = 0.6;
+const MOMENTUM_RANGE_MULTIPLIER = 1.2;
+const WICK_TO_BODY_MIN = 2;
 
 export type ComputeCryptoMaEnv = {
   SUPABASE_URL?: string;
@@ -77,6 +88,27 @@ type BarCharacteristicRow = {
   close_position: number | null;
 };
 
+type PriceActionRow = {
+  asset_id: number;
+  timeframe: number;
+  timestamp: string;
+  is_strong_bullish: boolean;
+  is_strong_bearish: boolean;
+  is_doji: boolean;
+  is_hammer: boolean;
+  is_shooting_star: boolean;
+  is_momentum: boolean;
+  is_inside_bar: boolean;
+  is_engulfing: boolean;
+  engulfing_direction: number | null;
+  is_breakout: boolean;
+  breakout_direction: number | null;
+  is_breakdown: boolean;
+  is_rejection: boolean;
+  rejection_direction: number | null;
+  is_high_volume: boolean;
+};
+
 type AssetRow = { id: number; symbol: string };
 
 type ComputeResult =
@@ -87,6 +119,7 @@ type ComputeResult =
       rowsUpserted: number;
       priceRowsUpserted: number;
       characteristicRowsUpserted: number;
+      priceActionRowsUpserted: number;
       rows: MaRow[];
     }
   | { success: false; message: string; status?: number };
@@ -405,6 +438,185 @@ function computeBarCharacteristicRow(
   return computeBarCharacteristic(assetId, timeframe, latest, previousClose);
 }
 
+function avgPositive(values: number[]): number | null {
+  if (values.length === 0) return null;
+  let sum = 0;
+  for (const v of values) sum += v;
+  return sum / values.length;
+}
+
+function emptyPriceAction(
+  assetId: number,
+  timeframe: number,
+  timestamp: string,
+): PriceActionRow {
+  return {
+    asset_id: assetId,
+    timeframe,
+    timestamp,
+    is_strong_bullish: false,
+    is_strong_bearish: false,
+    is_doji: false,
+    is_hammer: false,
+    is_shooting_star: false,
+    is_momentum: false,
+    is_inside_bar: false,
+    is_engulfing: false,
+    engulfing_direction: null,
+    is_breakout: false,
+    breakout_direction: null,
+    is_breakdown: false,
+    is_rejection: false,
+    rejection_direction: null,
+    is_high_volume: false,
+  };
+}
+
+/**
+ * Classify a single candle using OHLCV + prior structure.
+ * Index `i` is the candle being classified within `candlesAsc`.
+ */
+function computePriceActionAt(
+  assetId: number,
+  timeframe: number,
+  candlesAsc: Candle[],
+  i: number,
+): PriceActionRow {
+  const candle = candlesAsc[i]!;
+  const row = emptyPriceAction(assetId, timeframe, candle.bucket_start);
+
+  const body = Math.abs(candle.close - candle.open);
+  const range = candle.high - candle.low;
+  const upper = Math.max(candle.open, candle.close);
+  const lower = Math.min(candle.open, candle.close);
+  const upperWick = candle.high - upper;
+  const lowerWick = lower - candle.low;
+  const bodyToRange = range > 0 ? body / range : 0;
+  const closePosition = range > 0 ? (candle.close - candle.low) / range : 0.5;
+  const bullish = candle.close > candle.open;
+  const bearish = candle.close < candle.open;
+
+  row.is_strong_bullish =
+    bullish && bodyToRange >= STRONG_BODY_TO_RANGE && closePosition >= 0.7;
+  row.is_strong_bearish =
+    bearish && bodyToRange >= STRONG_BODY_TO_RANGE && closePosition <= 0.3;
+
+  row.is_doji = range > 0 && bodyToRange <= DOJI_BODY_TO_RANGE;
+
+  row.is_hammer =
+    body > 0 &&
+    lowerWick >= WICK_TO_BODY_MIN * body &&
+    upperWick <= body &&
+    closePosition >= 0.5;
+
+  row.is_shooting_star =
+    body > 0 &&
+    upperWick >= WICK_TO_BODY_MIN * body &&
+    lowerWick <= body &&
+    closePosition <= 0.5;
+
+  // Momentum: large body within an expanded range vs recent average.
+  if (i > 0 && bodyToRange >= MOMENTUM_BODY_TO_RANGE) {
+    const priorRanges: number[] = [];
+    const start = Math.max(0, i - STRUCTURE_LOOKBACK);
+    for (let j = start; j < i; j++) {
+      priorRanges.push(candlesAsc[j]!.high - candlesAsc[j]!.low);
+    }
+    const avgRange = avgPositive(priorRanges);
+    if (avgRange !== null && range >= avgRange * MOMENTUM_RANGE_MULTIPLIER) {
+      row.is_momentum = true;
+    }
+  }
+
+  const prev = i > 0 ? candlesAsc[i - 1]! : null;
+  if (prev) {
+    row.is_inside_bar = candle.high < prev.high && candle.low > prev.low;
+
+    const prevUpper = Math.max(prev.open, prev.close);
+    const prevLower = Math.min(prev.open, prev.close);
+    const currUpper = upper;
+    const currLower = lower;
+    const engulfs = currUpper >= prevUpper && currLower <= prevLower && body > 0;
+    if (engulfs) {
+      const prevBearish = prev.close < prev.open;
+      const prevBullish = prev.close > prev.open;
+      if (bullish && prevBearish) {
+        row.is_engulfing = true;
+        row.engulfing_direction = 1;
+      } else if (bearish && prevBullish) {
+        row.is_engulfing = true;
+        row.engulfing_direction = -1;
+      }
+    }
+  }
+
+  // Breakout / breakdown vs prior N-bar high / low (exclude current bar).
+  if (i > 0) {
+    const start = Math.max(0, i - STRUCTURE_LOOKBACK);
+    let priorHigh = -Infinity;
+    let priorLow = Infinity;
+    for (let j = start; j < i; j++) {
+      priorHigh = Math.max(priorHigh, candlesAsc[j]!.high);
+      priorLow = Math.min(priorLow, candlesAsc[j]!.low);
+    }
+    if (Number.isFinite(priorHigh) && candle.close > priorHigh) {
+      row.is_breakout = true;
+      row.breakout_direction = 1;
+    } else if (Number.isFinite(priorLow) && candle.close < priorLow) {
+      row.is_breakout = true;
+      row.breakout_direction = -1;
+      row.is_breakdown = true;
+    }
+  }
+
+  // Rejection: long wick with close away from the extreme.
+  if (body > 0) {
+    if (lowerWick >= WICK_TO_BODY_MIN * body && closePosition >= 0.55) {
+      row.is_rejection = true;
+      row.rejection_direction = 1;
+    } else if (upperWick >= WICK_TO_BODY_MIN * body && closePosition <= 0.45) {
+      row.is_rejection = true;
+      row.rejection_direction = -1;
+    }
+  }
+
+  if (candle.volume !== null && candle.volume > 0 && i > 0) {
+    const vols: number[] = [];
+    const start = Math.max(0, i - VOLUME_LOOKBACK);
+    for (let j = start; j < i; j++) {
+      const v = candlesAsc[j]!.volume;
+      if (v !== null && v > 0) vols.push(v);
+    }
+    const avgVol = avgPositive(vols);
+    if (avgVol !== null && candle.volume >= avgVol * VOLUME_HIGH_MULTIPLIER) {
+      row.is_high_volume = true;
+    }
+  }
+
+  return row;
+}
+
+function computePriceActionSeries(
+  assetId: number,
+  timeframe: number,
+  candlesAsc: Candle[],
+): PriceActionRow[] {
+  const rows: PriceActionRow[] = [];
+  for (let i = 0; i < candlesAsc.length; i++) {
+    rows.push(computePriceActionAt(assetId, timeframe, candlesAsc, i));
+  }
+  return rows;
+}
+
+function computePriceActionRow(
+  assetId: number,
+  timeframe: number,
+  candlesAsc: Candle[],
+): PriceActionRow | null {
+  if (candlesAsc.length === 0) return null;
+  return computePriceActionAt(assetId, timeframe, candlesAsc, candlesAsc.length - 1);
+}
+
 function toCandle(row: Record<string, unknown>): Candle | null {
   const bucket = typeof row.bucket_start === "string" ? row.bucket_start : null;
   const open = parseNumber(row.open);
@@ -644,6 +856,57 @@ async function upsertBarCharacteristics(
   return upserted;
 }
 
+async function upsertPriceAction(
+  supabaseUrl: string,
+  serviceKey: string,
+  rows: PriceActionRow[],
+): Promise<number> {
+  if (rows.length === 0) return 0;
+  const base = supabaseUrl.replace(/\/$/, "");
+  let upserted = 0;
+
+  for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
+    const chunk = rows.slice(i, i + UPSERT_CHUNK);
+    const res = await fetch(
+      `${base}/rest/v1/crypto_price_action?on_conflict=asset_id,timeframe,timestamp`,
+      {
+        method: "POST",
+        headers: restHeaders(serviceKey, {
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        }),
+        body: JSON.stringify(chunk),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to upsert crypto_price_action: ${text.slice(0, 300)}`);
+    }
+    upserted += chunk.length;
+  }
+
+  return upserted;
+}
+
+/** Upsert MA + bar characteristics + price action in parallel (same candle set). */
+async function upsertDerivedTables(
+  supabaseUrl: string,
+  serviceKey: string,
+  maRows: MaRow[],
+  barRows: BarCharacteristicRow[],
+  priceActionRows: PriceActionRow[],
+): Promise<{
+  maUpserted: number;
+  characteristicRowsUpserted: number;
+  priceActionRowsUpserted: number;
+}> {
+  const [maUpserted, characteristicRowsUpserted, priceActionRowsUpserted] = await Promise.all([
+    upsertMovingAverages(supabaseUrl, serviceKey, maRows),
+    upsertBarCharacteristics(supabaseUrl, serviceKey, barRows),
+    upsertPriceAction(supabaseUrl, serviceKey, priceActionRows),
+  ]);
+  return { maUpserted, characteristicRowsUpserted, priceActionRowsUpserted };
+}
+
 async function computeForAssetIncremental(
   supabaseUrl: string,
   serviceKey: string,
@@ -652,53 +915,82 @@ async function computeForAssetIncremental(
   maRows: MaRow[];
   priceRowsUpserted: number;
   characteristicRowsUpserted: number;
+  priceActionRowsUpserted: number;
 }> {
   const oneMinuteNewestFirst = await fetchOneMinuteCandles(supabaseUrl, serviceKey, asset.id, {
     limit: ONE_M_LOOKBACK,
   });
   if (oneMinuteNewestFirst.length === 0) {
-    return { maRows: [], priceRowsUpserted: 0, characteristicRowsUpserted: 0 };
+    return {
+      maRows: [],
+      priceRowsUpserted: 0,
+      characteristicRowsUpserted: 0,
+      priceActionRowsUpserted: 0,
+    };
   }
 
-  const maRows: MaRow[] = [];
-  let priceRowsUpserted = 0;
-  let characteristicRowsUpserted = 0;
-
-  for (const timeframe of TIMEFRAMES) {
-    if (timeframe > 1) {
+  // Materialize higher-TF candles concurrently, then derive all tables in parallel.
+  const higherTfPriceResults = await Promise.all(
+    TIMEFRAMES.filter((tf) => tf > 1).map(async (timeframe) => {
       const aggregated = aggregateCandles(oneMinuteNewestFirst, timeframe);
-      priceRowsUpserted += await upsertCryptoPrices(
+      const upserted = await upsertCryptoPrices(
         supabaseUrl,
         serviceKey,
         asset.id,
         timeframe,
         aggregated.slice(-CLOSE_LOOKBACK),
       );
-    }
+      return upserted;
+    }),
+  );
+  const priceRowsUpserted = higherTfPriceResults.reduce((a, b) => a + b, 0);
 
-    const closesAsc = await fetchTimeframeCandlesAsc(
-      supabaseUrl,
-      serviceKey,
-      asset.id,
-      timeframe,
-      CLOSE_LOOKBACK,
-    );
-    const ma = computeMaRow(asset.id, timeframe, closesAsc);
-    if (!ma) continue;
-    await upsertMovingAverages(supabaseUrl, serviceKey, [ma]);
-    maRows.push(ma);
-
-    const bar = computeBarCharacteristicRow(asset.id, timeframe, closesAsc);
-    if (bar) {
-      characteristicRowsUpserted += await upsertBarCharacteristics(
+  const tfResults = await Promise.all(
+    TIMEFRAMES.map(async (timeframe) => {
+      const closesAsc = await fetchTimeframeCandlesAsc(
         supabaseUrl,
         serviceKey,
-        [bar],
+        asset.id,
+        timeframe,
+        CLOSE_LOOKBACK,
       );
-    }
+      const ma = computeMaRow(asset.id, timeframe, closesAsc);
+      if (!ma) {
+        return {
+          ma: null as MaRow | null,
+          characteristicRowsUpserted: 0,
+          priceActionRowsUpserted: 0,
+        };
+      }
+
+      const bar = computeBarCharacteristicRow(asset.id, timeframe, closesAsc);
+      const pa = computePriceActionRow(asset.id, timeframe, closesAsc);
+      const upserted = await upsertDerivedTables(
+        supabaseUrl,
+        serviceKey,
+        [ma],
+        bar ? [bar] : [],
+        pa ? [pa] : [],
+      );
+
+      return {
+        ma,
+        characteristicRowsUpserted: upserted.characteristicRowsUpserted,
+        priceActionRowsUpserted: upserted.priceActionRowsUpserted,
+      };
+    }),
+  );
+
+  const maRows: MaRow[] = [];
+  let characteristicRowsUpserted = 0;
+  let priceActionRowsUpserted = 0;
+  for (const result of tfResults) {
+    if (result.ma) maRows.push(result.ma);
+    characteristicRowsUpserted += result.characteristicRowsUpserted;
+    priceActionRowsUpserted += result.priceActionRowsUpserted;
   }
 
-  return { maRows, priceRowsUpserted, characteristicRowsUpserted };
+  return { maRows, priceRowsUpserted, characteristicRowsUpserted, priceActionRowsUpserted };
 }
 
 async function computeForAssetBackfill(
@@ -714,6 +1006,7 @@ async function computeForAssetBackfill(
   priceRowsUpserted: number;
   rowsUpserted: number;
   characteristicRowsUpserted: number;
+  priceActionRowsUpserted: number;
 }> {
   const preferStored = options.preferStoredHigherTf !== false;
   const timeframes = (options.timeframes?.length ? options.timeframes : [...TIMEFRAMES]).filter(
@@ -738,6 +1031,7 @@ async function computeForAssetBackfill(
         priceRowsUpserted: 0,
         rowsUpserted: 0,
         characteristicRowsUpserted: 0,
+        priceActionRowsUpserted: 0,
       };
     }
   }
@@ -745,6 +1039,7 @@ async function computeForAssetBackfill(
   let priceRowsUpserted = 0;
   let rowsUpserted = 0;
   let characteristicRowsUpserted = 0;
+  let priceActionRowsUpserted = 0;
   const latestRows: MaRow[] = [];
 
   for (const timeframe of timeframes) {
@@ -788,20 +1083,32 @@ async function computeForAssetBackfill(
     if (candlesAsc.length === 0) continue;
 
     const series = computeMaSeries(asset.id, timeframe, candlesAsc);
-    rowsUpserted += await upsertMovingAverages(supabaseUrl, serviceKey, series);
+    const barSeries = computeBarCharacteristicSeries(asset.id, timeframe, candlesAsc);
+    const paSeries = computePriceActionSeries(asset.id, timeframe, candlesAsc);
+
+    const upserted = await upsertDerivedTables(
+      supabaseUrl,
+      serviceKey,
+      series,
+      barSeries,
+      paSeries,
+    );
+    rowsUpserted += upserted.maUpserted;
+    characteristicRowsUpserted += upserted.characteristicRowsUpserted;
+    priceActionRowsUpserted += upserted.priceActionRowsUpserted;
+
     if (series.length > 0) {
       latestRows.push(series[series.length - 1]!);
     }
-
-    const barSeries = computeBarCharacteristicSeries(asset.id, timeframe, candlesAsc);
-    characteristicRowsUpserted += await upsertBarCharacteristics(
-      supabaseUrl,
-      serviceKey,
-      barSeries,
-    );
   }
 
-  return { maRows: latestRows, priceRowsUpserted, rowsUpserted, characteristicRowsUpserted };
+  return {
+    maRows: latestRows,
+    priceRowsUpserted,
+    rowsUpserted,
+    characteristicRowsUpserted,
+    priceActionRowsUpserted,
+  };
 }
 
 /**
@@ -838,6 +1145,7 @@ export async function computeCryptoMovingAverages(
     let rowsUpserted = 0;
     let priceRowsUpserted = 0;
     let characteristicRowsUpserted = 0;
+    let priceActionRowsUpserted = 0;
 
     for (const asset of assets) {
       if (options.backfill) {
@@ -849,12 +1157,14 @@ export async function computeCryptoMovingAverages(
         rowsUpserted += result.rowsUpserted;
         priceRowsUpserted += result.priceRowsUpserted;
         characteristicRowsUpserted += result.characteristicRowsUpserted;
+        priceActionRowsUpserted += result.priceActionRowsUpserted;
       } else {
         const result = await computeForAssetIncremental(supabaseUrl, serviceKey, asset);
         allLatestRows.push(...result.maRows);
         rowsUpserted += result.maRows.length;
         priceRowsUpserted += result.priceRowsUpserted;
         characteristicRowsUpserted += result.characteristicRowsUpserted;
+        priceActionRowsUpserted += result.priceActionRowsUpserted;
       }
     }
 
@@ -865,6 +1175,7 @@ export async function computeCryptoMovingAverages(
       rowsUpserted,
       priceRowsUpserted,
       characteristicRowsUpserted,
+      priceActionRowsUpserted,
       rows: allLatestRows,
     };
   } catch (error) {
@@ -914,6 +1225,7 @@ export default {
             rowsUpserted: result.rowsUpserted,
             priceRowsUpserted: result.priceRowsUpserted,
             characteristicRowsUpserted: result.characteristicRowsUpserted,
+            priceActionRowsUpserted: result.priceActionRowsUpserted,
             rows: result.rows,
           },
           { status: 200, headers: jsonHeaders() },

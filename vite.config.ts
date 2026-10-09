@@ -274,6 +274,8 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
               assets: result.assets,
               rowsUpserted: result.rowsUpserted,
               priceRowsUpserted: result.priceRowsUpserted,
+              characteristicRowsUpserted: result.characteristicRowsUpserted,
+              priceActionRowsUpserted: result.priceActionRowsUpserted,
               rows: result.rows,
             });
             return;
