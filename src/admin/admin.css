@@ -2350,3 +2350,22 @@ body.xa-body {
   background: #e5e7eb;
   border-color: #d1d5db;
 }
+
+.xa-crypto__flag {
+  display: inline-block;
+  min-width: 1.1rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  line-height: 1;
+  text-align: center;
+}
+
+.xa-crypto__flag--on {
+  color: #15803d;
+}
+
+.xa-crypto__pa-table th,
+.xa-crypto__pa-table td {
+  white-space: nowrap;
+  font-size: 0.82rem;
+}

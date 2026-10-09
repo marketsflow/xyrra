@@ -63,9 +63,10 @@
                   <h1>Crypto Prices</h1>
                   <p class="xa-templates__lede">
                     Tokens from <code>crypto_assets</code>. Open a token to view OHLCV candles,
-                    moving averages, or bar characteristics
+                    moving averages, bar characteristics, or price-action flags
                     (<code>crypto_prices</code> / <code>crypto_moving_averages</code> /
-                    <code>crypto_bar_characteristics</code> / <code>crypto_price_action</code>).
+                    <code>crypto_bar_characteristics</code> /
+                    <code>crypto_price_action</code>).
                   </p>
                 </div>
                 <div class="xa-polymarket__actions">
@@ -127,6 +128,7 @@
                 </button>
                 <button type="button" class="xa-crypto__tf" data-view="ma">Moving averages</button>
                 <button type="button" class="xa-crypto__tf" data-view="bars">Characteristics</button>
+                <button type="button" class="xa-crypto__tf" data-view="pa">Price action</button>
               </div>
 
               <div
@@ -202,6 +204,33 @@
                   <tbody id="xa-crypto-bars-body">
                     <tr>
                       <td colspan="11" class="xa-users__empty">Loading…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div id="xa-crypto-pa-panel" class="xa-users__table-wrap" hidden>
+                <table class="xa-users__table xa-crypto__pa-table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Timestamp (UTC)</th>
+                      <th scope="col">Strong ▲</th>
+                      <th scope="col">Strong ▼</th>
+                      <th scope="col">Doji</th>
+                      <th scope="col">Hammer</th>
+                      <th scope="col">Shooting</th>
+                      <th scope="col">Momentum</th>
+                      <th scope="col">Inside</th>
+                      <th scope="col">Engulf</th>
+                      <th scope="col">Breakout</th>
+                      <th scope="col">Breakdown</th>
+                      <th scope="col">Rejection</th>
+                      <th scope="col">High vol</th>
+                    </tr>
+                  </thead>
+                  <tbody id="xa-crypto-pa-body">
+                    <tr>
+                      <td colspan="13" class="xa-users__empty">Loading…</td>
                     </tr>
                   </tbody>
                 </table>

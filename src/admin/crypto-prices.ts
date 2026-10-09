@@ -45,12 +45,31 @@ type BarCharacteristicRow = {
   close_position: number | null;
 };
 
+type PriceActionRow = {
+  timestamp: string;
+  is_strong_bullish: boolean;
+  is_strong_bearish: boolean;
+  is_doji: boolean;
+  is_hammer: boolean;
+  is_shooting_star: boolean;
+  is_momentum: boolean;
+  is_inside_bar: boolean;
+  is_engulfing: boolean;
+  engulfing_direction: number | null;
+  is_breakout: boolean;
+  breakout_direction: number | null;
+  is_breakdown: boolean;
+  is_rejection: boolean;
+  rejection_direction: number | null;
+  is_high_volume: boolean;
+};
+
 type TimeframeOption = {
   label: string;
   minutes: number;
 };
 
-type DetailView = "prices" | "ma" | "bars";
+type DetailView = "prices" | "ma" | "bars" | "pa";
 
 const TIMEFRAMES: TimeframeOption[] = [
   { label: "1m", minutes: 1 },
@@ -138,13 +157,26 @@ function parseTimeframe(raw: string | null): number {
 function parseView(raw: string | null): DetailView {
   if (raw === "ma" || raw === "moving-averages") return "ma";
   if (raw === "bars" || raw === "characteristics" || raw === "bar-characteristics") return "bars";
+  if (
+    raw === "pa" ||
+    raw === "price-action" ||
+    raw === "price_action" ||
+    raw === "priceaction"
+  ) {
+    return "pa";
+  }
   return "prices";
 }
 
 function viewLabel(view: DetailView) {
   if (view === "ma") return "Moving averages";
   if (view === "bars") return "Bar characteristics";
+  if (view === "pa") return "Price action";
   return "OHLCV candles";
+}
+
+function asBool(value: unknown): boolean {
+  return value === true || value === "true" || value === 1 || value === "1";
 }
 
 function timeframeLabel(minutes: number) {
@@ -260,6 +292,42 @@ function toBarCharacteristicRow(row: Record<string, unknown>): BarCharacteristic
     body_to_range: asNumber(row.body_to_range),
     close_position: asNumber(row.close_position),
   };
+}
+
+function toPriceActionRow(row: Record<string, unknown>): PriceActionRow | null {
+  const timestamp = asString(row.timestamp);
+  if (!timestamp) return null;
+  return {
+    timestamp,
+    is_strong_bullish: asBool(row.is_strong_bullish),
+    is_strong_bearish: asBool(row.is_strong_bearish),
+    is_doji: asBool(row.is_doji),
+    is_hammer: asBool(row.is_hammer),
+    is_shooting_star: asBool(row.is_shooting_star),
+    is_momentum: asBool(row.is_momentum),
+    is_inside_bar: asBool(row.is_inside_bar),
+    is_engulfing: asBool(row.is_engulfing),
+    engulfing_direction: asNumber(row.engulfing_direction),
+    is_breakout: asBool(row.is_breakout),
+    breakout_direction: asNumber(row.breakout_direction),
+    is_breakdown: asBool(row.is_breakdown),
+    is_rejection: asBool(row.is_rejection),
+    rejection_direction: asNumber(row.rejection_direction),
+    is_high_volume: asBool(row.is_high_volume),
+  };
+}
+
+/** Boolean flag → green check or muted dash. */
+function renderBoolFlag(value: boolean) {
+  if (!value) return '<span class="xa-muted">—</span>';
+  return '<span class="xa-crypto__flag xa-crypto__flag--on" title="True" aria-label="True">✓</span>';
+}
+
+/** Active directional pattern → factor box; inactive → muted dash. */
+function renderDirectedFlag(active: boolean, direction: number | null) {
+  if (!active) return '<span class="xa-muted">—</span>';
+  if (direction === null) return renderBoolFlag(true);
+  return renderFactorBox(direction);
 }
 
 /** 1 → green, -1 → red, 0 → orange, missing → muted empty. */
@@ -408,6 +476,31 @@ async function loadBarCharacteristics(
   return { rows, error: null };
 }
 
+async function loadPriceAction(
+  supabase: SupabaseClient,
+  assetId: number,
+  timeframeMinutes: number,
+): Promise<{ rows: PriceActionRow[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from("crypto_price_action")
+    .select(
+      "timestamp, is_strong_bullish, is_strong_bearish, is_doji, is_hammer, is_shooting_star, is_momentum, is_inside_bar, is_engulfing, engulfing_direction, is_breakout, breakout_direction, is_breakdown, is_rejection, rejection_direction, is_high_volume",
+    )
+    .eq("asset_id", assetId)
+    .eq("timeframe", timeframeMinutes)
+    .order("timestamp", { ascending: false })
+    .limit(DISPLAY_LIMIT);
+
+  if (error) {
+    return { rows: [], error: error.message };
+  }
+
+  const rows = ((data as Record<string, unknown>[] | null) ?? [])
+    .map(toPriceActionRow)
+    .filter((row): row is PriceActionRow => row !== null);
+  return { rows, error: null };
+}
+
 function renderAssets(
   assets: Array<
     CryptoAsset & {
@@ -430,6 +523,7 @@ function renderAssets(
       const pricesHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=prices`;
       const maHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=ma`;
       const barsHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=bars`;
+      const paHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=pa`;
       return `
         <tr class="xa-crypto__asset-row" data-symbol="${escapeHtml(asset.symbol)}">
           <td>
@@ -444,6 +538,7 @@ function renderAssets(
               <a href="${pricesHref}">Prices</a>
               <a href="${maHref}">MA</a>
               <a href="${barsHref}">Bars</a>
+              <a href="${paHref}">PA</a>
             </div>
           </td>
         </tr>
@@ -568,6 +663,39 @@ function renderBarCharacteristics(rows: BarCharacteristicRow[]) {
     .join("");
 }
 
+function renderPriceAction(rows: PriceActionRow[]) {
+  const tbody = document.getElementById("xa-crypto-pa-body");
+  if (!tbody) return;
+
+  if (rows.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="13" class="xa-users__empty">No price-action rows for this timeframe yet.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows
+    .map(
+      (row) => `
+        <tr>
+          <td>${escapeHtml(formatDateTime(row.timestamp))}</td>
+          <td>${renderBoolFlag(row.is_strong_bullish)}</td>
+          <td>${renderBoolFlag(row.is_strong_bearish)}</td>
+          <td>${renderBoolFlag(row.is_doji)}</td>
+          <td>${renderBoolFlag(row.is_hammer)}</td>
+          <td>${renderBoolFlag(row.is_shooting_star)}</td>
+          <td>${renderBoolFlag(row.is_momentum)}</td>
+          <td>${renderBoolFlag(row.is_inside_bar)}</td>
+          <td>${renderDirectedFlag(row.is_engulfing, row.engulfing_direction)}</td>
+          <td>${renderDirectedFlag(row.is_breakout, row.breakout_direction)}</td>
+          <td>${renderBoolFlag(row.is_breakdown)}</td>
+          <td>${renderDirectedFlag(row.is_rejection, row.rejection_direction)}</td>
+          <td>${renderBoolFlag(row.is_high_volume)}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
 function showListView() {
   document.getElementById("xa-crypto-list-view")?.removeAttribute("hidden");
   document.getElementById("xa-crypto-detail-view")?.setAttribute("hidden", "");
@@ -582,13 +710,17 @@ function showDetailPanels(view: DetailView) {
   const pricesPanel = document.getElementById("xa-crypto-prices-panel");
   const maPanel = document.getElementById("xa-crypto-ma-panel");
   const barsPanel = document.getElementById("xa-crypto-bars-panel");
+  const paPanel = document.getElementById("xa-crypto-pa-panel");
   pricesPanel?.setAttribute("hidden", "");
   maPanel?.setAttribute("hidden", "");
   barsPanel?.setAttribute("hidden", "");
+  paPanel?.setAttribute("hidden", "");
   if (view === "ma") {
     maPanel?.removeAttribute("hidden");
   } else if (view === "bars") {
     barsPanel?.removeAttribute("hidden");
+  } else if (view === "pa") {
+    paPanel?.removeAttribute("hidden");
   } else {
     pricesPanel?.removeAttribute("hidden");
   }
@@ -665,7 +797,7 @@ async function init() {
 
     listLoading = false;
     if (summaryEl) {
-      summaryEl.textContent = `${withLast.length.toLocaleString()} token${withLast.length === 1 ? "" : "s"}. Open Prices, MA, or Bars for a symbol.`;
+      summaryEl.textContent = `${withLast.length.toLocaleString()} token${withLast.length === 1 ? "" : "s"}. Open Prices, MA, Bars, or PA for a symbol.`;
     }
     renderAssets(withLast);
     setListStatus(`Updated ${new Date().toLocaleTimeString()}.`);
@@ -727,6 +859,26 @@ async function init() {
       return;
     }
 
+    if (activeView === "pa") {
+      setDetailStatus(`Loading ${timeframeLabel(activeTimeframe)} price action…`);
+      const result = await loadPriceAction(supabase, selectedAsset.id, activeTimeframe);
+      detailLoading = false;
+
+      if (result.error) {
+        setDetailStatus(result.error, true);
+        renderPriceAction([]);
+        if (detailSummaryEl) detailSummaryEl.textContent = "";
+        return;
+      }
+
+      renderPriceAction(result.rows);
+      if (detailSummaryEl) {
+        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} row${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} (patterns, breakouts, volume).`;
+      }
+      setDetailStatus(`Updated ${new Date().toLocaleTimeString()}.`);
+      return;
+    }
+
     setDetailStatus(`Loading ${timeframeLabel(activeTimeframe)} prices…`);
     const result = await loadCandlesForTimeframe(supabase, selectedAsset.id, activeTimeframe);
     detailLoading = false;
@@ -755,6 +907,7 @@ async function init() {
     renderPrices([]);
     renderMovingAverages([]);
     renderBarCharacteristics([]);
+    renderPriceAction([]);
     showDetailPanels(activeView);
     renderViewModeButtons(activeView);
 
