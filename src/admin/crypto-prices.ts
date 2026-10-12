@@ -104,6 +104,7 @@ type PriceLevelRow = {
   distance_from_support: number | null;
   distance_to_resistance: number | null;
   ema: number | null;
+  momentum: number | null;
   signal: string | null;
   updated_at: string | null;
   created_at: string | null;
@@ -490,6 +491,7 @@ function toPriceLevelRow(row: Record<string, unknown>): PriceLevelRow | null {
     distance_from_support: asNumber(row.distance_from_support),
     distance_to_resistance: asNumber(row.distance_to_resistance),
     ema: asNumber(row.ema),
+    momentum: asNumber(row.momentum),
     signal: asString(row.signal),
     updated_at: asString(row.updated_at),
     created_at: asString(row.created_at),
@@ -763,7 +765,7 @@ async function loadPriceLevels(
   const { data, error } = await supabase
     .from("crypto_price")
     .select(
-      "id, bucket_start, price_1m, price_level, distance_from_support, distance_to_resistance, ema, signal, updated_at, created_at",
+      "id, bucket_start, price_1m, price_level, distance_from_support, distance_to_resistance, ema, momentum, signal, updated_at, created_at",
     )
     .eq("asset_id", assetId)
     .eq("timeframe", timeframeMinutes)
@@ -1061,7 +1063,7 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
 
   if (rows.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="8" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (default: closed 4h candles).</td></tr>';
+      '<tr><td colspan="9" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (default: closed 4h candles).</td></tr>';
     return;
   }
 
@@ -1078,6 +1080,11 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
             row.ema === null
               ? '<span class="xa-muted">—</span>'
               : escapeHtml(String(row.ema))
+          }</td>
+          <td>${
+            row.momentum === null
+              ? '<span class="xa-muted">—</span>'
+              : escapeHtml(String(row.momentum))
           }</td>
           <td>${
             row.signal

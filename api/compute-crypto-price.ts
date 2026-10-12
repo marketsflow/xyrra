@@ -10,6 +10,8 @@
  * Backfill: walk source candles from crypto_prices (optional DAYS).
  *
  * EMA (0–50): +10 per bullish ema_9_20_factor among 5m/15m/1h/4h/1D.
+ * Momentum: crypto_momentum value at the same timestamp when present
+ *   (prefers mom_4h for analysis TF 4h; else first non-null mom_*).
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
@@ -27,6 +29,17 @@ const PAGE_SIZE = 1000;
 const UPSERT_CHUNK = 500;
 /** Default lookback when backfill=1 and days is omitted. */
 const DEFAULT_BACKFILL_DAYS = 7;
+const DEFAULT_MOMENTUM_CONFIG_ID = "default_v1";
+/** Prefer this mom_* column for crypto_price.momentum (matches ANALYSIS_TIMEFRAME). */
+const MOMENTUM_PREFERRED_COLUMN = "mom_4h" as const;
+const MOMENTUM_FALLBACK_COLUMNS = [
+  "mom_4h",
+  "mom_1d",
+  "mom_1h",
+  "mom_15m",
+  "mom_5m",
+  "mom_1m",
+] as const;
 
 export type ComputeCryptoPriceEnv = {
   SUPABASE_URL?: string;
@@ -80,6 +93,7 @@ type CryptoPriceRow = {
   signal: null;
   price_level: number;
   ema: number | null;
+  momentum: number | null;
   updated_at: string;
 };
 
@@ -561,6 +575,96 @@ function factorAsOf(
   return point.factor;
 }
 
+function momentumTsKey(iso: string): number | null {
+  const ms = Date.parse(iso);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/** Pick mom_4h when set; otherwise first non-null mom_* on the row. */
+export function pickMomentumValue(row: Record<string, unknown>): number | null {
+  const preferred = parseNumber(row[MOMENTUM_PREFERRED_COLUMN]);
+  if (preferred !== null) return preferred;
+  for (const col of MOMENTUM_FALLBACK_COLUMNS) {
+    const v = parseNumber(row[col]);
+    if (v !== null) return v;
+  }
+  return null;
+}
+
+async function fetchMomentumAtTimestamp(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetSymbol: string,
+  timestampIso: string,
+): Promise<number | null> {
+  const targetMs = momentumTsKey(timestampIso);
+  if (targetMs === null) return null;
+  const base = supabaseUrl.replace(/\/$/, "");
+  // Fetch a few rows at/before target so ISO format variants still match by ms.
+  const res = await fetch(
+    `${base}/rest/v1/crypto_momentum?select=timestamp,mom_1m,mom_5m,mom_15m,mom_1h,mom_4h,mom_1d&asset_symbol=eq.${encodeURIComponent(assetSymbol)}&timestamp=lte.${encodeURIComponent(timestampIso)}&config_id=eq.${encodeURIComponent(DEFAULT_MOMENTUM_CONFIG_ID)}&order=timestamp.desc&limit=5`,
+    { headers: restHeaders(serviceKey) },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to load crypto_momentum: ${text.slice(0, 300)}`);
+  }
+  const rows = (await res.json()) as Array<Record<string, unknown>>;
+  for (const row of rows) {
+    const ts = typeof row.timestamp === "string" ? momentumTsKey(row.timestamp) : null;
+    if (ts !== targetMs) continue;
+    return pickMomentumValue(row);
+  }
+  return null;
+}
+
+/**
+ * Load crypto_momentum rows for an asset (optional fromIso window) keyed by
+ * timestamp ms for exact bucket matches during backfill.
+ */
+async function fetchMomentumByTimestamp(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetSymbol: string,
+  fromIso: string | null,
+): Promise<Map<number, number>> {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const byTs = new Map<number, number>();
+  let offset = 0;
+  const fromFilter = fromIso
+    ? `&timestamp=gte.${encodeURIComponent(fromIso)}`
+    : "";
+
+  while (true) {
+    const end = offset + PAGE_SIZE - 1;
+    const res = await fetch(
+      `${base}/rest/v1/crypto_momentum?select=timestamp,mom_1m,mom_5m,mom_15m,mom_1h,mom_4h,mom_1d&asset_symbol=eq.${encodeURIComponent(assetSymbol)}&config_id=eq.${encodeURIComponent(DEFAULT_MOMENTUM_CONFIG_ID)}${fromFilter}&order=timestamp.asc`,
+      {
+        headers: restHeaders(serviceKey, {
+          Prefer: "count=exact",
+          Range: `${offset}-${end}`,
+        }),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to load crypto_momentum: ${text.slice(0, 300)}`);
+    }
+    const page = (await res.json()) as Array<Record<string, unknown>>;
+    for (const row of page) {
+      const ts =
+        typeof row.timestamp === "string" ? momentumTsKey(row.timestamp) : null;
+      const value = pickMomentumValue(row);
+      if (ts === null || value === null) continue;
+      byTs.set(ts, value);
+    }
+    if (page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return byTs;
+}
+
 async function insertCryptoPriceRows(
   supabaseUrl: string,
   serviceKey: string,
@@ -595,6 +699,7 @@ function buildRow(
   candle: PriceCandle,
   cycle: ActiveCycle,
   emaTotal: number,
+  momentum: number | null,
   updatedAt: string,
 ): CryptoPriceRow {
   const price = roundPrice(candle.close);
@@ -608,6 +713,7 @@ function buildRow(
     signal: null,
     price_level: price,
     ema: emaTotal,
+    momentum,
     updated_at: updatedAt,
   };
 }
@@ -647,6 +753,13 @@ async function backfillAsset(
     ANALYSIS_TIMEFRAME,
   );
 
+  const momentumByTs = await fetchMomentumByTimestamp(
+    supabaseUrl,
+    serviceKey,
+    asset.symbol,
+    fromIso,
+  );
+
   const maState = new Map<number, { i: number }>();
   for (const tf of EMA_SCORE_TIMEFRAMES) {
     maState.set(tf, { i: -1 });
@@ -670,7 +783,8 @@ async function backfillAsset(
       skippedNoCycle += 1;
       continue;
     }
-    rows.push(buildRow(asset.id, candle, cycle, emaTotal, updatedAt));
+    const momentum = momentumByTs.get(tMs) ?? null;
+    rows.push(buildRow(asset.id, candle, cycle, emaTotal, momentum, updatedAt));
   }
 
   return { rows, skippedNoCycle };
@@ -795,7 +909,13 @@ export async function computeCryptoPrice(
         skippedNoCycle += 1;
         continue;
       }
-      rows.push(buildRow(asset.id, latest, cycle, emaTotal, updatedAt));
+      const momentum = await fetchMomentumAtTimestamp(
+        supabaseUrl,
+        serviceKey,
+        asset.symbol,
+        latest.bucket_start,
+      );
+      rows.push(buildRow(asset.id, latest, cycle, emaTotal, momentum, updatedAt));
     }
 
     rowsInserted = await insertCryptoPriceRows(supabaseUrl, serviceKey, rows);

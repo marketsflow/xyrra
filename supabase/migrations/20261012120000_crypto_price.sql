@@ -32,6 +32,9 @@ create table if not exists public.crypto_price (
   ema numeric(8, 4)
     check (ema is null or (ema >= 0 and ema <= 50)),
 
+  -- Momentum score for this snapshot (populated by writer)
+  momentum numeric(8, 4),
+
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
@@ -67,6 +70,20 @@ comment on column public.crypto_price.price_level is
 
 comment on column public.crypto_price.ema is
   'Cross-TF EMA score (0–50): +10 when latest crypto_moving_averages.ema_9_20_factor is bullish (1) for each of 5m/15m/1h/4h/1D; 0 when neutral/bearish/missing.';
+
+do $$
+begin
+  if exists (
+    select 1
+    from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'crypto_price'
+      and column_name = 'momentum'
+  ) then
+    comment on column public.crypto_price.momentum is
+      'From crypto_momentum at the same timestamp when present (prefers mom_4h; else first non-null mom_*). Null when no matching momentum row.';
+  end if;
+end $$;
 
 alter table public.crypto_price enable row level security;
 
