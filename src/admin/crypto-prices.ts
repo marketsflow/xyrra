@@ -96,12 +96,23 @@ type CycleRow = {
   last_checked_at: string | null;
 };
 
+type PriceLevelRow = {
+  id: string;
+  price_1m: number | null;
+  price_level: number | null;
+  distance_from_support: number | null;
+  distance_to_resistance: number | null;
+  signal: string | null;
+  updated_at: string | null;
+  created_at: string | null;
+};
+
 type TimeframeOption = {
   label: string;
   minutes: number;
 };
 
-type DetailView = "prices" | "ma" | "bars" | "pa" | "mom" | "cycles";
+type DetailView = "prices" | "ma" | "bars" | "pa" | "mom" | "cycles" | "levels";
 
 const MOM_COLUMN_BY_TF: Record<number, keyof Pick<
   MomentumRow,
@@ -124,8 +135,10 @@ const TIMEFRAMES: TimeframeOption[] = [
   { label: "1D", minutes: 1440 },
 ];
 
-/** Support/resistance cycles are computed for 5m+ only (no 1m). */
+/** Support/resistance cycles + price levels are computed for 5m+ only (no 1m). */
 const CYCLE_TIMEFRAMES = TIMEFRAMES.filter((tf) => tf.minutes !== 1);
+/** Default TF for the live price-levels view (matches compute-crypto-price cron). */
+const LEVELS_DEFAULT_TF = 240;
 
 const DISPLAY_LIMIT = 200;
 const ONE_M_PAGE = 1000;
@@ -222,6 +235,16 @@ function parseView(raw: string | null): DetailView {
   ) {
     return "cycles";
   }
+  if (
+    raw === "levels" ||
+    raw === "level" ||
+    raw === "price-levels" ||
+    raw === "price_levels" ||
+    raw === "crypto-price" ||
+    raw === "crypto_price"
+  ) {
+    return "levels";
+  }
   return "prices";
 }
 
@@ -231,16 +254,18 @@ function viewLabel(view: DetailView) {
   if (view === "pa") return "Price action";
   if (view === "mom") return "Momentum";
   if (view === "cycles") return "Cycles";
+  if (view === "levels") return "Price levels";
   return "OHLCV candles";
 }
 
 function timeframesForView(view: DetailView): TimeframeOption[] {
-  return view === "cycles" ? CYCLE_TIMEFRAMES : TIMEFRAMES;
+  return view === "cycles" || view === "levels" ? CYCLE_TIMEFRAMES : TIMEFRAMES;
 }
 
 function ensureTimeframeForView(view: DetailView, minutes: number): number {
   const options = timeframesForView(view);
   if (options.some((tf) => tf.minutes === minutes)) return minutes;
+  if (view === "levels") return LEVELS_DEFAULT_TF;
   return options[0]?.minutes ?? 5;
 }
 
@@ -449,6 +474,21 @@ function toCycleRow(row: Record<string, unknown>): CycleRow | null {
     hover_at: asString(row.hover_at),
     last_close: asNumber(row.last_close),
     last_checked_at: asString(row.last_checked_at),
+  };
+}
+
+function toPriceLevelRow(row: Record<string, unknown>): PriceLevelRow | null {
+  const id = asString(row.id);
+  if (!id) return null;
+  return {
+    id,
+    price_1m: asNumber(row.price_1m),
+    price_level: asNumber(row.price_level),
+    distance_from_support: asNumber(row.distance_from_support),
+    distance_to_resistance: asNumber(row.distance_to_resistance),
+    signal: asString(row.signal),
+    updated_at: asString(row.updated_at),
+    created_at: asString(row.created_at),
   };
 }
 
@@ -711,6 +751,31 @@ async function loadCycles(
   return { rows, error: null };
 }
 
+async function loadPriceLevels(
+  supabase: SupabaseClient,
+  assetId: number,
+  timeframeMinutes: number,
+): Promise<{ rows: PriceLevelRow[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from("crypto_price")
+    .select(
+      "id, price_1m, price_level, distance_from_support, distance_to_resistance, signal, updated_at, created_at",
+    )
+    .eq("asset_id", assetId)
+    .eq("timeframe", timeframeMinutes)
+    .order("updated_at", { ascending: false })
+    .limit(DISPLAY_LIMIT);
+
+  if (error) {
+    return { rows: [], error: error.message };
+  }
+
+  const rows = ((data as Record<string, unknown>[] | null) ?? [])
+    .map(toPriceLevelRow)
+    .filter((row): row is PriceLevelRow => row !== null);
+  return { rows, error: null };
+}
+
 function renderAssets(
   assets: Array<
     CryptoAsset & {
@@ -736,6 +801,7 @@ function renderAssets(
       const paHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=pa`;
       const momHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=mom`;
       const cyclesHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=cycles&tf=5m`;
+      const levelsHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=levels&tf=4h`;
       return `
         <tr class="xa-crypto__asset-row" data-symbol="${escapeHtml(asset.symbol)}">
           <td>
@@ -753,6 +819,7 @@ function renderAssets(
               <a href="${paHref}">PA</a>
               <a href="${momHref}">Mom</a>
               <a href="${cyclesHref}">Cycles</a>
+              <a href="${levelsHref}">Levels</a>
             </div>
           </td>
         </tr>
@@ -984,6 +1051,37 @@ function renderCycles(rows: CycleRow[]) {
     .join("");
 }
 
+function renderPriceLevels(rows: PriceLevelRow[]) {
+  const tbody = document.getElementById("xa-crypto-levels-body");
+  if (!tbody) return;
+
+  if (rows.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="7" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (4h cron).</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows
+    .map(
+      (row) => `
+        <tr>
+          <td>${escapeHtml(formatDateTime(row.updated_at))}</td>
+          <td>${escapeHtml(formatPrice(row.price_1m))}</td>
+          <td>${escapeHtml(formatPrice(row.price_level))}</td>
+          <td>${renderPercentage(row.distance_from_support)}</td>
+          <td>${renderPercentage(row.distance_to_resistance)}</td>
+          <td>${
+            row.signal
+              ? escapeHtml(row.signal)
+              : '<span class="xa-muted">—</span>'
+          }</td>
+          <td><code class="xa-crypto__cycle-id" title="${escapeHtml(row.id)}">${escapeHtml(shortCycleId(row.id))}</code></td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
 function showListView() {
   document.getElementById("xa-crypto-list-view")?.removeAttribute("hidden");
   document.getElementById("xa-crypto-detail-view")?.setAttribute("hidden", "");
@@ -1001,12 +1099,14 @@ function showDetailPanels(view: DetailView) {
   const paPanel = document.getElementById("xa-crypto-pa-panel");
   const momPanel = document.getElementById("xa-crypto-mom-panel");
   const cyclesPanel = document.getElementById("xa-crypto-cycles-panel");
+  const levelsPanel = document.getElementById("xa-crypto-levels-panel");
   pricesPanel?.setAttribute("hidden", "");
   maPanel?.setAttribute("hidden", "");
   barsPanel?.setAttribute("hidden", "");
   paPanel?.setAttribute("hidden", "");
   momPanel?.setAttribute("hidden", "");
   cyclesPanel?.setAttribute("hidden", "");
+  levelsPanel?.setAttribute("hidden", "");
   if (view === "ma") {
     maPanel?.removeAttribute("hidden");
   } else if (view === "bars") {
@@ -1017,6 +1117,8 @@ function showDetailPanels(view: DetailView) {
     momPanel?.removeAttribute("hidden");
   } else if (view === "cycles") {
     cyclesPanel?.removeAttribute("hidden");
+  } else if (view === "levels") {
+    levelsPanel?.removeAttribute("hidden");
   } else {
     pricesPanel?.removeAttribute("hidden");
   }
@@ -1217,6 +1319,26 @@ async function init() {
       return;
     }
 
+    if (activeView === "levels") {
+      setDetailStatus(`Loading ${timeframeLabel(activeTimeframe)} price levels…`);
+      const result = await loadPriceLevels(supabase, selectedAsset.id, activeTimeframe);
+      detailLoading = false;
+
+      if (result.error) {
+        setDetailStatus(result.error, true);
+        renderPriceLevels([]);
+        if (detailSummaryEl) detailSummaryEl.textContent = "";
+        return;
+      }
+
+      renderPriceLevels(result.rows);
+      if (detailSummaryEl) {
+        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} live row${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} (1m price vs active S/R · crypto_price).`;
+      }
+      setDetailStatus(`Updated ${new Date().toLocaleTimeString()}.`);
+      return;
+    }
+
     setDetailStatus(`Loading ${timeframeLabel(activeTimeframe)} prices…`);
     const result = await loadCandlesForTimeframe(supabase, selectedAsset.id, activeTimeframe);
     detailLoading = false;
@@ -1248,6 +1370,7 @@ async function init() {
     renderPriceAction([]);
     renderMomentum([]);
     renderCycles([]);
+    renderPriceLevels([]);
     showDetailPanels(activeView);
     renderViewModeButtons(activeView);
 

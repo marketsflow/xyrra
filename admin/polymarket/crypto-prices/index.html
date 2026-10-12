@@ -63,12 +63,12 @@
                   <h1>Crypto Prices</h1>
                   <p class="xa-templates__lede">
                     Tokens from <code>crypto_assets</code>. Open a token to view OHLCV candles,
-                    moving averages, bar characteristics, price-action flags, momentum jumps, or
-                    support/resistance cycles
+                    moving averages, bar characteristics, price-action flags, momentum jumps,
+                    support/resistance cycles, or live price levels
                     (<code>crypto_prices</code> / <code>crypto_moving_averages</code> /
                     <code>crypto_bar_characteristics</code> /
                     <code>crypto_price_action</code> / <code>crypto_momentum</code> /
-                    <code>crypto_support_resistance</code>).
+                    <code>crypto_support_resistance</code> / <code>crypto_price</code>).
                   </p>
                 </div>
                 <div class="xa-polymarket__actions">
@@ -133,6 +133,7 @@
                 <button type="button" class="xa-crypto__tf" data-view="pa">Price action</button>
                 <button type="button" class="xa-crypto__tf" data-view="mom">Momentum</button>
                 <button type="button" class="xa-crypto__tf" data-view="cycles">Cycles</button>
+                <button type="button" class="xa-crypto__tf" data-view="levels">Price levels</button>
               </div>
 
               <div
@@ -283,6 +284,27 @@
                   <tbody id="xa-crypto-cycles-body">
                     <tr>
                       <td colspan="10" class="xa-users__empty">Loading…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div id="xa-crypto-levels-panel" class="xa-users__table-wrap" hidden>
+                <table class="xa-users__table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Updated (UTC)</th>
+                      <th scope="col">1m price</th>
+                      <th scope="col">Price level</th>
+                      <th scope="col">Dist. from support</th>
+                      <th scope="col">Dist. to resistance</th>
+                      <th scope="col">Signal</th>
+                      <th scope="col">Id</th>
+                    </tr>
+                  </thead>
+                  <tbody id="xa-crypto-levels-body">
+                    <tr>
+                      <td colspan="7" class="xa-users__empty">Loading…</td>
                     </tr>
                   </tbody>
                 </table>
