@@ -1,30 +1,32 @@
 /**
  * Vercel Cron + admin-triggered crypto_price inserts.
  *
- * Every minute: for each enabled asset and selected timeframe (default: 4h only),
- * read the latest 1m close + active support/resistance cycle, then insert a new
- * history row keyed by (asset_id, timeframe, bucket_start):
- *   - bucket_start           (1m candle start)
- *   - price_1m
- *   - distance_from_support  (% above support)
- *   - distance_to_resistance (% below resistance)
- *   - price_level            (reference price = price_1m for now)
- *   - ema                    (0–50: +10 per bullish TF among 5m/15m/1h/4h/1D)
- *   - signal                 (left null until signal logic is added)
+ * Analysis timeframe on each row is always 4h (S/R + stored timeframe=240).
+ * Source candle cadence (bucket_start / close) defaults to 4h crypto_prices;
+ * pass sourceTimeframe=1 (or ?source=1) for 1m buckets.
  *
- * EMA score uses only crypto_moving_averages.ema_9_20_factor (not ema_20_50)
- * for each of 5m / 15m / 1h / 4h / 1D: bullish (1) → 10, else → 0.
+ * Incremental (cron, default): latest *closed* 4h candle → upsert that bar only
+ * (does not invent per-minute rows).
+ * Backfill: walk source candles from crypto_prices (optional DAYS).
+ *
+ * EMA (0–50): +10 per bullish ema_9_20_factor among 5m/15m/1h/4h/1D.
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
 
-/** Default: 4h only. Expand later via ?timeframes=5,15,60,240,1440 */
-const DEFAULT_TIMEFRAMES = [240] as const;
-const ALLOWED_TIMEFRAMES = new Set([5, 15, 60, 240, 1440]);
-const TIMEFRAME_1M = 1;
+/** Persisted crypto_price.timeframe + S/R cycle timeframe. */
+const ANALYSIS_TIMEFRAME = 240;
+/** Default source candles from crypto_prices (override with sourceTimeframe=1). */
+const DEFAULT_SOURCE_TIMEFRAME = 240;
+const SOURCE_TIMEFRAME_1M = 1;
+const ALLOWED_SOURCE_TIMEFRAMES = new Set([SOURCE_TIMEFRAME_1M, ANALYSIS_TIMEFRAME]);
 /** Timeframes scored into crypto_price.ema (1m excluded). */
 const EMA_SCORE_TIMEFRAMES = [5, 15, 60, 240, 1440] as const;
 const EMA_BULLISH_POINTS = 10;
+const PAGE_SIZE = 1000;
+const UPSERT_CHUNK = 500;
+/** Default lookback when backfill=1 and days is omitted. */
+const DEFAULT_BACKFILL_DAYS = 7;
 
 export type ComputeCryptoPriceEnv = {
   SUPABASE_URL?: string;
@@ -34,8 +36,15 @@ export type ComputeCryptoPriceEnv = {
 };
 
 export type ComputeCryptoPriceOptions = {
-  /** Limit to these timeframes (minutes). Default: [240]. */
-  timeframes?: number[];
+  /** Walk source-candle history instead of latest bar only. */
+  backfill?: boolean;
+  /** Backfill lookback in days (omit / 0 = all available source history). */
+  days?: number;
+  /**
+   * crypto_prices timeframe used for bucket_start/close.
+   * Default 240 (4h). Set to 1 for per-minute rows.
+   */
+  sourceTimeframe?: number;
 };
 
 type AssetRow = { id: number; symbol: string };
@@ -43,6 +52,22 @@ type AssetRow = { id: number; symbol: string };
 type ActiveCycle = {
   support: number;
   resistance: number;
+};
+
+type SrCycleHist = ActiveCycle & {
+  started_at: string;
+  ended_at: string | null;
+  cycle_seq: number;
+};
+
+type MaPoint = {
+  timestamp: string;
+  factor: number | null;
+};
+
+type PriceCandle = {
+  bucket_start: string;
+  close: number;
 };
 
 type CryptoPriceRow = {
@@ -58,14 +83,12 @@ type CryptoPriceRow = {
   updated_at: string;
 };
 
-type Latest1mClose = {
-  bucket_start: string;
-  close: number;
-};
-
 type ComputeResult =
   | {
       success: true;
+      mode: "incremental" | "backfill";
+      sourceTimeframe: number;
+      analysisTimeframe: number;
       assets: number;
       rowsInserted: number;
       skippedNoPrice: number;
@@ -73,6 +96,24 @@ type ComputeResult =
       rows: CryptoPriceRow[];
     }
   | { success: false; message: string; status?: number };
+
+/** Parse 1 / 1m / 240 / 4h → source timeframe minutes. */
+export function parseSourceTimeframe(raw: string | null | undefined): number | null {
+  if (raw === null || raw === undefined) return null;
+  const s = String(raw).trim().toLowerCase();
+  if (!s) return null;
+  if (s === "1" || s === "1m" || s === "1min" || s === "minute") return SOURCE_TIMEFRAME_1M;
+  if (s === "240" || s === "4h" || s === "4hr" || s === "4hour") return ANALYSIS_TIMEFRAME;
+  const n = Number(s);
+  if (Number.isFinite(n) && ALLOWED_SOURCE_TIMEFRAMES.has(n)) return n;
+  return null;
+}
+
+function isCandleClosed(bucketStart: string, timeframeMinutes: number, nowMs = Date.now()): boolean {
+  const startMs = Date.parse(bucketStart);
+  if (!Number.isFinite(startMs)) return false;
+  return startMs + timeframeMinutes * 60_000 <= nowMs;
+}
 
 function jsonHeaders() {
   return { "Content-Type": "application/json" };
@@ -215,26 +256,35 @@ async function listEnabledAssets(
   return (await res.json()) as AssetRow[];
 }
 
-async function fetchLatest1mClose(
+async function fetchLatestSourceCandle(
   supabaseUrl: string,
   serviceKey: string,
   assetId: number,
-): Promise<Latest1mClose | null> {
+  sourceTimeframe: number,
+  options: { closedOnly?: boolean } = {},
+): Promise<PriceCandle | null> {
   const base = supabaseUrl.replace(/\/$/, "");
+  const limit = options.closedOnly ? 3 : 1;
   const res = await fetch(
-    `${base}/rest/v1/crypto_prices?select=bucket_start,close&asset_id=eq.${assetId}&timeframe=eq.${TIMEFRAME_1M}&order=bucket_start.desc&limit=1`,
+    `${base}/rest/v1/crypto_prices?select=bucket_start,close&asset_id=eq.${assetId}&timeframe=eq.${sourceTimeframe}&order=bucket_start.desc&limit=${limit}`,
     { headers: restHeaders(serviceKey) },
   );
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Failed to load latest 1m close: ${text.slice(0, 300)}`);
+    throw new Error(
+      `Failed to load latest crypto_prices tf=${sourceTimeframe}: ${text.slice(0, 300)}`,
+    );
   }
   const rows = (await res.json()) as Array<{ bucket_start?: unknown; close?: unknown }>;
-  const close = parseNumber(rows[0]?.close);
-  const bucketStart =
-    typeof rows[0]?.bucket_start === "string" ? rows[0].bucket_start : null;
-  if (close === null || !bucketStart) return null;
-  return { bucket_start: bucketStart, close };
+  for (const row of rows) {
+    const close = parseNumber(row.close);
+    const bucketStart =
+      typeof row.bucket_start === "string" ? row.bucket_start : null;
+    if (close === null || !bucketStart) continue;
+    if (options.closedOnly && !isCandleClosed(bucketStart, sourceTimeframe)) continue;
+    return { bucket_start: bucketStart, close };
+  }
+  return null;
 }
 
 async function fetchActiveCycle(
@@ -289,6 +339,228 @@ async function fetchLatestEmaFactorsByTimeframe(
   return new Map(results);
 }
 
+/** Ascending source candles from crypto_prices. */
+async function fetchSourceCandlesAsc(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+  sourceTimeframe: number,
+  fromIso: string | null,
+  options: { closedOnly?: boolean } = {},
+): Promise<PriceCandle[]> {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const candles: PriceCandle[] = [];
+  let offset = 0;
+  const fromFilter = fromIso
+    ? `&bucket_start=gte.${encodeURIComponent(fromIso)}`
+    : "";
+
+  while (true) {
+    const end = offset + PAGE_SIZE - 1;
+    const res = await fetch(
+      `${base}/rest/v1/crypto_prices?select=bucket_start,close&asset_id=eq.${assetId}&timeframe=eq.${sourceTimeframe}${fromFilter}&order=bucket_start.asc`,
+      {
+        headers: restHeaders(serviceKey, {
+          Prefer: "count=exact",
+          Range: `${offset}-${end}`,
+        }),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(
+        `Failed to load crypto_prices tf=${sourceTimeframe}: ${text.slice(0, 300)}`,
+      );
+    }
+    const page = (await res.json()) as Array<{ bucket_start?: unknown; close?: unknown }>;
+    for (const row of page) {
+      const close = parseNumber(row.close);
+      const bucketStart =
+        typeof row.bucket_start === "string" ? row.bucket_start : null;
+      if (close === null || !bucketStart) continue;
+      if (options.closedOnly && !isCandleClosed(bucketStart, sourceTimeframe)) continue;
+      candles.push({ bucket_start: bucketStart, close });
+    }
+    if (page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return candles;
+}
+
+async function fetchSrCyclesAsc(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+  timeframe: number,
+): Promise<SrCycleHist[]> {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const cycles: SrCycleHist[] = [];
+  let offset = 0;
+
+  while (true) {
+    const end = offset + PAGE_SIZE - 1;
+    const res = await fetch(
+      `${base}/rest/v1/crypto_support_resistance?select=support,resistance,started_at,ended_at,cycle_seq&asset_id=eq.${assetId}&timeframe=eq.${timeframe}&order=cycle_seq.asc`,
+      {
+        headers: restHeaders(serviceKey, {
+          Prefer: "count=exact",
+          Range: `${offset}-${end}`,
+        }),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(
+        `Failed to load crypto_support_resistance tf=${timeframe}: ${text.slice(0, 300)}`,
+      );
+    }
+    const page = (await res.json()) as Array<{
+      support?: unknown;
+      resistance?: unknown;
+      started_at?: unknown;
+      ended_at?: unknown;
+      cycle_seq?: unknown;
+    }>;
+    for (const row of page) {
+      const support = parseNumber(row.support);
+      const resistance = parseNumber(row.resistance);
+      const cycleSeq = parseNumber(row.cycle_seq);
+      const startedAt =
+        typeof row.started_at === "string" ? row.started_at : null;
+      if (support === null || resistance === null || cycleSeq === null || !startedAt) {
+        continue;
+      }
+      cycles.push({
+        support,
+        resistance,
+        started_at: startedAt,
+        ended_at: typeof row.ended_at === "string" ? row.ended_at : null,
+        cycle_seq: cycleSeq,
+      });
+    }
+    if (page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return cycles;
+}
+
+async function fetchMaSeriesAsc(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+  timeframe: number,
+  fromIso: string | null,
+): Promise<MaPoint[]> {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const points: MaPoint[] = [];
+
+  // Seed with the last factor before the window so early bars aren't scored as 0.
+  if (fromIso) {
+    const seedRes = await fetch(
+      `${base}/rest/v1/crypto_moving_averages?select=timestamp,ema_9_20_factor&asset_id=eq.${assetId}&timeframe=eq.${timeframe}&timestamp=lt.${encodeURIComponent(fromIso)}&order=timestamp.desc&limit=1`,
+      { headers: restHeaders(serviceKey) },
+    );
+    if (!seedRes.ok) {
+      const text = await seedRes.text();
+      throw new Error(
+        `Failed to seed crypto_moving_averages tf=${timeframe}: ${text.slice(0, 300)}`,
+      );
+    }
+    const seedRows = (await seedRes.json()) as Array<{
+      timestamp?: unknown;
+      ema_9_20_factor?: unknown;
+    }>;
+    const seedTs =
+      typeof seedRows[0]?.timestamp === "string" ? seedRows[0].timestamp : null;
+    if (seedTs) {
+      points.push({
+        timestamp: seedTs,
+        factor: parseNumber(seedRows[0]?.ema_9_20_factor),
+      });
+    }
+  }
+
+  let offset = 0;
+  const fromFilter = fromIso
+    ? `&timestamp=gte.${encodeURIComponent(fromIso)}`
+    : "";
+
+  while (true) {
+    const end = offset + PAGE_SIZE - 1;
+    const res = await fetch(
+      `${base}/rest/v1/crypto_moving_averages?select=timestamp,ema_9_20_factor&asset_id=eq.${assetId}&timeframe=eq.${timeframe}${fromFilter}&order=timestamp.asc`,
+      {
+        headers: restHeaders(serviceKey, {
+          Prefer: "count=exact",
+          Range: `${offset}-${end}`,
+        }),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(
+        `Failed to load crypto_moving_averages tf=${timeframe}: ${text.slice(0, 300)}`,
+      );
+    }
+    const page = (await res.json()) as Array<{
+      timestamp?: unknown;
+      ema_9_20_factor?: unknown;
+    }>;
+    for (const row of page) {
+      const ts = typeof row.timestamp === "string" ? row.timestamp : null;
+      if (!ts) continue;
+      points.push({ timestamp: ts, factor: parseNumber(row.ema_9_20_factor) });
+    }
+    if (page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return points;
+}
+
+/** Cycle open at minute T (includes the breach bar; prefers breached over brand-new). */
+export function cycleAtTime(cycles: SrCycleHist[], bucketStart: string): SrCycleHist | null {
+  const tMs = Date.parse(bucketStart);
+  if (!Number.isFinite(tMs)) return null;
+  let chosen: SrCycleHist | null = null;
+  for (const c of cycles) {
+    const startMs = Date.parse(c.started_at);
+    if (!Number.isFinite(startMs) || startMs > tMs) break;
+    const endMs = c.ended_at ? Date.parse(c.ended_at) : null;
+    if (endMs !== null && Number.isFinite(endMs) && endMs < tMs) continue;
+    if (
+      chosen &&
+      chosen.ended_at === bucketStart &&
+      c.started_at === bucketStart &&
+      c.ended_at !== bucketStart
+    ) {
+      continue;
+    }
+    chosen = c;
+  }
+  return chosen;
+}
+
+/** Advance pointer through ascending MA series; return factor as-of tMs. */
+function factorAsOf(
+  series: MaPoint[],
+  tMs: number,
+  state: { i: number },
+): number | null {
+  while (
+    state.i + 1 < series.length &&
+    Date.parse(series[state.i + 1]!.timestamp) <= tMs
+  ) {
+    state.i += 1;
+  }
+  if (state.i < 0 || state.i >= series.length) return null;
+  const point = series[state.i]!;
+  if (Date.parse(point.timestamp) > tMs) return null;
+  return point.factor;
+}
+
 async function insertCryptoPriceRows(
   supabaseUrl: string,
   serviceKey: string,
@@ -296,37 +568,41 @@ async function insertCryptoPriceRows(
 ): Promise<number> {
   if (rows.length === 0) return 0;
   const base = supabaseUrl.replace(/\/$/, "");
-  const res = await fetch(
-    `${base}/rest/v1/crypto_price?on_conflict=asset_id,timeframe,bucket_start`,
-    {
-      method: "POST",
-      headers: restHeaders(serviceKey, {
-        Prefer: "resolution=merge-duplicates,return=minimal",
-      }),
-      body: JSON.stringify(rows),
-    },
-  );
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to insert crypto_price: ${text.slice(0, 300)}`);
+  let inserted = 0;
+  for (let i = 0; i < rows.length; i += UPSERT_CHUNK) {
+    const chunk = rows.slice(i, i + UPSERT_CHUNK);
+    const res = await fetch(
+      `${base}/rest/v1/crypto_price?on_conflict=asset_id,timeframe,bucket_start`,
+      {
+        method: "POST",
+        headers: restHeaders(serviceKey, {
+          Prefer: "resolution=merge-duplicates,return=minimal",
+        }),
+        body: JSON.stringify(chunk),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to insert crypto_price: ${text.slice(0, 300)}`);
+    }
+    inserted += chunk.length;
   }
-  return rows.length;
+  return inserted;
 }
 
 function buildRow(
   assetId: number,
-  timeframe: number,
-  latest: Latest1mClose,
+  candle: PriceCandle,
   cycle: ActiveCycle,
   emaTotal: number,
   updatedAt: string,
 ): CryptoPriceRow {
-  const price = roundPrice(latest.close);
+  const price = roundPrice(candle.close);
   return {
     asset_id: assetId,
-    bucket_start: latest.bucket_start,
+    bucket_start: candle.bucket_start,
     price_1m: price,
-    timeframe,
+    timeframe: ANALYSIS_TIMEFRAME,
     distance_from_support: distanceFromSupportPct(price, cycle.support),
     distance_to_resistance: distanceToResistancePct(price, cycle.resistance),
     signal: null,
@@ -334,6 +610,70 @@ function buildRow(
     ema: emaTotal,
     updated_at: updatedAt,
   };
+}
+
+async function backfillAsset(
+  supabaseUrl: string,
+  serviceKey: string,
+  asset: AssetRow,
+  sourceTimeframe: number,
+  fromIso: string | null,
+  updatedAt: string,
+): Promise<{ rows: CryptoPriceRow[]; skippedNoCycle: number }> {
+  const candles = await fetchSourceCandlesAsc(
+    supabaseUrl,
+    serviceKey,
+    asset.id,
+    sourceTimeframe,
+    fromIso,
+    { closedOnly: true },
+  );
+  if (candles.length === 0) {
+    return { rows: [], skippedNoCycle: 0 };
+  }
+
+  const maSeries = new Map<number, MaPoint[]>();
+  for (const tf of EMA_SCORE_TIMEFRAMES) {
+    maSeries.set(
+      tf,
+      await fetchMaSeriesAsc(supabaseUrl, serviceKey, asset.id, tf, fromIso),
+    );
+  }
+
+  const cycles = await fetchSrCyclesAsc(
+    supabaseUrl,
+    serviceKey,
+    asset.id,
+    ANALYSIS_TIMEFRAME,
+  );
+
+  const maState = new Map<number, { i: number }>();
+  for (const tf of EMA_SCORE_TIMEFRAMES) {
+    maState.set(tf, { i: -1 });
+  }
+
+  const rows: CryptoPriceRow[] = [];
+  let skippedNoCycle = 0;
+
+  for (const candle of candles) {
+    const tMs = Date.parse(candle.bucket_start);
+    const factors = new Map<number, number | null>();
+    for (const tf of EMA_SCORE_TIMEFRAMES) {
+      factors.set(
+        tf,
+        factorAsOf(maSeries.get(tf) ?? [], tMs, maState.get(tf)!),
+      );
+    }
+    const emaTotal = computeEmaTotal(factors);
+    const cycle = cycleAtTime(cycles, candle.bucket_start);
+    if (!cycle) {
+      skippedNoCycle += 1;
+      continue;
+    }
+    rows.push(buildRow(asset.id, candle, cycle, emaTotal, updatedAt));
+  }
+
+  return { rows, skippedNoCycle };
 }
 
 /**
@@ -361,26 +701,80 @@ export async function computeCryptoPrice(
     };
   }
 
-  const timeframes = (options.timeframes?.length
-    ? options.timeframes
-    : [...DEFAULT_TIMEFRAMES]
-  ).filter((tf) => ALLOWED_TIMEFRAMES.has(tf));
-
-  if (timeframes.length === 0) {
-    return { success: false, message: "No valid timeframes selected.", status: 400 };
-  }
+  const sourceTimeframe = ALLOWED_SOURCE_TIMEFRAMES.has(options.sourceTimeframe ?? -1)
+    ? (options.sourceTimeframe as number)
+    : DEFAULT_SOURCE_TIMEFRAME;
+  const mode = options.backfill ? "backfill" : "incremental";
 
   try {
     const assets = await listEnabledAssets(supabaseUrl, serviceKey);
-    const rows: CryptoPriceRow[] = [];
+    const sampleRows: CryptoPriceRow[] = [];
+    let rowsInserted = 0;
     let skippedNoPrice = 0;
     let skippedNoCycle = 0;
     const updatedAt = new Date().toISOString();
 
+    if (mode === "backfill") {
+      const days =
+        options.days !== undefined && Number.isFinite(options.days)
+          ? options.days
+          : DEFAULT_BACKFILL_DAYS;
+      const fromIso =
+        days > 0
+          ? new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
+          : null;
+
+      for (const asset of assets) {
+        const result = await backfillAsset(
+          supabaseUrl,
+          serviceKey,
+          asset,
+          sourceTimeframe,
+          fromIso,
+          updatedAt,
+        );
+        if (result.rows.length === 0) {
+          skippedNoPrice += 1;
+          continue;
+        }
+        skippedNoCycle += result.skippedNoCycle;
+        rowsInserted += await insertCryptoPriceRows(
+          supabaseUrl,
+          serviceKey,
+          result.rows,
+        );
+        if (sampleRows.length < 20) {
+          sampleRows.push(...result.rows.slice(-5));
+        }
+      }
+
+      return {
+        success: true,
+        mode,
+        sourceTimeframe,
+        analysisTimeframe: ANALYSIS_TIMEFRAME,
+        assets: assets.length,
+        rowsInserted,
+        skippedNoPrice,
+        skippedNoCycle,
+        rows: sampleRows,
+      };
+    }
+
+    const rows: CryptoPriceRow[] = [];
+
     for (const asset of assets) {
-      const latest1m = await fetchLatest1mClose(supabaseUrl, serviceKey, asset.id);
-      if (latest1m === null) {
-        skippedNoPrice += timeframes.length;
+      // Default 4h: only the latest *closed* 4h bar (cron every minute won't
+      // create 1m rows). Opt-in source=1 uses closed 1m bars.
+      const latest = await fetchLatestSourceCandle(
+        supabaseUrl,
+        serviceKey,
+        asset.id,
+        sourceTimeframe,
+        { closedOnly: true },
+      );
+      if (latest === null) {
+        skippedNoPrice += 1;
         continue;
       }
 
@@ -391,25 +785,26 @@ export async function computeCryptoPrice(
       );
       const emaTotal = computeEmaTotal(emaFactors);
 
-      for (const timeframe of timeframes) {
-        const cycle = await fetchActiveCycle(
-          supabaseUrl,
-          serviceKey,
-          asset.id,
-          timeframe,
-        );
-        if (!cycle) {
-          skippedNoCycle += 1;
-          continue;
-        }
-        rows.push(buildRow(asset.id, timeframe, latest1m, cycle, emaTotal, updatedAt));
+      const cycle = await fetchActiveCycle(
+        supabaseUrl,
+        serviceKey,
+        asset.id,
+        ANALYSIS_TIMEFRAME,
+      );
+      if (!cycle) {
+        skippedNoCycle += 1;
+        continue;
       }
+      rows.push(buildRow(asset.id, latest, cycle, emaTotal, updatedAt));
     }
 
-    const rowsInserted = await insertCryptoPriceRows(supabaseUrl, serviceKey, rows);
+    rowsInserted = await insertCryptoPriceRows(supabaseUrl, serviceKey, rows);
 
     return {
       success: true,
+      mode,
+      sourceTimeframe,
+      analysisTimeframe: ANALYSIS_TIMEFRAME,
       assets: assets.length,
       rowsInserted,
       skippedNoPrice,
@@ -423,7 +818,7 @@ export async function computeCryptoPrice(
 }
 
 export const config = {
-  maxDuration: 60,
+  maxDuration: 300,
 };
 
 export default {
@@ -437,13 +832,20 @@ export default {
       }
 
       const url = new URL(request.url);
-      const timeframesParam = url.searchParams.get("timeframes") || url.searchParams.get("tf");
-      const timeframes = timeframesParam
-        ? timeframesParam
-            .split(",")
-            .map((s) => Number(s.trim()))
-            .filter((n) => Number.isFinite(n) && n > 0)
-        : undefined;
+      const backfill =
+        url.searchParams.get("backfill") === "1" ||
+        url.searchParams.get("backfill") === "true" ||
+        url.searchParams.get("mode") === "backfill";
+      const daysParam = url.searchParams.get("days");
+      const days =
+        daysParam !== null && daysParam !== ""
+          ? Number(daysParam)
+          : undefined;
+      const sourceTimeframe = parseSourceTimeframe(
+        url.searchParams.get("source") ||
+          url.searchParams.get("source_tf") ||
+          url.searchParams.get("cadence"),
+      );
 
       const env: ComputeCryptoPriceEnv = {
         SUPABASE_URL: process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL,
@@ -453,13 +855,18 @@ export default {
       };
 
       const result = await computeCryptoPrice(env, request.headers.get("authorization"), {
-        timeframes,
+        backfill,
+        ...(Number.isFinite(days) ? { days } : {}),
+        ...(sourceTimeframe !== null ? { sourceTimeframe } : {}),
       });
 
       if (result.success === true) {
         return Response.json(
           {
             success: true,
+            mode: result.mode,
+            sourceTimeframe: result.sourceTimeframe,
+            analysisTimeframe: result.analysisTimeframe,
             assets: result.assets,
             rowsInserted: result.rowsInserted,
             skippedNoPrice: result.skippedNoPrice,

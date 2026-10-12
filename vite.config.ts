@@ -393,14 +393,23 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
             return;
           }
           const reqUrl = new URL(req.url || "/", "http://localhost");
-          const timeframesParam =
-            reqUrl.searchParams.get("timeframes") || reqUrl.searchParams.get("tf");
-          const timeframes = timeframesParam
-            ? timeframesParam
-                .split(",")
-                .map((s) => Number(s.trim()))
-                .filter((n) => Number.isFinite(n) && n > 0)
-            : undefined;
+          const backfill =
+            reqUrl.searchParams.get("backfill") === "1" ||
+            reqUrl.searchParams.get("backfill") === "true" ||
+            reqUrl.searchParams.get("mode") === "backfill";
+          const daysParam = reqUrl.searchParams.get("days");
+          const days =
+            daysParam !== null && daysParam !== "" ? Number(daysParam) : undefined;
+          const sourceRaw =
+            reqUrl.searchParams.get("source") ||
+            reqUrl.searchParams.get("source_tf") ||
+            reqUrl.searchParams.get("cadence");
+          const sourceTimeframe =
+            sourceRaw === "1" || sourceRaw === "1m"
+              ? 1
+              : sourceRaw === "240" || sourceRaw === "4h"
+                ? 240
+                : undefined;
           const result = await computeCryptoPrice(
             {
               SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
@@ -409,11 +418,18 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
               CRON_SECRET: env.CRON_SECRET,
             },
             headerValue(req.headers.authorization),
-            { timeframes },
+            {
+              backfill,
+              ...(Number.isFinite(days) ? { days } : {}),
+              ...(sourceTimeframe !== undefined ? { sourceTimeframe } : {}),
+            },
           );
           if (result.success === true) {
             writeJson(res, 200, {
               success: true,
+              mode: result.mode,
+              sourceTimeframe: result.sourceTimeframe,
+              analysisTimeframe: result.analysisTimeframe,
               assets: result.assets,
               rowsInserted: result.rowsInserted,
               skippedNoPrice: result.skippedNoPrice,

@@ -1061,7 +1061,7 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
 
   if (rows.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="8" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (every minute).</td></tr>';
+      '<tr><td colspan="8" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (default: closed 4h candles).</td></tr>';
     return;
   }
 
@@ -1342,7 +1342,7 @@ async function init() {
 
       renderPriceLevels(result.rows);
       if (detailSummaryEl) {
-        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} row${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} (1m vs S/R · EMA = Σ ema_9_20 bullish ×10 over 5m/15m/1h/4h/1D · crypto_price).`;
+        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} row${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} (4h candles vs S/R · EMA = Σ ema_9_20 bullish ×10 over 5m/15m/1h/4h/1D · crypto_price).`;
       }
       setDetailStatus(`Updated ${new Date().toLocaleTimeString()}.`);
       return;
