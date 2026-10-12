@@ -2,16 +2,19 @@
  * Vercel Cron + admin-triggered crypto momentum anomaly scan.
  *
  * Scans crypto_prices.percentage for jump anomalies:
- *   - 1m: last 10 rows (candidate = 10th / newest)
- *   - 5m / 15m / 1h / 4h / 1D: last 5 rows (candidate = 5th / newest)
+ *   - 1m: last 10 closed rows (candidate = 10th / newest closed)
+ *   - 5m / 15m / 1h / 4h / 1D: last 5 closed rows (candidate = 5th / newest closed)
+ *
+ * Only fully closed candles are used (bucket_start + timeframe <= now). This
+ * avoids snapshotting an in-progress higher-TF bar whose % later changes.
  *
  * When the candidate bar's percentage jump is anomalous vs the prior bars in
  * that window, the signed percentage is written to the matching mom_* column
- * on crypto_momentum.
+ * on crypto_momentum (upsert refreshes % if the closed bar is scanned again).
  *
- * Default (cron / incremental): evaluate only the latest window per TF.
+ * Default (cron / incremental): evaluate only the latest closed window per TF.
  * Backfill (?backfill=1): slide through history, treating each window's
- * 10th (1m) or 5th (other) bar as the candidate.
+ * 10th (1m) or 5th (other) closed bar as the candidate.
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
@@ -198,6 +201,26 @@ function lookbackForTimeframe(timeframe: number): number {
 
 function roundMom(value: number): number {
   return Math.round(value * 10_000) / 10_000;
+}
+
+/** Candle is closed once wall-clock reaches bucket_start + timeframe. */
+export function isCandleClosed(
+  candle: Candle,
+  timeframeMinutes: number,
+  nowMs: number = Date.now(),
+): boolean {
+  const startMs = new Date(candle.bucket_start).getTime();
+  if (!Number.isFinite(startMs)) return false;
+  return startMs + timeframeMinutes * 60_000 <= nowMs;
+}
+
+/** Drop the currently forming bar (and any future-dated rows). */
+export function onlyClosedCandles(
+  candlesAsc: Candle[],
+  timeframeMinutes: number,
+  nowMs: number = Date.now(),
+): Candle[] {
+  return candlesAsc.filter((c) => isCandleClosed(c, timeframeMinutes, nowMs));
 }
 
 /**
@@ -524,11 +547,13 @@ async function computeForAsset(
     anomalyRatio: number;
   },
 ): Promise<{ rows: MomentumRow[]; anomaliesDetected: number }> {
+  const nowMs = Date.now();
   const scanParams = {
     lookback_1m: LOOKBACK_1M,
     lookback_other: LOOKBACK_OTHER,
     min_abs_pct: options.minAbsPct,
     anomaly_ratio: options.anomalyRatio,
+    closed_candles_only: true,
     mode: options.backfill ? "backfill" : "incremental",
   };
 
@@ -536,13 +561,15 @@ async function computeForAsset(
 
   for (const timeframe of options.timeframes) {
     const lookback = lookbackForTimeframe(timeframe);
-    const candles = await fetchCandlesAsc(
+    // Fetch one extra so dropping the still-open bar still leaves a full window.
+    const rawCandles = await fetchCandlesAsc(
       supabaseUrl,
       serviceKey,
       asset.id,
       timeframe,
-      options.backfill ? {} : { limit: lookback },
+      options.backfill ? {} : { limit: lookback + 1 },
     );
+    const candles = onlyClosedCandles(rawCandles, timeframe, nowMs);
     allHits.push(
       ...scanTimeframeAnomalies(candles, timeframe, {
         backfill: options.backfill,
