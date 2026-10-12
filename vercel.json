@@ -85,6 +85,10 @@
       "memory": 1024,
       "maxDuration": 300
     },
+    "api/compute-crypto-momentum.ts": {
+      "memory": 1024,
+      "maxDuration": 300
+    },
     "api/articles-page.ts": {
       "memory": 256,
       "maxDuration": 30
@@ -101,6 +105,10 @@
     },
     {
       "path": "/api/compute-crypto-ma",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/compute-crypto-momentum",
       "schedule": "* * * * *"
     }
   ]

@@ -12,6 +12,7 @@ import { fetchStockPrices } from "./api/stock-prices";
 import { ingestPolymarketTick } from "./api/ingest-polymarket";
 import { ingestCryptoPrices } from "./api/ingest-crypto";
 import { computeCryptoMovingAverages } from "./api/compute-crypto-ma";
+import { computeCryptoMomentum } from "./api/compute-crypto-momentum";
 import { articleSeoPlugin } from "./vite/article-seo-plugin";
 import { renderArticlesResponse } from "./api/articles-page";
 
@@ -276,6 +277,58 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
               priceRowsUpserted: result.priceRowsUpserted,
               characteristicRowsUpserted: result.characteristicRowsUpserted,
               priceActionRowsUpserted: result.priceActionRowsUpserted,
+              rows: result.rows,
+            });
+            return;
+          }
+          writeJson(res, result.status ?? 500, { success: false, message: result.message });
+          return;
+        }
+        if (path === "/api/compute-crypto-momentum") {
+          if (req.method !== "GET" && req.method !== "POST") {
+            writeJson(res, 405, { success: false, message: "Method not allowed" });
+            return;
+          }
+          const reqUrl = new URL(req.url || "/", "http://localhost");
+          const backfill =
+            reqUrl.searchParams.get("backfill") === "1" ||
+            reqUrl.searchParams.get("backfill") === "true" ||
+            reqUrl.searchParams.get("mode") === "backfill";
+          const timeframesParam =
+            reqUrl.searchParams.get("timeframes") || reqUrl.searchParams.get("tf");
+          const timeframes = timeframesParam
+            ? timeframesParam
+                .split(",")
+                .map((s) => Number(s.trim()))
+                .filter((n) => Number.isFinite(n) && n > 0)
+            : undefined;
+          const minAbsPctRaw = reqUrl.searchParams.get("min_abs_pct");
+          const anomalyRatioRaw = reqUrl.searchParams.get("anomaly_ratio");
+          const minAbsPct = minAbsPctRaw !== null ? Number(minAbsPctRaw) : undefined;
+          const anomalyRatio = anomalyRatioRaw !== null ? Number(anomalyRatioRaw) : undefined;
+          const result = await computeCryptoMomentum(
+            {
+              SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+              SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY,
+              SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+              CRON_SECRET: env.CRON_SECRET,
+            },
+            headerValue(req.headers.authorization),
+            {
+              backfill,
+              timeframes,
+              configId: reqUrl.searchParams.get("config_id") || undefined,
+              minAbsPct: Number.isFinite(minAbsPct) ? minAbsPct : undefined,
+              anomalyRatio: Number.isFinite(anomalyRatio) ? anomalyRatio : undefined,
+            },
+          );
+          if (result.success === true) {
+            writeJson(res, 200, {
+              success: true,
+              mode: result.mode,
+              assets: result.assets,
+              rowsUpserted: result.rowsUpserted,
+              anomaliesDetected: result.anomaliesDetected,
               rows: result.rows,
             });
             return;
