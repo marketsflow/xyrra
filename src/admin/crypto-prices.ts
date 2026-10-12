@@ -1342,7 +1342,7 @@ async function init() {
 
       renderPriceLevels(result.rows);
       if (detailSummaryEl) {
-        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} row${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} (1m vs S/R · EMA = Σ bullish higher-TFs ×10 · crypto_price).`;
+        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} row${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} (1m vs S/R · EMA = Σ ema_9_20 bullish ×10 over 5m/15m/1h/4h/1D · crypto_price).`;
       }
       setDetailStatus(`Updated ${new Date().toLocaleTimeString()}.`);
       return;

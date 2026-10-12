@@ -12,8 +12,8 @@
  *   - ema                    (0–50: +10 per bullish TF among 5m/15m/1h/4h/1D)
  *   - signal                 (left null until signal logic is added)
  *
- * EMA score uses latest crypto_moving_averages per TF (excl. 1m):
- *   bullish (ema_9_20_factor = 1) → 10, else → 0.
+ * EMA score uses only crypto_moving_averages.ema_9_20_factor (not ema_20_50)
+ * for each of 5m / 15m / 1h / 4h / 1D: bullish (1) → 10, else → 0.
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
@@ -125,8 +125,9 @@ export function isEmaBullish(ema920Factor: number | null): boolean {
 }
 
 /**
- * Sum EMA score across higher TFs: +10 per bullish, +0 for neutral/bearish/missing.
- * Caps naturally at 50 (5 timeframes × 10).
+ * Sum ema_9_20_factor score across the 5 higher TFs only:
+ * +10 per bullish (factor = 1), +0 for neutral/bearish/missing.
+ * Max 50 (5 × 10). Does not use ema_20_50_factor.
  */
 export function computeEmaTotal(
   factorByTimeframe: Map<number, number | null>,
@@ -260,7 +261,8 @@ async function fetchActiveCycle(
 
 /**
  * Latest ema_9_20_factor per higher timeframe from crypto_moving_averages.
- * Fetches recent rows (newest first) and keeps the first row seen per TF.
+ * One newest-row query per TF (not a shared recent window) so slower TFs
+ * like 4h/1D are not crowded out by frequent 5m/15m rows.
  */
 async function fetchLatestEmaFactorsByTimeframe(
   supabaseUrl: string,
@@ -268,26 +270,23 @@ async function fetchLatestEmaFactorsByTimeframe(
   assetId: number,
 ): Promise<Map<number, number | null>> {
   const base = supabaseUrl.replace(/\/$/, "");
-  const tfs = EMA_SCORE_TIMEFRAMES.join(",");
-  const res = await fetch(
-    `${base}/rest/v1/crypto_moving_averages?select=timeframe,ema_9_20_factor,timestamp&asset_id=eq.${assetId}&timeframe=in.(${tfs})&order=timestamp.desc&limit=${EMA_SCORE_TIMEFRAMES.length * 5}`,
-    { headers: restHeaders(serviceKey) },
+  const results = await Promise.all(
+    EMA_SCORE_TIMEFRAMES.map(async (tf) => {
+      const res = await fetch(
+        `${base}/rest/v1/crypto_moving_averages?select=ema_9_20_factor&asset_id=eq.${assetId}&timeframe=eq.${tf}&order=timestamp.desc&limit=1`,
+        { headers: restHeaders(serviceKey) },
+      );
+      if (!res.ok) {
+        const text = await res.text();
+        throw new Error(
+          `Failed to load crypto_moving_averages tf=${tf}: ${text.slice(0, 300)}`,
+        );
+      }
+      const rows = (await res.json()) as Array<{ ema_9_20_factor?: unknown }>;
+      return [tf, parseNumber(rows[0]?.ema_9_20_factor)] as const;
+    }),
   );
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`Failed to load crypto_moving_averages: ${text.slice(0, 300)}`);
-  }
-  const rows = (await res.json()) as Array<{
-    timeframe?: unknown;
-    ema_9_20_factor?: unknown;
-  }>;
-  const byTf = new Map<number, number | null>();
-  for (const row of rows) {
-    const tf = parseNumber(row.timeframe);
-    if (tf === null || byTf.has(tf)) continue;
-    byTf.set(tf, parseNumber(row.ema_9_20_factor));
-  }
-  return byTf;
+  return new Map(results);
 }
 
 async function insertCryptoPriceRows(
