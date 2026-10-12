@@ -1081,11 +1081,7 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
               ? '<span class="xa-muted">—</span>'
               : escapeHtml(String(row.ema))
           }</td>
-          <td>${
-            row.momentum === null
-              ? '<span class="xa-muted">—</span>'
-              : escapeHtml(String(row.momentum))
-          }</td>
+          <td>${renderPercentage(row.momentum)}</td>
           <td>${
             row.signal
               ? escapeHtml(row.signal)
@@ -1349,7 +1345,7 @@ async function init() {
 
       renderPriceLevels(result.rows);
       if (detailSummaryEl) {
-        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} row${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} (4h candles vs S/R · EMA = Σ ema_9_20 bullish ×10 over 5m/15m/1h/4h/1D · crypto_price).`;
+        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} row${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} (4h candles vs S/R · EMA + Momentum from crypto_momentum · crypto_price).`;
       }
       setDetailStatus(`Updated ${new Date().toLocaleTimeString()}.`);
       return;
