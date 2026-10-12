@@ -14,6 +14,7 @@ import { ingestCryptoPrices } from "./api/ingest-crypto";
 import { computeCryptoMovingAverages } from "./api/compute-crypto-ma";
 import { computeCryptoMomentum } from "./api/compute-crypto-momentum";
 import { computeCryptoSupportResistance } from "./api/compute-crypto-sr";
+import { computeCryptoPrice } from "./api/compute-crypto-price";
 import { articleSeoPlugin } from "./vite/article-seo-plugin";
 import { renderArticlesResponse } from "./api/articles-page";
 
@@ -379,6 +380,44 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
               cyclesOpened: result.cyclesOpened,
               cyclesBreached: result.cyclesBreached,
               hoversRecorded: result.hoversRecorded,
+              rows: result.rows,
+            });
+            return;
+          }
+          writeJson(res, result.status ?? 500, { success: false, message: result.message });
+          return;
+        }
+        if (path === "/api/compute-crypto-price") {
+          if (req.method !== "GET" && req.method !== "POST") {
+            writeJson(res, 405, { success: false, message: "Method not allowed" });
+            return;
+          }
+          const reqUrl = new URL(req.url || "/", "http://localhost");
+          const timeframesParam =
+            reqUrl.searchParams.get("timeframes") || reqUrl.searchParams.get("tf");
+          const timeframes = timeframesParam
+            ? timeframesParam
+                .split(",")
+                .map((s) => Number(s.trim()))
+                .filter((n) => Number.isFinite(n) && n > 0)
+            : undefined;
+          const result = await computeCryptoPrice(
+            {
+              SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+              SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY,
+              SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+              CRON_SECRET: env.CRON_SECRET,
+            },
+            headerValue(req.headers.authorization),
+            { timeframes },
+          );
+          if (result.success === true) {
+            writeJson(res, 200, {
+              success: true,
+              assets: result.assets,
+              rowsUpserted: result.rowsUpserted,
+              skippedNoPrice: result.skippedNoPrice,
+              skippedNoCycle: result.skippedNoCycle,
               rows: result.rows,
             });
             return;
