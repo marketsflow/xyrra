@@ -2,13 +2,21 @@
  * Vercel Cron + admin-triggered crypto support / resistance cycles.
  *
  * Per asset + timeframe (5m, 15m, 1h, 4h, 1D), using close prices only:
- *   - support    = min(close) over the last 30 closed bars
- *   - resistance = max(close) over the last 30 closed bars
+ *   - Initial support    = min(close) over the last 30 closed bars
+ *   - Initial resistance = max(close) over the last 30 closed bars
  *
  * Once a cycle is entered, closes within ±3% of either level are ignored for
  * rollover (recorded as hover). A close beyond that band on the outer side
  * breaches the cycle: the row is closed and a new cycle row is inserted with
- * a fresh id / cycle_seq and levels from the current 30-bar window.
+ * a fresh id / cycle_seq. Role reversal on breach:
+ *   - Resistance breached → that resistance becomes the new support;
+ *     new resistance = highest close in the current 30-bar window.
+ *   - Support breached → that support becomes the new resistance;
+ *     new support = lowest close in the current 30-bar window (pushed lower).
+ *
+ * For the first 3 days after a cycle's started_at, a higher close on the same
+ * cycle raises resistance in place (no new cycle). After that window, resistance
+ * is fixed until a true ±3% outer breach.
  *
  * Default (cron): evaluate the latest closed bar per TF against the active cycle.
  * Backfill (?backfill=1): walk closed history chronologically.
@@ -20,6 +28,8 @@ const TIMEFRAMES = [5, 15, 60, 240, 1440] as const;
 const LOOKBACK = 30;
 /** Ignore closes within this percent of a level for cycle rollover. */
 const DEFAULT_BAND_PCT = 3;
+/** Raise resistance on the same cycle for this long after started_at. */
+const RESISTANCE_UPDATE_MS = 3 * 24 * 60 * 60 * 1000;
 const PAGE_SIZE = 1000;
 const UPSERT_CHUNK = 200;
 
@@ -148,6 +158,52 @@ export function levelsFromWindow(windowAsc: Candle[]): {
   }
   if (!Number.isFinite(support) || !Number.isFinite(resistance)) return null;
   return { support: roundPrice(support), resistance: roundPrice(resistance) };
+}
+
+/**
+ * After a breach, flip the broken level and derive the opposite side from the
+ * current 30-bar window (resistance breach → support flip; support breach →
+ * resistance flip + support pushed to the window low).
+ */
+export function levelsAfterBreach(
+  side: HoverSide,
+  breached: { support: number; resistance: number },
+  windowLevels: { support: number; resistance: number },
+): { support: number; resistance: number } {
+  if (side === "resistance") {
+    const support = roundPrice(breached.resistance);
+    const resistance = roundPrice(Math.max(windowLevels.resistance, support));
+    return { support, resistance };
+  }
+  const resistance = roundPrice(breached.support);
+  const support = roundPrice(Math.min(windowLevels.support, resistance));
+  return { support, resistance };
+}
+
+/** True when `at` is on/after cycle start and within the 3-day resistance update window. */
+export function isWithinResistanceUpdateWindow(startedAt: string, at: string): boolean {
+  const startMs = new Date(startedAt).getTime();
+  const atMs = new Date(at).getTime();
+  if (!Number.isFinite(startMs) || !Number.isFinite(atMs)) return false;
+  const elapsed = atMs - startMs;
+  return elapsed >= 0 && elapsed <= RESISTANCE_UPDATE_MS;
+}
+
+/**
+ * Within 3 days of cycle start, ratchet resistance up to a higher close on the
+ * same row. Returns true when resistance changed.
+ */
+export function ratchetResistanceIfNeeded(
+  active: { started_at: string; support: number; resistance: number },
+  close: number,
+  at: string,
+): boolean {
+  if (!isWithinResistanceUpdateWindow(active.started_at, at)) return false;
+  if (!(close > active.resistance)) return false;
+  const next = roundPrice(close);
+  if (next < active.support) return false;
+  active.resistance = next;
+  return true;
 }
 
 export type LevelEvent =
@@ -542,6 +598,9 @@ export function processCandleSeries(
       continue;
     }
 
+    // First 3 days: raise resistance in place when close makes a new high.
+    ratchetResistanceIfNeeded(active, candle.close, candle.bucket_start);
+
     const event = classifyCloseAgainstLevels(
       candle.close,
       active.support,
@@ -565,7 +624,8 @@ export function processCandleSeries(
       continue;
     }
 
-    // Breach → close current cycle, open a new one from this window.
+    // Breach → close current cycle; open next with role-reversed levels.
+    const nextLevels = levelsAfterBreach(event.side, active, levels);
     active.status =
       event.side === "support" ? "breached_support" : "breached_resistance";
     active.ended_at = candle.bucket_start;
@@ -580,8 +640,8 @@ export function processCandleSeries(
       assetId,
       timeframe,
       cycleSeq: nextSeq,
-      support: levels.support,
-      resistance: levels.resistance,
+      support: nextLevels.support,
+      resistance: nextLevels.resistance,
       startedAt: candle.bucket_start,
       lastClose: candle.close,
     });

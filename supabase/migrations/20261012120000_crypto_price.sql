@@ -1,5 +1,5 @@
--- Live proximity / signal state per asset + timeframe.
--- Continuously upserted (one row per asset/timeframe).
+-- Minute-by-minute proximity / signal history per asset + timeframe.
+-- One new row per 1m bucket (cron inserts; idempotent on conflict).
 
 create table if not exists public.crypto_price (
   id uuid primary key default gen_random_uuid(),
@@ -7,6 +7,9 @@ create table if not exists public.crypto_price (
   asset_id bigint not null
     references public.crypto_assets (id)
     on delete cascade,
+
+  -- 1m candle this snapshot is aligned to
+  bucket_start timestamptz not null,
 
   -- Latest 1m close used as the reference price for distances / signal
   price_1m numeric(20, 8),
@@ -28,20 +31,23 @@ create table if not exists public.crypto_price (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
-  unique (asset_id, timeframe)
+  unique (asset_id, timeframe, bucket_start)
 );
 
 create index if not exists idx_crypto_price_lookup
-  on public.crypto_price (asset_id, timeframe);
+  on public.crypto_price (asset_id, timeframe, bucket_start desc);
 
 create index if not exists idx_crypto_price_updated
   on public.crypto_price (updated_at desc);
 
 comment on table public.crypto_price is
-  'Continuously updated support/resistance proximity and signal per asset/timeframe.';
+  'Minute-by-minute support/resistance proximity and signal history per asset/timeframe.';
+
+comment on column public.crypto_price.bucket_start is
+  '1-minute candle start this snapshot is aligned to.';
 
 comment on column public.crypto_price.price_1m is
-  'Latest 1-minute close for this asset.';
+  '1-minute close for bucket_start.';
 
 comment on column public.crypto_price.distance_from_support is
   'Distance of current price from active support (convention set by writer).';
@@ -50,7 +56,7 @@ comment on column public.crypto_price.distance_to_resistance is
   'Distance of current price to active resistance (convention set by writer).';
 
 comment on column public.crypto_price.signal is
-  'Current signal label for this asset/timeframe.';
+  'Signal label for this asset/timeframe at bucket_start.';
 
 comment on column public.crypto_price.price_level is
   'Price used when computing distances / signal.';

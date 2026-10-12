@@ -1,8 +1,10 @@
 /**
- * Vercel Cron + admin-triggered crypto_price upserts.
+ * Vercel Cron + admin-triggered crypto_price inserts.
  *
  * Every minute: for each enabled asset and selected timeframe (default: 4h only),
- * read the latest 1m close + active support/resistance cycle, then upsert:
+ * read the latest 1m close + active support/resistance cycle, then insert a new
+ * history row keyed by (asset_id, timeframe, bucket_start):
+ *   - bucket_start           (1m candle start)
  *   - price_1m
  *   - distance_from_support  (% above support)
  *   - distance_to_resistance (% below resistance)
@@ -38,6 +40,7 @@ type ActiveCycle = {
 
 type CryptoPriceRow = {
   asset_id: number;
+  bucket_start: string;
   price_1m: number;
   timeframe: number;
   distance_from_support: number | null;
@@ -47,11 +50,16 @@ type CryptoPriceRow = {
   updated_at: string;
 };
 
+type Latest1mClose = {
+  bucket_start: string;
+  close: number;
+};
+
 type ComputeResult =
   | {
       success: true;
       assets: number;
-      rowsUpserted: number;
+      rowsInserted: number;
       skippedNoPrice: number;
       skippedNoCycle: number;
       rows: CryptoPriceRow[];
@@ -181,18 +189,22 @@ async function fetchLatest1mClose(
   supabaseUrl: string,
   serviceKey: string,
   assetId: number,
-): Promise<number | null> {
+): Promise<Latest1mClose | null> {
   const base = supabaseUrl.replace(/\/$/, "");
   const res = await fetch(
-    `${base}/rest/v1/crypto_prices?select=close&asset_id=eq.${assetId}&timeframe=eq.${TIMEFRAME_1M}&order=bucket_start.desc&limit=1`,
+    `${base}/rest/v1/crypto_prices?select=bucket_start,close&asset_id=eq.${assetId}&timeframe=eq.${TIMEFRAME_1M}&order=bucket_start.desc&limit=1`,
     { headers: restHeaders(serviceKey) },
   );
   if (!res.ok) {
     const text = await res.text();
     throw new Error(`Failed to load latest 1m close: ${text.slice(0, 300)}`);
   }
-  const rows = (await res.json()) as Array<{ close?: unknown }>;
-  return parseNumber(rows[0]?.close);
+  const rows = (await res.json()) as Array<{ bucket_start?: unknown; close?: unknown }>;
+  const close = parseNumber(rows[0]?.close);
+  const bucketStart =
+    typeof rows[0]?.bucket_start === "string" ? rows[0].bucket_start : null;
+  if (close === null || !bucketStart) return null;
+  return { bucket_start: bucketStart, close };
 }
 
 async function fetchActiveCycle(
@@ -217,7 +229,7 @@ async function fetchActiveCycle(
   return { support, resistance };
 }
 
-async function upsertCryptoPriceRows(
+async function insertCryptoPriceRows(
   supabaseUrl: string,
   serviceKey: string,
   rows: CryptoPriceRow[],
@@ -225,7 +237,7 @@ async function upsertCryptoPriceRows(
   if (rows.length === 0) return 0;
   const base = supabaseUrl.replace(/\/$/, "");
   const res = await fetch(
-    `${base}/rest/v1/crypto_price?on_conflict=asset_id,timeframe`,
+    `${base}/rest/v1/crypto_price?on_conflict=asset_id,timeframe,bucket_start`,
     {
       method: "POST",
       headers: restHeaders(serviceKey, {
@@ -236,7 +248,7 @@ async function upsertCryptoPriceRows(
   );
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Failed to upsert crypto_price: ${text.slice(0, 300)}`);
+    throw new Error(`Failed to insert crypto_price: ${text.slice(0, 300)}`);
   }
   return rows.length;
 }
@@ -244,13 +256,14 @@ async function upsertCryptoPriceRows(
 function buildRow(
   assetId: number,
   timeframe: number,
-  price1m: number,
+  latest: Latest1mClose,
   cycle: ActiveCycle,
   updatedAt: string,
 ): CryptoPriceRow {
-  const price = roundPrice(price1m);
+  const price = roundPrice(latest.close);
   return {
     asset_id: assetId,
+    bucket_start: latest.bucket_start,
     price_1m: price,
     timeframe,
     distance_from_support: distanceFromSupportPct(price, cycle.support),
@@ -303,8 +316,8 @@ export async function computeCryptoPrice(
     const updatedAt = new Date().toISOString();
 
     for (const asset of assets) {
-      const price1m = await fetchLatest1mClose(supabaseUrl, serviceKey, asset.id);
-      if (price1m === null) {
+      const latest1m = await fetchLatest1mClose(supabaseUrl, serviceKey, asset.id);
+      if (latest1m === null) {
         skippedNoPrice += timeframes.length;
         continue;
       }
@@ -320,16 +333,16 @@ export async function computeCryptoPrice(
           skippedNoCycle += 1;
           continue;
         }
-        rows.push(buildRow(asset.id, timeframe, price1m, cycle, updatedAt));
+        rows.push(buildRow(asset.id, timeframe, latest1m, cycle, updatedAt));
       }
     }
 
-    const rowsUpserted = await upsertCryptoPriceRows(supabaseUrl, serviceKey, rows);
+    const rowsInserted = await insertCryptoPriceRows(supabaseUrl, serviceKey, rows);
 
     return {
       success: true,
       assets: assets.length,
-      rowsUpserted,
+      rowsInserted,
       skippedNoPrice,
       skippedNoCycle,
       rows,
@@ -379,7 +392,7 @@ export default {
           {
             success: true,
             assets: result.assets,
-            rowsUpserted: result.rowsUpserted,
+            rowsInserted: result.rowsInserted,
             skippedNoPrice: result.skippedNoPrice,
             skippedNoCycle: result.skippedNoCycle,
             rows: result.rows,

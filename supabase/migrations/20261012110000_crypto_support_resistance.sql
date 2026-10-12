@@ -1,6 +1,8 @@
 -- Support / resistance cycles per asset + timeframe (5m, 15m, 1h, 4h, 1D).
--- Levels = min/max close over a 30-bar window. One active cycle per asset/TF;
--- a close beyond ±3% of a level ends the cycle and opens a new historical row.
+-- Initial levels = min/max close over a 30-bar window. One active cycle per asset/TF;
+-- a close beyond ±3% of a level ends the cycle and opens a new historical row with
+-- role reversal (breached resistance → new support; breached support → new resistance,
+-- support pushed to the window low).
 --
 -- Drop any prior draft shape (timestamp PK without cycle columns) before create.
 
@@ -65,16 +67,16 @@ create index idx_crypto_support_resistance_started
   on public.crypto_support_resistance (asset_id, timeframe, started_at desc);
 
 comment on table public.crypto_support_resistance is
-  'Historical support/resistance cycles. id is the cycle id per asset/timeframe; new row on breach.';
+  'Historical support/resistance cycles. id is the cycle id per asset/timeframe; new row on breach with role-reversed levels.';
 
 comment on column public.crypto_support_resistance.id is
   'Cycle id — refer to this when joining other tables to a timeframe level cycle.';
 
 comment on column public.crypto_support_resistance.support is
-  'Lowest close in the 30-bar window at cycle open.';
+  'Support at cycle open: window low on first cycle / after support breach, or prior resistance after resistance breach.';
 
 comment on column public.crypto_support_resistance.resistance is
-  'Highest close in the 30-bar window at cycle open.';
+  'Resistance at cycle open: window high on first cycle / after resistance breach, or prior support after support breach.';
 
 comment on column public.crypto_support_resistance.hover_side is
   'Most recent level the close was within ±3% of (does not open a new cycle).';

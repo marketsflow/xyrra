@@ -415,7 +415,7 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
             writeJson(res, 200, {
               success: true,
               assets: result.assets,
-              rowsUpserted: result.rowsUpserted,
+              rowsInserted: result.rowsInserted,
               skippedNoPrice: result.skippedNoPrice,
               skippedNoCycle: result.skippedNoCycle,
               rows: result.rows,

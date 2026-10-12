@@ -2,8 +2,11 @@
  * One-shot backfill: crypto_support_resistance cycles.
  *
  * For each asset + timeframe (5m, 15m, 1h, 4h, 1D), walks all closed candles
- * chronologically. Levels = min/max close over a 30-bar window. A close beyond
- * ±3% of a level ends the cycle and opens a new historical row.
+ * chronologically. Initial levels = min/max close over a 30-bar window. For the
+ * first 3 days after cycle start, a higher close raises resistance on the same
+ * row. A close beyond ±3% of a level ends the cycle and opens a new row with
+ * role reversal (breached resistance → new support; breached support → new
+ * resistance, support pushed to the window low).
  *
  * Clears existing cycles for each asset/TF before rebuilding.
  *

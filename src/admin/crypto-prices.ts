@@ -98,6 +98,7 @@ type CycleRow = {
 
 type PriceLevelRow = {
   id: string;
+  bucket_start: string | null;
   price_1m: number | null;
   price_level: number | null;
   distance_from_support: number | null;
@@ -137,7 +138,7 @@ const TIMEFRAMES: TimeframeOption[] = [
 
 /** Support/resistance cycles + price levels are computed for 5m+ only (no 1m). */
 const CYCLE_TIMEFRAMES = TIMEFRAMES.filter((tf) => tf.minutes !== 1);
-/** Default TF for the live price-levels view (matches compute-crypto-price cron). */
+/** Default TF for the price-levels history view (matches compute-crypto-price cron). */
 const LEVELS_DEFAULT_TF = 240;
 
 const DISPLAY_LIMIT = 200;
@@ -482,6 +483,7 @@ function toPriceLevelRow(row: Record<string, unknown>): PriceLevelRow | null {
   if (!id) return null;
   return {
     id,
+    bucket_start: asString(row.bucket_start),
     price_1m: asNumber(row.price_1m),
     price_level: asNumber(row.price_level),
     distance_from_support: asNumber(row.distance_from_support),
@@ -759,11 +761,11 @@ async function loadPriceLevels(
   const { data, error } = await supabase
     .from("crypto_price")
     .select(
-      "id, price_1m, price_level, distance_from_support, distance_to_resistance, signal, updated_at, created_at",
+      "id, bucket_start, price_1m, price_level, distance_from_support, distance_to_resistance, signal, updated_at, created_at",
     )
     .eq("asset_id", assetId)
     .eq("timeframe", timeframeMinutes)
-    .order("updated_at", { ascending: false })
+    .order("bucket_start", { ascending: false })
     .limit(DISPLAY_LIMIT);
 
   if (error) {
@@ -1057,7 +1059,7 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
 
   if (rows.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="7" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (4h cron).</td></tr>';
+      '<tr><td colspan="7" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (every minute).</td></tr>';
     return;
   }
 
@@ -1065,7 +1067,7 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
     .map(
       (row) => `
         <tr>
-          <td>${escapeHtml(formatDateTime(row.updated_at))}</td>
+          <td>${escapeHtml(formatDateTime(row.bucket_start ?? row.updated_at))}</td>
           <td>${escapeHtml(formatPrice(row.price_1m))}</td>
           <td>${escapeHtml(formatPrice(row.price_level))}</td>
           <td>${renderPercentage(row.distance_from_support)}</td>
@@ -1313,7 +1315,7 @@ async function init() {
       renderCycles(result.rows);
       const activeCount = result.rows.filter((r) => r.status === "active").length;
       if (detailSummaryEl) {
-        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} cycle${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} · ${activeCount} active (30-bar close min/max, ±3% band).`;
+        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} cycle${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} · ${activeCount} active (role reversal on breach, ±3% band).`;
       }
       setDetailStatus(`Updated ${new Date().toLocaleTimeString()}.`);
       return;
@@ -1333,7 +1335,7 @@ async function init() {
 
       renderPriceLevels(result.rows);
       if (detailSummaryEl) {
-        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} live row${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} (1m price vs active S/R · crypto_price).`;
+        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} row${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} (1m snapshots vs active S/R · crypto_price).`;
       }
       setDetailStatus(`Updated ${new Date().toLocaleTimeString()}.`);
       return;
