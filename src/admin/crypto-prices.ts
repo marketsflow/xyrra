@@ -65,12 +65,36 @@ type PriceActionRow = {
   is_high_volume: boolean;
 };
 
+type MomentumRow = {
+  timestamp: string;
+  mom_1m: number | null;
+  mom_5m: number | null;
+  mom_15m: number | null;
+  mom_1h: number | null;
+  mom_4h: number | null;
+  mom_1d: number | null;
+  timeframe_confluence_score: number | null;
+  dominant_timeframe: string | null;
+};
+
 type TimeframeOption = {
   label: string;
   minutes: number;
 };
 
-type DetailView = "prices" | "ma" | "bars" | "pa";
+type DetailView = "prices" | "ma" | "bars" | "pa" | "mom";
+
+const MOM_COLUMN_BY_TF: Record<number, keyof Pick<
+  MomentumRow,
+  "mom_1m" | "mom_5m" | "mom_15m" | "mom_1h" | "mom_4h" | "mom_1d"
+>> = {
+  1: "mom_1m",
+  5: "mom_5m",
+  15: "mom_15m",
+  60: "mom_1h",
+  240: "mom_4h",
+  1440: "mom_1d",
+};
 
 const TIMEFRAMES: TimeframeOption[] = [
   { label: "1m", minutes: 1 },
@@ -166,6 +190,7 @@ function parseView(raw: string | null): DetailView {
   ) {
     return "pa";
   }
+  if (raw === "mom" || raw === "momentum" || raw === "crypto-momentum") return "mom";
   return "prices";
 }
 
@@ -173,6 +198,7 @@ function viewLabel(view: DetailView) {
   if (view === "ma") return "Moving averages";
   if (view === "bars") return "Bar characteristics";
   if (view === "pa") return "Price action";
+  if (view === "mom") return "Momentum";
   return "OHLCV candles";
 }
 
@@ -327,6 +353,22 @@ function toPriceActionRow(row: Record<string, unknown>): PriceActionRow | null {
     is_rejection: asBool(row.is_rejection),
     rejection_direction: asNumber(row.rejection_direction),
     is_high_volume: asBool(row.is_high_volume),
+  };
+}
+
+function toMomentumRow(row: Record<string, unknown>): MomentumRow | null {
+  const timestamp = asString(row.timestamp);
+  if (!timestamp) return null;
+  return {
+    timestamp,
+    mom_1m: asNumber(row.mom_1m),
+    mom_5m: asNumber(row.mom_5m),
+    mom_15m: asNumber(row.mom_15m),
+    mom_1h: asNumber(row.mom_1h),
+    mom_4h: asNumber(row.mom_4h),
+    mom_1d: asNumber(row.mom_1d),
+    timeframe_confluence_score: asNumber(row.timeframe_confluence_score),
+    dominant_timeframe: asString(row.dominant_timeframe),
   };
 }
 
@@ -522,6 +564,32 @@ async function loadPriceAction(
   return { rows, error: null };
 }
 
+async function loadMomentum(
+  supabase: SupabaseClient,
+  symbol: string,
+  timeframeMinutes: number,
+): Promise<{ rows: MomentumRow[]; error: string | null }> {
+  const momColumn = MOM_COLUMN_BY_TF[timeframeMinutes] ?? "mom_1m";
+  const { data, error } = await supabase
+    .from("crypto_momentum")
+    .select(
+      "timestamp, mom_1m, mom_5m, mom_15m, mom_1h, mom_4h, mom_1d, timeframe_confluence_score, dominant_timeframe",
+    )
+    .eq("asset_symbol", symbol)
+    .not(momColumn, "is", null)
+    .order("timestamp", { ascending: false })
+    .limit(DISPLAY_LIMIT);
+
+  if (error) {
+    return { rows: [], error: error.message };
+  }
+
+  const rows = ((data as Record<string, unknown>[] | null) ?? [])
+    .map(toMomentumRow)
+    .filter((row): row is MomentumRow => row !== null);
+  return { rows, error: null };
+}
+
 function renderAssets(
   assets: Array<
     CryptoAsset & {
@@ -545,6 +613,7 @@ function renderAssets(
       const maHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=ma`;
       const barsHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=bars`;
       const paHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=pa`;
+      const momHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=mom`;
       return `
         <tr class="xa-crypto__asset-row" data-symbol="${escapeHtml(asset.symbol)}">
           <td>
@@ -560,6 +629,7 @@ function renderAssets(
               <a href="${maHref}">MA</a>
               <a href="${barsHref}">Bars</a>
               <a href="${paHref}">PA</a>
+              <a href="${momHref}">Mom</a>
             </div>
           </td>
         </tr>
@@ -718,6 +788,35 @@ function renderPriceAction(rows: PriceActionRow[]) {
     .join("");
 }
 
+function renderMomentum(rows: MomentumRow[]) {
+  const tbody = document.getElementById("xa-crypto-mom-body");
+  if (!tbody) return;
+
+  if (rows.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="9" class="xa-users__empty">No momentum anomalies for this timeframe yet.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows
+    .map(
+      (row) => `
+        <tr>
+          <td>${escapeHtml(formatDateTime(row.timestamp))}</td>
+          <td>${renderPercentage(row.mom_1m)}</td>
+          <td>${renderPercentage(row.mom_5m)}</td>
+          <td>${renderPercentage(row.mom_15m)}</td>
+          <td>${renderPercentage(row.mom_1h)}</td>
+          <td>${renderPercentage(row.mom_4h)}</td>
+          <td>${renderPercentage(row.mom_1d)}</td>
+          <td>${escapeHtml(formatRatio(row.timeframe_confluence_score, 4))}</td>
+          <td>${row.dominant_timeframe ? escapeHtml(row.dominant_timeframe) : '<span class="xa-muted">—</span>'}</td>
+        </tr>
+      `,
+    )
+    .join("");
+}
+
 function showListView() {
   document.getElementById("xa-crypto-list-view")?.removeAttribute("hidden");
   document.getElementById("xa-crypto-detail-view")?.setAttribute("hidden", "");
@@ -733,16 +832,20 @@ function showDetailPanels(view: DetailView) {
   const maPanel = document.getElementById("xa-crypto-ma-panel");
   const barsPanel = document.getElementById("xa-crypto-bars-panel");
   const paPanel = document.getElementById("xa-crypto-pa-panel");
+  const momPanel = document.getElementById("xa-crypto-mom-panel");
   pricesPanel?.setAttribute("hidden", "");
   maPanel?.setAttribute("hidden", "");
   barsPanel?.setAttribute("hidden", "");
   paPanel?.setAttribute("hidden", "");
+  momPanel?.setAttribute("hidden", "");
   if (view === "ma") {
     maPanel?.removeAttribute("hidden");
   } else if (view === "bars") {
     barsPanel?.removeAttribute("hidden");
   } else if (view === "pa") {
     paPanel?.removeAttribute("hidden");
+  } else if (view === "mom") {
+    momPanel?.removeAttribute("hidden");
   } else {
     pricesPanel?.removeAttribute("hidden");
   }
@@ -819,7 +922,7 @@ async function init() {
 
     listLoading = false;
     if (summaryEl) {
-      summaryEl.textContent = `${withLast.length.toLocaleString()} token${withLast.length === 1 ? "" : "s"}. Open Prices, MA, Bars, or PA for a symbol.`;
+      summaryEl.textContent = `${withLast.length.toLocaleString()} token${withLast.length === 1 ? "" : "s"}. Open Prices, MA, Bars, PA, or Mom for a symbol.`;
     }
     renderAssets(withLast);
     setListStatus(`Updated ${new Date().toLocaleTimeString()}.`);
@@ -901,6 +1004,26 @@ async function init() {
       return;
     }
 
+    if (activeView === "mom") {
+      setDetailStatus(`Loading ${timeframeLabel(activeTimeframe)} momentum…`);
+      const result = await loadMomentum(supabase, selectedAsset.symbol, activeTimeframe);
+      detailLoading = false;
+
+      if (result.error) {
+        setDetailStatus(result.error, true);
+        renderMomentum([]);
+        if (detailSummaryEl) detailSummaryEl.textContent = "";
+        return;
+      }
+
+      renderMomentum(result.rows);
+      if (detailSummaryEl) {
+        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} anomal${result.rows.length === 1 ? "y" : "ies"} · ${timeframeLabel(activeTimeframe)} jump% in mom_* (rows with that TF set).`;
+      }
+      setDetailStatus(`Updated ${new Date().toLocaleTimeString()}.`);
+      return;
+    }
+
     setDetailStatus(`Loading ${timeframeLabel(activeTimeframe)} prices…`);
     const result = await loadCandlesForTimeframe(supabase, selectedAsset.id, activeTimeframe);
     detailLoading = false;
@@ -930,6 +1053,7 @@ async function init() {
     renderMovingAverages([]);
     renderBarCharacteristics([]);
     renderPriceAction([]);
+    renderMomentum([]);
     showDetailPanels(activeView);
     renderViewModeButtons(activeView);
 

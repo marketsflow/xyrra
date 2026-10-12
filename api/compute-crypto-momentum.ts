@@ -432,20 +432,22 @@ async function fetchCandlesAsc(
   return attachPercentages(candles);
 }
 
-/** Omit null mom_* so merge-duplicates does not wipe columns filled by another TF. */
+/** PostgREST requires every object in a batch to share the same keys. */
 function toUpsertPayload(row: MomentumRow): Record<string, unknown> {
-  const payload: Record<string, unknown> = {
+  return {
     asset_symbol: row.asset_symbol,
     timestamp: row.timestamp,
     config_id: row.config_id,
+    mom_1m: row.mom_1m,
+    mom_5m: row.mom_5m,
+    mom_15m: row.mom_15m,
+    mom_1h: row.mom_1h,
+    mom_4h: row.mom_4h,
+    mom_1d: row.mom_1d,
     timeframe_confluence_score: row.timeframe_confluence_score,
     dominant_timeframe: row.dominant_timeframe,
     custom_params: row.custom_params,
   };
-  for (const col of Object.values(MOM_COLUMN_BY_TF)) {
-    if (row[col] !== null) payload[col] = row[col];
-  }
-  return payload;
 }
 
 async function upsertMomentumRows(

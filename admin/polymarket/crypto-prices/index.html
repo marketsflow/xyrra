@@ -63,10 +63,10 @@
                   <h1>Crypto Prices</h1>
                   <p class="xa-templates__lede">
                     Tokens from <code>crypto_assets</code>. Open a token to view OHLCV candles,
-                    moving averages, bar characteristics, or price-action flags
+                    moving averages, bar characteristics, price-action flags, or momentum jumps
                     (<code>crypto_prices</code> / <code>crypto_moving_averages</code> /
                     <code>crypto_bar_characteristics</code> /
-                    <code>crypto_price_action</code>).
+                    <code>crypto_price_action</code> / <code>crypto_momentum</code>).
                   </p>
                 </div>
                 <div class="xa-polymarket__actions">
@@ -129,6 +129,7 @@
                 <button type="button" class="xa-crypto__tf" data-view="ma">Moving averages</button>
                 <button type="button" class="xa-crypto__tf" data-view="bars">Characteristics</button>
                 <button type="button" class="xa-crypto__tf" data-view="pa">Price action</button>
+                <button type="button" class="xa-crypto__tf" data-view="mom">Momentum</button>
               </div>
 
               <div
@@ -232,6 +233,29 @@
                   <tbody id="xa-crypto-pa-body">
                     <tr>
                       <td colspan="13" class="xa-users__empty">Loading…</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div id="xa-crypto-mom-panel" class="xa-users__table-wrap" hidden>
+                <table class="xa-users__table">
+                  <thead>
+                    <tr>
+                      <th scope="col">Timestamp (UTC)</th>
+                      <th scope="col">1m %</th>
+                      <th scope="col">5m %</th>
+                      <th scope="col">15m %</th>
+                      <th scope="col">1h %</th>
+                      <th scope="col">4h %</th>
+                      <th scope="col">1D %</th>
+                      <th scope="col">Confluence</th>
+                      <th scope="col">Dominant</th>
+                    </tr>
+                  </thead>
+                  <tbody id="xa-crypto-mom-body">
+                    <tr>
+                      <td colspan="9" class="xa-users__empty">Loading…</td>
                     </tr>
                   </tbody>
                 </table>
