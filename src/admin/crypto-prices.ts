@@ -77,12 +77,31 @@ type MomentumRow = {
   dominant_timeframe: string | null;
 };
 
+type CycleStatus = "active" | "breached_support" | "breached_resistance";
+type HoverSide = "support" | "resistance";
+
+type CycleRow = {
+  id: string;
+  cycle_seq: number;
+  support: number;
+  resistance: number;
+  started_at: string;
+  ended_at: string | null;
+  status: CycleStatus;
+  breach_close: number | null;
+  breach_at: string | null;
+  hover_side: HoverSide | null;
+  hover_at: string | null;
+  last_close: number | null;
+  last_checked_at: string | null;
+};
+
 type TimeframeOption = {
   label: string;
   minutes: number;
 };
 
-type DetailView = "prices" | "ma" | "bars" | "pa" | "mom";
+type DetailView = "prices" | "ma" | "bars" | "pa" | "mom" | "cycles";
 
 const MOM_COLUMN_BY_TF: Record<number, keyof Pick<
   MomentumRow,
@@ -104,6 +123,9 @@ const TIMEFRAMES: TimeframeOption[] = [
   { label: "4h", minutes: 240 },
   { label: "1D", minutes: 1440 },
 ];
+
+/** Support/resistance cycles are computed for 5m+ only (no 1m). */
+const CYCLE_TIMEFRAMES = TIMEFRAMES.filter((tf) => tf.minutes !== 1);
 
 const DISPLAY_LIMIT = 200;
 const ONE_M_PAGE = 1000;
@@ -191,6 +213,15 @@ function parseView(raw: string | null): DetailView {
     return "pa";
   }
   if (raw === "mom" || raw === "momentum" || raw === "crypto-momentum") return "mom";
+  if (
+    raw === "cycles" ||
+    raw === "cycle" ||
+    raw === "sr" ||
+    raw === "support-resistance" ||
+    raw === "support_resistance"
+  ) {
+    return "cycles";
+  }
   return "prices";
 }
 
@@ -199,7 +230,18 @@ function viewLabel(view: DetailView) {
   if (view === "bars") return "Bar characteristics";
   if (view === "pa") return "Price action";
   if (view === "mom") return "Momentum";
+  if (view === "cycles") return "Cycles";
   return "OHLCV candles";
+}
+
+function timeframesForView(view: DetailView): TimeframeOption[] {
+  return view === "cycles" ? CYCLE_TIMEFRAMES : TIMEFRAMES;
+}
+
+function ensureTimeframeForView(view: DetailView, minutes: number): number {
+  const options = timeframesForView(view);
+  if (options.some((tf) => tf.minutes === minutes)) return minutes;
+  return options[0]?.minutes ?? 5;
 }
 
 function asBool(value: unknown): boolean {
@@ -370,6 +412,60 @@ function toMomentumRow(row: Record<string, unknown>): MomentumRow | null {
     timeframe_confluence_score: asNumber(row.timeframe_confluence_score),
     dominant_timeframe: asString(row.dominant_timeframe),
   };
+}
+
+function toCycleRow(row: Record<string, unknown>): CycleRow | null {
+  const id = asString(row.id);
+  const cycleSeq = asNumber(row.cycle_seq);
+  const support = asNumber(row.support);
+  const resistance = asNumber(row.resistance);
+  const startedAt = asString(row.started_at);
+  const status = asString(row.status);
+  if (
+    !id ||
+    cycleSeq === null ||
+    support === null ||
+    resistance === null ||
+    !startedAt ||
+    (status !== "active" &&
+      status !== "breached_support" &&
+      status !== "breached_resistance")
+  ) {
+    return null;
+  }
+  const hoverSide = asString(row.hover_side);
+  return {
+    id,
+    cycle_seq: cycleSeq,
+    support,
+    resistance,
+    started_at: startedAt,
+    ended_at: asString(row.ended_at),
+    status,
+    breach_close: asNumber(row.breach_close),
+    breach_at: asString(row.breach_at),
+    hover_side:
+      hoverSide === "support" || hoverSide === "resistance" ? hoverSide : null,
+    hover_at: asString(row.hover_at),
+    last_close: asNumber(row.last_close),
+    last_checked_at: asString(row.last_checked_at),
+  };
+}
+
+function renderCycleStatus(status: CycleStatus) {
+  const label =
+    status === "active"
+      ? "Active"
+      : status === "breached_support"
+        ? "Breached support"
+        : "Breached resistance";
+  const tone =
+    status === "active" ? "active" : status === "breached_support" ? "support" : "resistance";
+  return `<span class="xa-crypto__cycle-status xa-crypto__cycle-status--${tone}">${escapeHtml(label)}</span>`;
+}
+
+function shortCycleId(id: string) {
+  return id.length > 8 ? `${id.slice(0, 8)}…` : id;
 }
 
 /** Boolean flag → green check or muted dash. */
@@ -590,6 +686,31 @@ async function loadMomentum(
   return { rows, error: null };
 }
 
+async function loadCycles(
+  supabase: SupabaseClient,
+  assetId: number,
+  timeframeMinutes: number,
+): Promise<{ rows: CycleRow[]; error: string | null }> {
+  const { data, error } = await supabase
+    .from("crypto_support_resistance")
+    .select(
+      "id, cycle_seq, support, resistance, started_at, ended_at, status, breach_close, breach_at, hover_side, hover_at, last_close, last_checked_at",
+    )
+    .eq("asset_id", assetId)
+    .eq("timeframe", timeframeMinutes)
+    .order("cycle_seq", { ascending: false })
+    .limit(DISPLAY_LIMIT);
+
+  if (error) {
+    return { rows: [], error: error.message };
+  }
+
+  const rows = ((data as Record<string, unknown>[] | null) ?? [])
+    .map(toCycleRow)
+    .filter((row): row is CycleRow => row !== null);
+  return { rows, error: null };
+}
+
 function renderAssets(
   assets: Array<
     CryptoAsset & {
@@ -614,6 +735,7 @@ function renderAssets(
       const barsHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=bars`;
       const paHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=pa`;
       const momHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=mom`;
+      const cyclesHref = `/admin/polymarket/crypto-prices/?symbol=${encodeURIComponent(asset.symbol)}&view=cycles&tf=5m`;
       return `
         <tr class="xa-crypto__asset-row" data-symbol="${escapeHtml(asset.symbol)}">
           <td>
@@ -630,6 +752,7 @@ function renderAssets(
               <a href="${barsHref}">Bars</a>
               <a href="${paHref}">PA</a>
               <a href="${momHref}">Mom</a>
+              <a href="${cyclesHref}">Cycles</a>
             </div>
           </td>
         </tr>
@@ -638,13 +761,14 @@ function renderAssets(
     .join("");
 }
 
-function renderTimeframeButtons(activeMinutes: number) {
+function renderTimeframeButtons(activeMinutes: number, view: DetailView = "prices") {
   const el = document.getElementById("xa-crypto-timeframes");
   if (!el) return;
 
-  el.innerHTML = TIMEFRAMES.map((tf) => {
-    const active = tf.minutes === activeMinutes;
-    return `
+  el.innerHTML = timeframesForView(view)
+    .map((tf) => {
+      const active = tf.minutes === activeMinutes;
+      return `
       <button
         type="button"
         class="xa-crypto__tf${active ? " xa-crypto__tf--active" : ""}"
@@ -654,7 +778,8 @@ function renderTimeframeButtons(activeMinutes: number) {
         ${escapeHtml(tf.label)}
       </button>
     `;
-  }).join("");
+    })
+    .join("");
 }
 
 function renderViewModeButtons(activeView: DetailView) {
@@ -817,6 +942,48 @@ function renderMomentum(rows: MomentumRow[]) {
     .join("");
 }
 
+function renderCycles(rows: CycleRow[]) {
+  const tbody = document.getElementById("xa-crypto-cycles-body");
+  if (!tbody) return;
+
+  if (rows.length === 0) {
+    tbody.innerHTML =
+      '<tr><td colspan="10" class="xa-users__empty">No support/resistance cycles for this timeframe yet.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = rows
+    .map((row) => {
+      const hoverLabel = row.hover_side
+        ? `${row.hover_side}${row.hover_at ? ` · ${formatDateTime(row.hover_at)}` : ""}`
+        : null;
+      const rowClass = row.status === "active" ? ' class="xa-crypto__cycle-row--active"' : "";
+      return `
+        <tr${rowClass}>
+          <td>${escapeHtml(String(row.cycle_seq))}</td>
+          <td>${renderCycleStatus(row.status)}</td>
+          <td>${escapeHtml(formatPrice(row.support))}</td>
+          <td>${escapeHtml(formatPrice(row.resistance))}</td>
+          <td>${escapeHtml(formatDateTime(row.started_at))}</td>
+          <td>${row.ended_at ? escapeHtml(formatDateTime(row.ended_at)) : '<span class="xa-muted">—</span>'}</td>
+          <td title="${row.breach_at ? escapeHtml(formatDateTime(row.breach_at)) : ""}">${
+            row.breach_close !== null
+              ? escapeHtml(formatPrice(row.breach_close))
+              : '<span class="xa-muted">—</span>'
+          }</td>
+          <td>${hoverLabel ? escapeHtml(hoverLabel) : '<span class="xa-muted">—</span>'}</td>
+          <td title="${row.last_checked_at ? escapeHtml(formatDateTime(row.last_checked_at)) : ""}">${
+            row.last_close !== null
+              ? escapeHtml(formatPrice(row.last_close))
+              : '<span class="xa-muted">—</span>'
+          }</td>
+          <td><code class="xa-crypto__cycle-id" title="${escapeHtml(row.id)}">${escapeHtml(shortCycleId(row.id))}</code></td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
 function showListView() {
   document.getElementById("xa-crypto-list-view")?.removeAttribute("hidden");
   document.getElementById("xa-crypto-detail-view")?.setAttribute("hidden", "");
@@ -833,11 +1000,13 @@ function showDetailPanels(view: DetailView) {
   const barsPanel = document.getElementById("xa-crypto-bars-panel");
   const paPanel = document.getElementById("xa-crypto-pa-panel");
   const momPanel = document.getElementById("xa-crypto-mom-panel");
+  const cyclesPanel = document.getElementById("xa-crypto-cycles-panel");
   pricesPanel?.setAttribute("hidden", "");
   maPanel?.setAttribute("hidden", "");
   barsPanel?.setAttribute("hidden", "");
   paPanel?.setAttribute("hidden", "");
   momPanel?.setAttribute("hidden", "");
+  cyclesPanel?.setAttribute("hidden", "");
   if (view === "ma") {
     maPanel?.removeAttribute("hidden");
   } else if (view === "bars") {
@@ -846,6 +1015,8 @@ function showDetailPanels(view: DetailView) {
     paPanel?.removeAttribute("hidden");
   } else if (view === "mom") {
     momPanel?.removeAttribute("hidden");
+  } else if (view === "cycles") {
+    cyclesPanel?.removeAttribute("hidden");
   } else {
     pricesPanel?.removeAttribute("hidden");
   }
@@ -861,8 +1032,8 @@ async function init() {
   const { supabase } = session;
   const params = new URLSearchParams(window.location.search);
   const symbolParam = params.get("symbol")?.trim().toUpperCase() || null;
-  let activeTimeframe = parseTimeframe(params.get("tf"));
   let activeView = parseView(params.get("view"));
+  let activeTimeframe = ensureTimeframeForView(activeView, parseTimeframe(params.get("tf")));
 
   const refreshBtn = document.getElementById("xa-crypto-refresh") as HTMLButtonElement | null;
   const ingestBtn = document.getElementById("xa-crypto-ingest") as HTMLButtonElement | null;
@@ -922,7 +1093,7 @@ async function init() {
 
     listLoading = false;
     if (summaryEl) {
-      summaryEl.textContent = `${withLast.length.toLocaleString()} token${withLast.length === 1 ? "" : "s"}. Open Prices, MA, Bars, PA, or Mom for a symbol.`;
+      summaryEl.textContent = `${withLast.length.toLocaleString()} token${withLast.length === 1 ? "" : "s"}. Open Prices, MA, Bars, PA, Mom, or Cycles for a symbol.`;
     }
     renderAssets(withLast);
     setListStatus(`Updated ${new Date().toLocaleTimeString()}.`);
@@ -940,8 +1111,9 @@ async function init() {
   async function loadDetailData() {
     if (!selectedAsset || detailLoading) return;
     detailLoading = true;
+    activeTimeframe = ensureTimeframeForView(activeView, activeTimeframe);
     renderViewModeButtons(activeView);
-    renderTimeframeButtons(activeTimeframe);
+    renderTimeframeButtons(activeTimeframe, activeView);
     showDetailPanels(activeView);
 
     if (activeView === "ma") {
@@ -1024,6 +1196,27 @@ async function init() {
       return;
     }
 
+    if (activeView === "cycles") {
+      setDetailStatus(`Loading ${timeframeLabel(activeTimeframe)} support/resistance cycles…`);
+      const result = await loadCycles(supabase, selectedAsset.id, activeTimeframe);
+      detailLoading = false;
+
+      if (result.error) {
+        setDetailStatus(result.error, true);
+        renderCycles([]);
+        if (detailSummaryEl) detailSummaryEl.textContent = "";
+        return;
+      }
+
+      renderCycles(result.rows);
+      const activeCount = result.rows.filter((r) => r.status === "active").length;
+      if (detailSummaryEl) {
+        detailSummaryEl.textContent = `${result.rows.length.toLocaleString()} cycle${result.rows.length === 1 ? "" : "s"} · ${timeframeLabel(activeTimeframe)} · ${activeCount} active (30-bar close min/max, ±3% band).`;
+      }
+      setDetailStatus(`Updated ${new Date().toLocaleTimeString()}.`);
+      return;
+    }
+
     setDetailStatus(`Loading ${timeframeLabel(activeTimeframe)} prices…`);
     const result = await loadCandlesForTimeframe(supabase, selectedAsset.id, activeTimeframe);
     detailLoading = false;
@@ -1054,6 +1247,7 @@ async function init() {
     renderBarCharacteristics([]);
     renderPriceAction([]);
     renderMomentum([]);
+    renderCycles([]);
     showDetailPanels(activeView);
     renderViewModeButtons(activeView);
 
@@ -1095,6 +1289,7 @@ async function init() {
     const nextView = parseView(button.dataset.view ?? null);
     if (nextView === activeView) return;
     activeView = nextView;
+    activeTimeframe = ensureTimeframeForView(activeView, activeTimeframe);
     if (detailLedeEl) {
       const parts = [
         selectedAsset.name?.trim() || null,
