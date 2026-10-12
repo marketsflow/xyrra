@@ -9,7 +9,11 @@
  *   - distance_from_support  (% above support)
  *   - distance_to_resistance (% below resistance)
  *   - price_level            (reference price = price_1m for now)
+ *   - ema                    (0–50: +10 per bullish TF among 5m/15m/1h/4h/1D)
  *   - signal                 (left null until signal logic is added)
+ *
+ * EMA score uses latest crypto_moving_averages per TF (excl. 1m):
+ *   bullish (ema_9_20_factor = 1) → 10, else → 0.
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
@@ -18,6 +22,9 @@
 const DEFAULT_TIMEFRAMES = [240] as const;
 const ALLOWED_TIMEFRAMES = new Set([5, 15, 60, 240, 1440]);
 const TIMEFRAME_1M = 1;
+/** Timeframes scored into crypto_price.ema (1m excluded). */
+const EMA_SCORE_TIMEFRAMES = [5, 15, 60, 240, 1440] as const;
+const EMA_BULLISH_POINTS = 10;
 
 export type ComputeCryptoPriceEnv = {
   SUPABASE_URL?: string;
@@ -47,6 +54,7 @@ type CryptoPriceRow = {
   distance_to_resistance: number | null;
   signal: null;
   price_level: number;
+  ema: number | null;
   updated_at: string;
 };
 
@@ -109,6 +117,27 @@ export function distanceFromSupportPct(price: number, support: number): number |
 export function distanceToResistancePct(price: number, resistance: number): number | null {
   if (resistance === 0) return null;
   return roundPct(((resistance - price) / resistance) * 100);
+}
+
+/** EMA 9/20 factor: 1 bullish, 0 neutral, -1 bearish (null → not bullish). */
+export function isEmaBullish(ema920Factor: number | null): boolean {
+  return ema920Factor === 1;
+}
+
+/**
+ * Sum EMA score across higher TFs: +10 per bullish, +0 for neutral/bearish/missing.
+ * Caps naturally at 50 (5 timeframes × 10).
+ */
+export function computeEmaTotal(
+  factorByTimeframe: Map<number, number | null>,
+): number {
+  let total = 0;
+  for (const tf of EMA_SCORE_TIMEFRAMES) {
+    if (isEmaBullish(factorByTimeframe.get(tf) ?? null)) {
+      total += EMA_BULLISH_POINTS;
+    }
+  }
+  return total;
 }
 
 async function assertAdminAccess(
@@ -229,6 +258,38 @@ async function fetchActiveCycle(
   return { support, resistance };
 }
 
+/**
+ * Latest ema_9_20_factor per higher timeframe from crypto_moving_averages.
+ * Fetches recent rows (newest first) and keeps the first row seen per TF.
+ */
+async function fetchLatestEmaFactorsByTimeframe(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+): Promise<Map<number, number | null>> {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const tfs = EMA_SCORE_TIMEFRAMES.join(",");
+  const res = await fetch(
+    `${base}/rest/v1/crypto_moving_averages?select=timeframe,ema_9_20_factor,timestamp&asset_id=eq.${assetId}&timeframe=in.(${tfs})&order=timestamp.desc&limit=${EMA_SCORE_TIMEFRAMES.length * 5}`,
+    { headers: restHeaders(serviceKey) },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to load crypto_moving_averages: ${text.slice(0, 300)}`);
+  }
+  const rows = (await res.json()) as Array<{
+    timeframe?: unknown;
+    ema_9_20_factor?: unknown;
+  }>;
+  const byTf = new Map<number, number | null>();
+  for (const row of rows) {
+    const tf = parseNumber(row.timeframe);
+    if (tf === null || byTf.has(tf)) continue;
+    byTf.set(tf, parseNumber(row.ema_9_20_factor));
+  }
+  return byTf;
+}
+
 async function insertCryptoPriceRows(
   supabaseUrl: string,
   serviceKey: string,
@@ -258,6 +319,7 @@ function buildRow(
   timeframe: number,
   latest: Latest1mClose,
   cycle: ActiveCycle,
+  emaTotal: number,
   updatedAt: string,
 ): CryptoPriceRow {
   const price = roundPrice(latest.close);
@@ -270,6 +332,7 @@ function buildRow(
     distance_to_resistance: distanceToResistancePct(price, cycle.resistance),
     signal: null,
     price_level: price,
+    ema: emaTotal,
     updated_at: updatedAt,
   };
 }
@@ -322,6 +385,13 @@ export async function computeCryptoPrice(
         continue;
       }
 
+      const emaFactors = await fetchLatestEmaFactorsByTimeframe(
+        supabaseUrl,
+        serviceKey,
+        asset.id,
+      );
+      const emaTotal = computeEmaTotal(emaFactors);
+
       for (const timeframe of timeframes) {
         const cycle = await fetchActiveCycle(
           supabaseUrl,
@@ -333,7 +403,7 @@ export async function computeCryptoPrice(
           skippedNoCycle += 1;
           continue;
         }
-        rows.push(buildRow(asset.id, timeframe, latest1m, cycle, updatedAt));
+        rows.push(buildRow(asset.id, timeframe, latest1m, cycle, emaTotal, updatedAt));
       }
     }
 

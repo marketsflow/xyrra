@@ -28,6 +28,10 @@ create table if not exists public.crypto_price (
   -- Reference price used for the distance / signal calculation
   price_level numeric(20, 8),
 
+  -- Cross-TF EMA score: +10 per bullish TF among 5m/15m/1h/4h/1D (0–50)
+  ema numeric(8, 4)
+    check (ema is null or (ema >= 0 and ema <= 50)),
+
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
 
@@ -60,6 +64,9 @@ comment on column public.crypto_price.signal is
 
 comment on column public.crypto_price.price_level is
   'Price used when computing distances / signal.';
+
+comment on column public.crypto_price.ema is
+  'Cross-TF EMA score (0–50): +10 when latest crypto_moving_averages.ema_9_20_factor is bullish (1) for each of 5m/15m/1h/4h/1D; 0 when neutral/bearish/missing.';
 
 alter table public.crypto_price enable row level security;
 
