@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#f8f9fd" />
+    <title>View Virtual Trades | Admin | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/admin/admin.css" />
+  </head>
+  <body class="xa-body">
+    <div id="xa-admin-loading" class="xa-loading" role="status" aria-live="polite">
+      Checking session…
+    </div>
+
+    <div class="xa-admin" id="xa-admin-app" hidden>
+      <header class="xa-admin__bar">
+        <a class="xa-brand" href="/admin/" aria-label="Xyrra admin home">
+          <img src="/images/new/xyrra-logo.png" alt="" width="954" height="115" decoding="async" />
+        </a>
+        <div class="xa-admin__bar-actions">
+          <div class="xa-admin__meta">
+            <strong id="xa-admin-email">…</strong>
+            <span id="xa-admin-role">…</span>
+          </div>
+          <button type="button" id="xa-admin-signout" class="xa-admin__signout">Sign out</button>
+        </div>
+      </header>
+
+      <div class="xa-admin__layout">
+        <aside class="xa-admin__sidebar" aria-label="Admin navigation">
+          <nav class="xa-admin__nav">
+            <a class="xa-admin__nav-link" data-xa-nav="dashboard" href="/admin/">Dashboard</a>
+            <a class="xa-admin__nav-link" data-xa-nav="users" href="/admin/users/">Users</a>
+            <a class="xa-admin__nav-link" data-xa-nav="articles" href="/admin/articles/">Articles</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-templates" href="/admin/email-templates/">Email Templates</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-lists" href="/admin/email-lists/">Email Lists</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-outreach" href="/admin/email-outreach/">Email Outreach</a>
+            <a class="xa-admin__nav-link" data-xa-nav="emails-sent" href="/admin/emails-sent/">Emails Sent</a>
+            <a class="xa-admin__nav-link" data-xa-nav="stock-prices" href="/admin/stock-prices/">Stock Prices</a>
+            <a class="xa-admin__nav-link" data-xa-nav="polymarket" href="/admin/polymarket/">Polymarket</a>
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="polymarket-crypto-prices"
+              href="/admin/polymarket/crypto-prices/"
+              >Crypto Prices</a
+            >
+            <a class="xa-admin__nav-link" data-xa-nav="virtual-trades" href="/admin/virtual-trades/">Virtual Trades</a>
+          </nav>
+        </aside>
+
+        <main class="xa-admin__main">
+          <div class="xa-admin__panel">
+            <div class="xa-users__header">
+              <div>
+                <a class="xa-crypto__back" href="/admin/virtual-trades/">← Back to Virtual Trades</a>
+                <h1>View Virtual trades</h1>
+                <p class="xa-templates__lede">
+                  Virtual trades you have run will appear here.
+                </p>
+              </div>
+              <div class="xa-polymarket__actions">
+                <a class="xa-templates__create" href="/admin/virtual-trades/create/">Create a virtual trade</a>
+              </div>
+            </div>
+
+            <p id="xa-vt-view-status" class="xa-users__status" aria-live="polite"></p>
+            <div id="xa-vt-view-empty" class="xa-sent__empty">
+              <p class="xa-sent__empty-title">No virtual trades yet</p>
+              <p>Select a closed 4h period on the create page to run your first simulation.</p>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/src/admin/virtual-trades-view.ts"></script>
+  </body>
+</html>

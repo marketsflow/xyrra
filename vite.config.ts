@@ -660,6 +660,12 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/admin/polymarket/" + search;
       } else if (path === "/admin/polymarket/crypto-prices") {
         (req as IncomingMessage & { url?: string }).url = "/admin/polymarket/crypto-prices/" + search;
+      } else if (path === "/admin/virtual-trades") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/virtual-trades/" + search;
+      } else if (path === "/admin/virtual-trades/create") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/virtual-trades/create/" + search;
+      } else if (path === "/admin/virtual-trades/view") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/virtual-trades/view/" + search;
       } else if (path === "/admin/articles") {
         (req as IncomingMessage & { url?: string }).url = "/admin/articles/" + search;
       } else if (path === "/admin/articles/new") {
@@ -789,6 +795,15 @@ export default defineConfig(({ mode }) => {
           adminPolymarketCryptoPrices: resolve(
             __dirname,
             "admin/polymarket/crypto-prices/index.html",
+          ),
+          adminVirtualTrades: resolve(__dirname, "admin/virtual-trades/index.html"),
+          adminVirtualTradesCreate: resolve(
+            __dirname,
+            "admin/virtual-trades/create/index.html",
+          ),
+          adminVirtualTradesView: resolve(
+            __dirname,
+            "admin/virtual-trades/view/index.html",
           ),
           adminArticles: resolve(__dirname, "admin/articles/index.html"),
           adminArticlesNew: resolve(__dirname, "admin/articles/new/index.html"),
