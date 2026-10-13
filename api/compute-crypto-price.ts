@@ -14,9 +14,12 @@
  *   (prefers mom_4h for analysis TF 4h; else first non-null mom_*).
  *
  * percentage_sum: sum of last 4 crypto_prices.percentage on TF 4h (as of bar).
- * After all other fields are set on a row:
- *   if momentum > 0 and percentage_sum < 0.30,
- *   then signal = "Above" and price_level = price_1m + 200.
+ * After all other fields are set, first matching signal rule wins:
+ *   1) 0 < mom < 1% and %sum < 0.30 → Above, price_level = price_1m + 200
+ *   2) 0 < mom < 1% and %sum > 0.80 → Above, price_level = price_1m - 200
+ *   3) mom > 1% → Below, price_level = price_1m - 200
+ *   4) -1% < mom < 0 and %sum > 0.80 → Below, price_level = price_1m - 200
+ *   5) mom < 1% (fallback) → Below, price_level = price_1m - 200
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
@@ -45,12 +48,16 @@ const MOMENTUM_FALLBACK_COLUMNS = [
   "mom_5m",
   "mom_1m",
 ] as const;
-/** Signal rule: positive momentum + weak recent 4h % sum → Above. */
-const ABOVE_SIGNAL = "Above";
-const ABOVE_PCT_LOOKBACK = 4;
-/** Sum of last 4 × 4h close-% must be strictly below this (percent units). */
-const ABOVE_PCT_SUM_THRESHOLD = 0.3;
-const ABOVE_PRICE_LEVEL_OFFSET = 200;
+const SIGNAL_ABOVE = "Above";
+const SIGNAL_BELOW = "Below";
+/** Bars used for percentage_sum (last N × 4h close-%). */
+const PCT_LOOKBACK = 4;
+/** Momentum band edges in percent units (crypto_price.momentum). */
+const MOMENTUM_STRONG_PCT = 1;
+/** percentage_sum thresholds in percent units. */
+const PCT_SUM_WEAK = 0.3;
+const PCT_SUM_STRONG = 0.8;
+const PRICE_LEVEL_OFFSET = 200;
 
 export type ComputeCryptoPriceEnv = {
   SUPABASE_URL?: string;
@@ -214,7 +221,7 @@ export function computeEmaTotal(
 }
 
 /**
- * Sum of the last `ABOVE_PCT_LOOKBACK` 4h crypto_prices.percentage values
+ * Sum of the last `PCT_LOOKBACK` 4h crypto_prices.percentage values
  * with bucket_start <= asOfBucketStart. Null when fewer than 4 bars exist or
  * any of those percentages is missing.
  */
@@ -231,9 +238,9 @@ export function sumLast4hPercentages(
     if (!Number.isFinite(tMs) || tMs > asOfMs) continue;
     eligible.push(point);
   }
-  if (eligible.length < ABOVE_PCT_LOOKBACK) return null;
+  if (eligible.length < PCT_LOOKBACK) return null;
 
-  const last = eligible.slice(-ABOVE_PCT_LOOKBACK);
+  const last = eligible.slice(-PCT_LOOKBACK);
   let sum = 0;
   for (const point of last) {
     if (point.percentage === null) return null;
@@ -243,10 +250,10 @@ export function sumLast4hPercentages(
 }
 
 /**
- * Persist percentage_sum, then apply Above rule when momentum > 0 and
- * sum(last 4 × 4h %) < 0.30 → signal "Above", price_level = price_1m + 200.
+ * Persist percentage_sum, then apply signal rules (first match wins).
+ * See file header for the five rules.
  */
-export function applyAboveSignalRule(
+export function applySignalRules(
   row: CryptoPriceRow,
   pctSum: number | null,
 ): CryptoPriceRow {
@@ -254,13 +261,46 @@ export function applyAboveSignalRule(
     ...row,
     percentage_sum: pctSum === null ? null : roundPct(pctSum),
   };
-  if (withSum.momentum === null || withSum.momentum <= 0) return withSum;
-  if (pctSum === null || !(pctSum < ABOVE_PCT_SUM_THRESHOLD)) return withSum;
-  return {
+  const mom = withSum.momentum;
+  if (mom === null) return withSum;
+
+  const price = withSum.price_1m;
+  const set = (signal: string, priceLevel: number): CryptoPriceRow => ({
     ...withSum,
-    signal: ABOVE_SIGNAL,
-    price_level: roundPrice(withSum.price_1m + ABOVE_PRICE_LEVEL_OFFSET),
-  };
+    signal,
+    price_level: roundPrice(priceLevel),
+  });
+
+  // 1) 0 < mom < 1% and %sum < 0.30 → Above, +200
+  if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum < PCT_SUM_WEAK) {
+    return set(SIGNAL_ABOVE, price + PRICE_LEVEL_OFFSET);
+  }
+  // 2) 0 < mom < 1% and %sum > 0.80 → Above, -200
+  if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
+    return set(SIGNAL_ABOVE, price - PRICE_LEVEL_OFFSET);
+  }
+  // 3) mom > 1% → Below, -200
+  if (mom > MOMENTUM_STRONG_PCT) {
+    return set(SIGNAL_BELOW, price - PRICE_LEVEL_OFFSET);
+  }
+  // 4) -1% < mom < 0 and %sum > 0.80 → Below, -200
+  if (mom < 0 && mom > -MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
+    return set(SIGNAL_BELOW, price - PRICE_LEVEL_OFFSET);
+  }
+  // 5) mom < 1% (fallback when no earlier rule matched) → Below, -200
+  if (mom < MOMENTUM_STRONG_PCT) {
+    return set(SIGNAL_BELOW, price - PRICE_LEVEL_OFFSET);
+  }
+
+  return withSum;
+}
+
+/** @deprecated Use applySignalRules. */
+export function applyAboveSignalRule(
+  row: CryptoPriceRow,
+  pctSum: number | null,
+): CryptoPriceRow {
+  return applySignalRules(row, pctSum);
 }
 
 async function assertAdminAccess(
@@ -434,7 +474,7 @@ async function fetch4hPercentagesAsc(
   const base = supabaseUrl.replace(/\/$/, "");
   const points: PctPoint[] = [];
   let offset = 0;
-  const lookbackMs = ABOVE_PCT_LOOKBACK * ANALYSIS_TIMEFRAME * 60_000;
+  const lookbackMs = PCT_LOOKBACK * ANALYSIS_TIMEFRAME * 60_000;
   const fromFilter = fromIso
     ? `&bucket_start=gte.${encodeURIComponent(
         new Date(Date.parse(fromIso) - lookbackMs).toISOString(),
@@ -919,7 +959,7 @@ async function backfillAsset(
     const momentum = momentumByTs.get(tMs) ?? null;
     const row = buildRow(asset.id, candle, cycle, emaTotal, momentum, updatedAt);
     const pctSum = sumLast4hPercentages(percentages4h, candle.bucket_start);
-    rows.push(applyAboveSignalRule(row, pctSum));
+    rows.push(applySignalRules(row, pctSum));
   }
 
   return { rows, skippedNoCycle };
@@ -1058,11 +1098,11 @@ export async function computeCryptoPrice(
         // Enough prior 4h bars for the 4-bar % sum (plus the current bar).
         new Date(
           Date.parse(latest.bucket_start) -
-            ABOVE_PCT_LOOKBACK * ANALYSIS_TIMEFRAME * 60_000,
+            PCT_LOOKBACK * ANALYSIS_TIMEFRAME * 60_000,
         ).toISOString(),
       );
       const pctSum = sumLast4hPercentages(percentages4h, latest.bucket_start);
-      rows.push(applyAboveSignalRule(row, pctSum));
+      rows.push(applySignalRules(row, pctSum));
     }
 
     rowsInserted = await insertCryptoPriceRows(supabaseUrl, serviceKey, rows);
