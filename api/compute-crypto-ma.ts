@@ -384,11 +384,21 @@ function closeChangePct(close: number, previousClose: number | null): number | n
   return pctOf(close - previousClose, previousClose);
 }
 
-/** Attach percentage from lag(close) for an ascending candle series. */
-function withClosePercentages(candlesAsc: Candle[]): Candle[] {
+/**
+ * Attach percentage from lag(close) for an ascending candle series.
+ * When the series is a partial lookback window, pass seedPrevClose (close of the
+ * bar immediately before candlesAsc[0]) so the first bar is not written as null.
+ */
+function withClosePercentages(
+  candlesAsc: Candle[],
+  seedPrevClose: number | null = null,
+): Candle[] {
   return candlesAsc.map((candle, i) => ({
     ...candle,
-    percentage: closeChangePct(candle.close, i > 0 ? candlesAsc[i - 1]!.close : null),
+    percentage: closeChangePct(
+      candle.close,
+      i > 0 ? candlesAsc[i - 1]!.close : seedPrevClose,
+    ),
   }));
 }
 
@@ -768,6 +778,31 @@ async function fetchAllTimeframeCandlesAsc(
   return candles;
 }
 
+/**
+ * Close of the candle immediately before `beforeBucketStart` on this TF,
+ * used to seed percentage when aggregating from a partial 1m lookback.
+ */
+async function fetchPreviousClose(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+  timeframe: number,
+  beforeBucketStart: string,
+): Promise<number | null> {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const res = await fetch(
+    `${base}/rest/v1/crypto_prices?select=close&asset_id=eq.${assetId}&timeframe=eq.${timeframe}&bucket_start=lt.${encodeURIComponent(beforeBucketStart)}&order=bucket_start.desc&limit=1`,
+    { headers: restHeaders(serviceKey) },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to load previous close tf=${timeframe}: ${text.slice(0, 300)}`);
+  }
+  const rows = (await res.json()) as Array<{ close?: unknown }>;
+  if (!rows.length) return null;
+  return parseNumber(rows[0]!.close);
+}
+
 async function upsertCryptoPrices(
   supabaseUrl: string,
   serviceKey: string,
@@ -781,17 +816,24 @@ async function upsertCryptoPrices(
 
   for (let i = 0; i < candles.length; i += UPSERT_CHUNK) {
     const chunk = candles.slice(i, i + UPSERT_CHUNK);
-    const payload = chunk.map((candle) => ({
-      asset_id: assetId,
-      timeframe,
-      bucket_start: candle.bucket_start,
-      open: candle.open,
-      high: candle.high,
-      low: candle.low,
-      close: candle.close,
-      volume: candle.volume,
-      percentage: candle.percentage ?? null,
-    }));
+    // Omit null percentage so merge-duplicates does not wipe a previously
+    // computed value when the lookback window starts mid-series.
+    const payload = chunk.map((candle) => {
+      const row: Record<string, unknown> = {
+        asset_id: assetId,
+        timeframe,
+        bucket_start: candle.bucket_start,
+        open: candle.open,
+        high: candle.high,
+        low: candle.low,
+        close: candle.close,
+        volume: candle.volume,
+      };
+      if (candle.percentage !== null && candle.percentage !== undefined) {
+        row.percentage = candle.percentage;
+      }
+      return row;
+    });
     const res = await fetch(
       `${base}/rest/v1/crypto_prices?on_conflict=asset_id,timeframe,bucket_start`,
       {
@@ -950,13 +992,24 @@ async function computeForAssetIncremental(
   // Materialize higher-TF candles concurrently, then derive all tables in parallel.
   const higherTfPriceResults = await Promise.all(
     TIMEFRAMES.filter((tf) => tf > 1).map(async (timeframe) => {
-      const aggregated = withClosePercentages(aggregateCandles(oneMinuteNewestFirst, timeframe));
+      const aggregated = aggregateCandles(oneMinuteNewestFirst, timeframe);
+      const seedPrevClose =
+        aggregated.length > 0
+          ? await fetchPreviousClose(
+              supabaseUrl,
+              serviceKey,
+              asset.id,
+              timeframe,
+              aggregated[0]!.bucket_start,
+            )
+          : null;
+      const withPct = withClosePercentages(aggregated, seedPrevClose);
       const upserted = await upsertCryptoPrices(
         supabaseUrl,
         serviceKey,
         asset.id,
         timeframe,
-        aggregated.slice(-CLOSE_LOOKBACK),
+        withPct.slice(-CLOSE_LOOKBACK),
       );
       return upserted;
     }),
