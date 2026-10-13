@@ -6,7 +6,7 @@ const WINDOW_SEC = 4 * 60 * 60;
 const LOOKBACK_DAYS = 7;
 const ANALYSIS_TIMEFRAME = 240;
 const BTC_SYMBOL = "BTC";
-const DEFAULT_POSITION_USD = 100;
+const DEFAULT_POSITION_USD = 10;
 
 type CryptoPriceSignalRow = {
   bucket_start: string;
@@ -213,7 +213,14 @@ async function loadSignaledCryptoPrices(
   return rows;
 }
 
-function groupSignaledPeriods(rows: CryptoPriceSignalRow[]): DayGroup[] {
+/**
+ * Pair each signaled crypto_price bar with the Polymarket window of the same start.
+ * crypto_price.price_level is the previous 4h close (= spot at this window's open).
+ */
+function groupSignaledPeriods(
+  rows: CryptoPriceSignalRow[],
+  closedPolyEndSec: number,
+): DayGroup[] {
   const byDay = new Map<string, FourHourPeriod[]>();
 
   for (const cryptoPrice of rows) {
@@ -223,12 +230,16 @@ function groupSignaledPeriods(rows: CryptoPriceSignalRow[]): DayGroup[] {
     // Align to canonical 4h unix starts used by Polymarket slugs.
     if (startSec % WINDOW_SEC !== 0) continue;
 
+    const endSec = startSec + WINDOW_SEC;
+    // Only list Polymarket windows that have fully closed.
+    if (endSec > closedPolyEndSec) continue;
+
     const period: FourHourPeriod = {
       startSec,
-      endSec: startSec + WINDOW_SEC,
+      endSec,
       startIso: new Date(startSec * 1000).toISOString(),
-      endIso: new Date((startSec + WINDOW_SEC) * 1000).toISOString(),
-      label: `${formatUtcTime(startSec)}–${formatUtcTime(startSec + WINDOW_SEC)} UTC`,
+      endIso: new Date(endSec * 1000).toISOString(),
+      label: `${formatUtcTime(startSec)}–${formatUtcTime(endSec)} UTC`,
       cryptoPrice,
     };
 
@@ -377,7 +388,7 @@ function renderPreview(
       <div><dt>Polymarket</dt><dd>${escapeHtml(title)}</dd></div>
       <div><dt>crypto_price</dt><dd>${escapeHtml(cryptoAt)}</dd></div>
       <div><dt>Signal</dt><dd>${escapeHtml(period.cryptoPrice.signal)}</dd></div>
-      <div><dt>Price level</dt><dd>${period.cryptoPrice.price_level == null ? "—" : escapeHtml(period.cryptoPrice.price_level.toLocaleString(undefined, { maximumFractionDigits: 2 }))}</dd></div>
+      <div><dt>Price level (prev 4h close)</dt><dd>${period.cryptoPrice.price_level == null ? "—" : escapeHtml(period.cryptoPrice.price_level.toLocaleString(undefined, { maximumFractionDigits: 2 }))}</dd></div>
       <div><dt>Price to beat</dt><dd>${strike == null ? "—" : escapeHtml(strike.toLocaleString(undefined, { style: "currency", currency: "USD" }))}</dd></div>
       <div><dt>Entry spot</dt><dd>${spot == null ? "Waiting for tick / missing" : escapeHtml(spot.toLocaleString(undefined, { style: "currency", currency: "USD" }))}</dd></div>
       <div><dt>Entry tick</dt><dd>${tick ? escapeHtml(new Date(tick.recorded_at).toISOString()) : "No Polymarket tick found for this window"}</dd></div>
@@ -510,7 +521,7 @@ async function init() {
       fromIso,
       beforeIso,
     );
-    const days = groupSignaledPeriods(signaled);
+    const days = groupSignaledPeriods(signaled, closedEndSec);
     for (const day of days) {
       for (const period of day.periods) {
         periodByStart.set(period.startSec, period);

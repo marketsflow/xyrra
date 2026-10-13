@@ -6,10 +6,12 @@
  * Stored analysis timeframe is always 4h (S/R + crypto_price.timeframe=240).
  * EMA score: Σ +10 for each bullish ema_9_20_factor among 5m/15m/1h/4h/1D.
  * Momentum: crypto_momentum at the same timestamp when present (mom_4h preferred).
+ * Signal price_level = previous source-candle close (Polymarket-open aligned; no ±200).
  *
  * Usage:
- *   node --import tsx scripts/backfill-crypto-price.mjs
- *   SOURCE_TF=1 DAYS=1 node --import tsx scripts/backfill-crypto-price.mjs
+ *   npx tsx scripts/backfill-crypto-price.mjs
+ *   SOURCE_TF=1 DAYS=1 npx tsx scripts/backfill-crypto-price.mjs
+ *   SUPABASE_URL=https://….supabase.co DAYS=14 npx tsx scripts/backfill-crypto-price.mjs
  *
  * Optional:
  *   DAYS=7 / DAYS=0 (all history)

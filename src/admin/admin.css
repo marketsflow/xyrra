@@ -2572,3 +2572,39 @@ body.xa-body {
 .xa-vt__preview-grid code {
   font-size: 0.8rem;
 }
+
+.xa-vt__result {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.5rem;
+  border-radius: 0.4rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.xa-vt__result--win {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.xa-vt__result--loss {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.xa-vt__result--open {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.xa-vt__pnl--win {
+  color: #166534;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.xa-vt__pnl--loss {
+  color: #991b1b;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
