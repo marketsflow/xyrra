@@ -295,11 +295,17 @@ async function init() {
   initAdminShell(session, "virtual-trades");
   setAdminLoading(false);
 
-  const statusEl = document.getElementById("xa-vt-view-status");
-  const emptyEl = document.getElementById("xa-vt-view-empty");
-  const tableWrap = document.getElementById("xa-vt-view-table-wrap");
-  const bodyEl = document.getElementById("xa-vt-view-body");
-  if (!statusEl || !emptyEl || !tableWrap || !bodyEl) return;
+  const statusNode = document.getElementById("xa-vt-view-status");
+  const emptyNode = document.getElementById("xa-vt-view-empty");
+  const tableWrapNode = document.getElementById("xa-vt-view-table-wrap");
+  const bodyNode = document.getElementById("xa-vt-view-body");
+  if (!statusNode || !emptyNode || !tableWrapNode || !bodyNode) return;
+
+  // Locals after the null guard so nested helpers keep non-null types under tsc.
+  const statusEl = statusNode;
+  const emptyEl = emptyNode;
+  const tableWrap = tableWrapNode;
+  const bodyEl = bodyNode;
 
   statusEl.textContent = "Loading virtual trades…";
 
