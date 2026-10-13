@@ -13,6 +13,10 @@
  * Momentum: crypto_momentum value at the same timestamp when present
  *   (prefers mom_4h for analysis TF 4h; else first non-null mom_*).
  *
+ * After all other fields are set on a row:
+ *   if momentum > 0 and sum(last 4 crypto_prices.percentage on TF 4h) < 0.30,
+ *   then signal = "Above" and price_level = price_1m + 200.
+ *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
 
@@ -40,6 +44,12 @@ const MOMENTUM_FALLBACK_COLUMNS = [
   "mom_5m",
   "mom_1m",
 ] as const;
+/** Signal rule: positive momentum + weak recent 4h % sum → Above. */
+const ABOVE_SIGNAL = "Above";
+const ABOVE_PCT_LOOKBACK = 4;
+/** Sum of last 4 × 4h close-% must be strictly below this (percent units). */
+const ABOVE_PCT_SUM_THRESHOLD = 0.3;
+const ABOVE_PRICE_LEVEL_OFFSET = 200;
 
 export type ComputeCryptoPriceEnv = {
   SUPABASE_URL?: string;
@@ -83,6 +93,11 @@ type PriceCandle = {
   close: number;
 };
 
+type PctPoint = {
+  bucket_start: string;
+  percentage: number | null;
+};
+
 type CryptoPriceRow = {
   asset_id: number;
   bucket_start: string;
@@ -90,7 +105,7 @@ type CryptoPriceRow = {
   timeframe: number;
   distance_from_support: number | null;
   distance_to_resistance: number | null;
-  signal: null;
+  signal: string | null;
   price_level: number;
   ema: number | null;
   momentum: number | null;
@@ -194,6 +209,52 @@ export function computeEmaTotal(
     }
   }
   return total;
+}
+
+/**
+ * Sum of the last `ABOVE_PCT_LOOKBACK` 4h crypto_prices.percentage values
+ * with bucket_start <= asOfBucketStart. Null when fewer than 4 bars exist or
+ * any of those percentages is missing.
+ */
+export function sumLast4hPercentages(
+  percentagesAsc: PctPoint[],
+  asOfBucketStart: string,
+): number | null {
+  const asOfMs = Date.parse(asOfBucketStart);
+  if (!Number.isFinite(asOfMs)) return null;
+
+  const eligible: PctPoint[] = [];
+  for (const point of percentagesAsc) {
+    const tMs = Date.parse(point.bucket_start);
+    if (!Number.isFinite(tMs) || tMs > asOfMs) continue;
+    eligible.push(point);
+  }
+  if (eligible.length < ABOVE_PCT_LOOKBACK) return null;
+
+  const last = eligible.slice(-ABOVE_PCT_LOOKBACK);
+  let sum = 0;
+  for (const point of last) {
+    if (point.percentage === null) return null;
+    sum += point.percentage;
+  }
+  return sum;
+}
+
+/**
+ * After all other crypto_price fields are populated: positive momentum and
+ * sum(last 4 × 4h %) < 0.30 → signal "Above", price_level = price_1m + 200.
+ */
+export function applyAboveSignalRule(
+  row: CryptoPriceRow,
+  pctSum: number | null,
+): CryptoPriceRow {
+  if (row.momentum === null || row.momentum <= 0) return row;
+  if (pctSum === null || !(pctSum < ABOVE_PCT_SUM_THRESHOLD)) return row;
+  return {
+    ...row,
+    signal: ABOVE_SIGNAL,
+    price_level: roundPrice(row.price_1m + ABOVE_PRICE_LEVEL_OFFSET),
+  };
 }
 
 async function assertAdminAccess(
@@ -351,6 +412,64 @@ async function fetchLatestEmaFactorsByTimeframe(
     }),
   );
   return new Map(results);
+}
+
+/**
+ * Ascending 4h percentage series from crypto_prices (for Above signal rule).
+ * When fromIso is set, loads a few extra prior bars so early rows still have
+ * a full 4-bar lookback.
+ */
+async function fetch4hPercentagesAsc(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+  fromIso: string | null,
+): Promise<PctPoint[]> {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const points: PctPoint[] = [];
+  let offset = 0;
+  const lookbackMs = ABOVE_PCT_LOOKBACK * ANALYSIS_TIMEFRAME * 60_000;
+  const fromFilter = fromIso
+    ? `&bucket_start=gte.${encodeURIComponent(
+        new Date(Date.parse(fromIso) - lookbackMs).toISOString(),
+      )}`
+    : "";
+
+  while (true) {
+    const end = offset + PAGE_SIZE - 1;
+    const res = await fetch(
+      `${base}/rest/v1/crypto_prices?select=bucket_start,percentage&asset_id=eq.${assetId}&timeframe=eq.${ANALYSIS_TIMEFRAME}${fromFilter}&order=bucket_start.asc`,
+      {
+        headers: restHeaders(serviceKey, {
+          Prefer: "count=exact",
+          Range: `${offset}-${end}`,
+        }),
+      },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(
+        `Failed to load 4h crypto_prices percentages: ${text.slice(0, 300)}`,
+      );
+    }
+    const page = (await res.json()) as Array<{
+      bucket_start?: unknown;
+      percentage?: unknown;
+    }>;
+    for (const row of page) {
+      const bucketStart =
+        typeof row.bucket_start === "string" ? row.bucket_start : null;
+      if (!bucketStart) continue;
+      points.push({
+        bucket_start: bucketStart,
+        percentage: parseNumber(row.percentage),
+      });
+    }
+    if (page.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+  }
+
+  return points;
 }
 
 /** Ascending source candles from crypto_prices. */
@@ -760,6 +879,13 @@ async function backfillAsset(
     fromIso,
   );
 
+  const percentages4h = await fetch4hPercentagesAsc(
+    supabaseUrl,
+    serviceKey,
+    asset.id,
+    fromIso,
+  );
+
   const maState = new Map<number, { i: number }>();
   for (const tf of EMA_SCORE_TIMEFRAMES) {
     maState.set(tf, { i: -1 });
@@ -784,7 +910,9 @@ async function backfillAsset(
       continue;
     }
     const momentum = momentumByTs.get(tMs) ?? null;
-    rows.push(buildRow(asset.id, candle, cycle, emaTotal, momentum, updatedAt));
+    const row = buildRow(asset.id, candle, cycle, emaTotal, momentum, updatedAt);
+    const pctSum = sumLast4hPercentages(percentages4h, candle.bucket_start);
+    rows.push(applyAboveSignalRule(row, pctSum));
   }
 
   return { rows, skippedNoCycle };
@@ -915,7 +1043,19 @@ export async function computeCryptoPrice(
         asset.symbol,
         latest.bucket_start,
       );
-      rows.push(buildRow(asset.id, latest, cycle, emaTotal, momentum, updatedAt));
+      const row = buildRow(asset.id, latest, cycle, emaTotal, momentum, updatedAt);
+      const percentages4h = await fetch4hPercentagesAsc(
+        supabaseUrl,
+        serviceKey,
+        asset.id,
+        // Enough prior 4h bars for the 4-bar % sum (plus the current bar).
+        new Date(
+          Date.parse(latest.bucket_start) -
+            ABOVE_PCT_LOOKBACK * ANALYSIS_TIMEFRAME * 60_000,
+        ).toISOString(),
+      );
+      const pctSum = sumLast4hPercentages(percentages4h, latest.bucket_start);
+      rows.push(applyAboveSignalRule(row, pctSum));
     }
 
     rowsInserted = await insertCryptoPriceRows(supabaseUrl, serviceKey, rows);
