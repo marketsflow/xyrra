@@ -217,10 +217,9 @@ async function loadSignaledCryptoPrices(
 }
 
 /**
- * Pair each signaled crypto_price bar with the *next* Polymarket 4h window.
- *
- * Signal candle bucket_start = T closes at T+4h; that signal is only known then,
- * so the tradeable market is btc-updown-4h-{T+4h} (not the already-finished T window).
+ * Pair each signaled crypto_price bar with the Polymarket window of the same start.
+ * Only rows with a non-null signal are loaded, so create never offers a window
+ * that has no signal on crypto_price levels (same bucket_start / tf=4h).
  */
 function groupSignaledPeriods(
   rows: CryptoPriceSignalRow[],
@@ -229,14 +228,17 @@ function groupSignaledPeriods(
   const byDay = new Map<string, FourHourPeriod[]>();
 
   for (const cryptoPrice of rows) {
+    // Skip empty / whitespace signals (defense in depth; query already filters).
+    if (!cryptoPrice.signal.trim()) continue;
+
     const signalMs = Date.parse(cryptoPrice.bucket_start);
     if (!Number.isFinite(signalMs)) continue;
     const signalStartSec = Math.floor(signalMs / 1000);
     // Align to canonical 4h unix starts used by Polymarket slugs.
     if (signalStartSec % WINDOW_SEC !== 0) continue;
 
-    // Next Polymarket window after the signal candle closes.
-    const startSec = signalStartSec + WINDOW_SEC;
+    // Same window as the signaled crypto_price bar (matches levels view).
+    const startSec = signalStartSec;
     const endSec = startSec + WINDOW_SEC;
     // Only list Polymarket windows that have fully closed.
     if (endSec > closedPolyEndSec) continue;
@@ -422,7 +424,7 @@ function renderPreview(
     <p class="xa-vt__preview-title">Selected window</p>
     <dl class="xa-vt__preview-grid">
       <div><dt>Polymarket</dt><dd>${escapeHtml(title)}</dd></div>
-      <div><dt>Signal crypto_price</dt><dd>${escapeHtml(cryptoAt)} → trade next 4h</dd></div>
+      <div><dt>crypto_price</dt><dd>${escapeHtml(cryptoAt)}</dd></div>
       <div><dt>Signal</dt><dd>${escapeHtml(period.cryptoPrice.signal)}</dd></div>
       <div><dt>Price level</dt><dd>${period.cryptoPrice.price_level == null ? "—" : escapeHtml(period.cryptoPrice.price_level.toLocaleString(undefined, { maximumFractionDigits: 2 }))}</dd></div>
       <div><dt>Price to beat</dt><dd>${strike == null ? "—" : escapeHtml(strike.toLocaleString(undefined, { style: "currency", currency: "USD" }))}</dd></div>
