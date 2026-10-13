@@ -105,6 +105,7 @@ type PriceLevelRow = {
   distance_to_resistance: number | null;
   ema: number | null;
   momentum: number | null;
+  percentage_sum: number | null;
   signal: string | null;
   updated_at: string | null;
   created_at: string | null;
@@ -492,6 +493,7 @@ function toPriceLevelRow(row: Record<string, unknown>): PriceLevelRow | null {
     distance_to_resistance: asNumber(row.distance_to_resistance),
     ema: asNumber(row.ema),
     momentum: asNumber(row.momentum),
+    percentage_sum: asNumber(row.percentage_sum),
     signal: asString(row.signal),
     updated_at: asString(row.updated_at),
     created_at: asString(row.created_at),
@@ -765,7 +767,7 @@ async function loadPriceLevels(
   const { data, error } = await supabase
     .from("crypto_price")
     .select(
-      "id, bucket_start, price_1m, price_level, distance_from_support, distance_to_resistance, ema, momentum, signal, updated_at, created_at",
+      "id, bucket_start, price_1m, price_level, distance_from_support, distance_to_resistance, ema, momentum, percentage_sum, signal, updated_at, created_at",
     )
     .eq("asset_id", assetId)
     .eq("timeframe", timeframeMinutes)
@@ -1063,7 +1065,7 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
 
   if (rows.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="9" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (default: closed 4h candles).</td></tr>';
+      '<tr><td colspan="10" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (default: closed 4h candles).</td></tr>';
     return;
   }
 
@@ -1082,6 +1084,7 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
               : escapeHtml(String(row.ema))
           }</td>
           <td>${renderPercentage(row.momentum)}</td>
+          <td>${renderPercentage(row.percentage_sum)}</td>
           <td>${
             row.signal
               ? escapeHtml(row.signal)

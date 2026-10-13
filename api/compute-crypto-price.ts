@@ -13,8 +13,9 @@
  * Momentum: crypto_momentum value at the same timestamp when present
  *   (prefers mom_4h for analysis TF 4h; else first non-null mom_*).
  *
+ * percentage_sum: sum of last 4 crypto_prices.percentage on TF 4h (as of bar).
  * After all other fields are set on a row:
- *   if momentum > 0 and sum(last 4 crypto_prices.percentage on TF 4h) < 0.30,
+ *   if momentum > 0 and percentage_sum < 0.30,
  *   then signal = "Above" and price_level = price_1m + 200.
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
@@ -109,6 +110,7 @@ type CryptoPriceRow = {
   price_level: number;
   ema: number | null;
   momentum: number | null;
+  percentage_sum: number | null;
   updated_at: string;
 };
 
@@ -241,19 +243,23 @@ export function sumLast4hPercentages(
 }
 
 /**
- * After all other crypto_price fields are populated: positive momentum and
+ * Persist percentage_sum, then apply Above rule when momentum > 0 and
  * sum(last 4 × 4h %) < 0.30 → signal "Above", price_level = price_1m + 200.
  */
 export function applyAboveSignalRule(
   row: CryptoPriceRow,
   pctSum: number | null,
 ): CryptoPriceRow {
-  if (row.momentum === null || row.momentum <= 0) return row;
-  if (pctSum === null || !(pctSum < ABOVE_PCT_SUM_THRESHOLD)) return row;
-  return {
+  const withSum: CryptoPriceRow = {
     ...row,
+    percentage_sum: pctSum === null ? null : roundPct(pctSum),
+  };
+  if (withSum.momentum === null || withSum.momentum <= 0) return withSum;
+  if (pctSum === null || !(pctSum < ABOVE_PCT_SUM_THRESHOLD)) return withSum;
+  return {
+    ...withSum,
     signal: ABOVE_SIGNAL,
-    price_level: roundPrice(row.price_1m + ABOVE_PRICE_LEVEL_OFFSET),
+    price_level: roundPrice(withSum.price_1m + ABOVE_PRICE_LEVEL_OFFSET),
   };
 }
 
@@ -833,6 +839,7 @@ function buildRow(
     price_level: price,
     ema: emaTotal,
     momentum,
+    percentage_sum: null,
     updated_at: updatedAt,
   };
 }
