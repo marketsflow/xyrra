@@ -20,9 +20,8 @@
  *   3) mom > 1% → Below
  *   4) -1% < mom < 0 and %sum > 0.80 → Below
  *   5) mom < 1% (fallback) → Below
- * price_level is the *previous* source candle close (no ± offset). For a 4h bar
- * starting at T that is the close at T — i.e. Polymarket open / price-to-beat
- * time for the window `btc-updown-4h-{T}`. price_1m remains this bar's close.
+ *   6) mom is null and %sum > 1.00 → Below
+ * price_level is always price_1m (this bar's close; no ± offset).
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
@@ -60,6 +59,7 @@ const MOMENTUM_STRONG_PCT = 1;
 /** percentage_sum thresholds in percent units. */
 const PCT_SUM_WEAK = 0.3;
 const PCT_SUM_STRONG = 0.8;
+const PCT_SUM_VERY_STRONG = 1.0;
 
 export type ComputeCryptoPriceEnv = {
   SUPABASE_URL?: string;
@@ -252,44 +252,55 @@ export function sumLast4hPercentages(
 }
 
 /**
- * Persist percentage_sum, then apply signal rules (first match wins).
- * See file header for the five rules.
- * Does not change price_level (set by the writer to the previous-bar close).
+ * Persist percentage_sum, keep price_level = price_1m, then apply signal rules
+ * (first match wins). See file header for the six rules.
  */
 export function applySignalRules(
   row: CryptoPriceRow,
   pctSum: number | null,
 ): CryptoPriceRow {
+  const price1m = roundPrice(row.price_1m);
   const withSum: CryptoPriceRow = {
     ...row,
+    price_level: price1m,
     percentage_sum: pctSum === null ? null : roundPct(pctSum),
   };
-  const mom = withSum.momentum;
-  if (mom === null) return withSum;
 
   const set = (signal: string): CryptoPriceRow => ({
     ...withSum,
     signal,
+    price_level: price1m,
   });
 
-  // 1) 0 < mom < 1% and %sum < 0.30 → Above
-  if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum < PCT_SUM_WEAK) {
-    return set(SIGNAL_ABOVE);
+  const mom = withSum.momentum;
+
+  // Rules 1–5 require a momentum value.
+  if (mom !== null) {
+    // 1) 0 < mom < 1% and %sum < 0.30 → Above
+    if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum < PCT_SUM_WEAK) {
+      return set(SIGNAL_ABOVE);
+    }
+    // 2) 0 < mom < 1% and %sum > 0.80 → Above
+    if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
+      return set(SIGNAL_ABOVE);
+    }
+    // 3) mom > 1% → Below
+    if (mom > MOMENTUM_STRONG_PCT) {
+      return set(SIGNAL_BELOW);
+    }
+    // 4) -1% < mom < 0 and %sum > 0.80 → Below
+    if (mom < 0 && mom > -MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
+      return set(SIGNAL_BELOW);
+    }
+    // 5) mom < 1% (fallback when no earlier rule matched) → Below
+    if (mom < MOMENTUM_STRONG_PCT) {
+      return set(SIGNAL_BELOW);
+    }
+    return withSum;
   }
-  // 2) 0 < mom < 1% and %sum > 0.80 → Above
-  if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
-    return set(SIGNAL_ABOVE);
-  }
-  // 3) mom > 1% → Below
-  if (mom > MOMENTUM_STRONG_PCT) {
-    return set(SIGNAL_BELOW);
-  }
-  // 4) -1% < mom < 0 and %sum > 0.80 → Below
-  if (mom < 0 && mom > -MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
-    return set(SIGNAL_BELOW);
-  }
-  // 5) mom < 1% (fallback when no earlier rule matched) → Below
-  if (mom < MOMENTUM_STRONG_PCT) {
+
+  // 6) mom is null and %sum > 1.00 → Below
+  if (pctSum !== null && pctSum > PCT_SUM_VERY_STRONG) {
     return set(SIGNAL_BELOW);
   }
 
@@ -407,29 +418,6 @@ async function fetchLatestSourceCandle(
     return { bucket_start: bucketStart, close };
   }
   return null;
-}
-
-/** Close of the source candle immediately before `beforeBucketStart`. */
-async function fetchPreviousSourceClose(
-  supabaseUrl: string,
-  serviceKey: string,
-  assetId: number,
-  sourceTimeframe: number,
-  beforeBucketStart: string,
-): Promise<number | null> {
-  const base = supabaseUrl.replace(/\/$/, "");
-  const res = await fetch(
-    `${base}/rest/v1/crypto_prices?select=close&asset_id=eq.${assetId}&timeframe=eq.${sourceTimeframe}&bucket_start=lt.${encodeURIComponent(beforeBucketStart)}&order=bucket_start.desc&limit=1`,
-    { headers: restHeaders(serviceKey) },
-  );
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(
-      `Failed to load previous crypto_prices close tf=${sourceTimeframe}: ${text.slice(0, 300)}`,
-    );
-  }
-  const rows = (await res.json()) as Array<{ close?: unknown }>;
-  return parseNumber(rows[0]?.close);
 }
 
 async function fetchActiveCycle(
@@ -890,11 +878,8 @@ function buildRow(
   emaTotal: number,
   momentum: number | null,
   updatedAt: string,
-  /** Previous source-candle close; aligns with bar open / Polymarket price-to-beat. */
-  previousClose: number | null,
 ): CryptoPriceRow {
   const price = roundPrice(candle.close);
-  const level = previousClose === null ? price : roundPrice(previousClose);
   return {
     asset_id: assetId,
     bucket_start: candle.bucket_start,
@@ -903,7 +888,7 @@ function buildRow(
     distance_from_support: distanceFromSupportPct(price, cycle.support),
     distance_to_resistance: distanceToResistancePct(price, cycle.resistance),
     signal: null,
-    price_level: level,
+    price_level: price,
     ema: emaTotal,
     momentum,
     percentage_sum: null,
@@ -965,30 +950,8 @@ async function backfillAsset(
     maState.set(tf, { i: -1 });
   }
 
-  // Need one prior closed candle so the first in-range bar gets a true prev close.
-  let seedPreviousClose: number | null = null;
-  if (fromIso) {
-    const seedFrom = new Date(
-      Date.parse(fromIso) - sourceTimeframe * 60_000,
-    ).toISOString();
-    const seedCandles = await fetchSourceCandlesAsc(
-      supabaseUrl,
-      serviceKey,
-      asset.id,
-      sourceTimeframe,
-      seedFrom,
-      { closedOnly: true },
-    );
-    for (const c of seedCandles) {
-      if (Date.parse(c.bucket_start) < Date.parse(fromIso)) {
-        seedPreviousClose = c.close;
-      }
-    }
-  }
-
   const rows: CryptoPriceRow[] = [];
   let skippedNoCycle = 0;
-  let previousClose: number | null = seedPreviousClose;
 
   for (const candle of candles) {
     const tMs = Date.parse(candle.bucket_start);
@@ -1003,22 +966,12 @@ async function backfillAsset(
     const cycle = cycleAtTime(cycles, candle.bucket_start);
     if (!cycle) {
       skippedNoCycle += 1;
-      previousClose = candle.close;
       continue;
     }
     const momentum = momentumByTs.get(tMs) ?? null;
-    const row = buildRow(
-      asset.id,
-      candle,
-      cycle,
-      emaTotal,
-      momentum,
-      updatedAt,
-      previousClose,
-    );
+    const row = buildRow(asset.id, candle, cycle, emaTotal, momentum, updatedAt);
     const pctSum = sumLast4hPercentages(percentages4h, candle.bucket_start);
     rows.push(applySignalRules(row, pctSum));
-    previousClose = candle.close;
   }
 
   return { rows, skippedNoCycle };
@@ -1149,22 +1102,7 @@ export async function computeCryptoPrice(
         asset.symbol,
         latest.bucket_start,
       );
-      const previousClose = await fetchPreviousSourceClose(
-        supabaseUrl,
-        serviceKey,
-        asset.id,
-        sourceTimeframe,
-        latest.bucket_start,
-      );
-      const row = buildRow(
-        asset.id,
-        latest,
-        cycle,
-        emaTotal,
-        momentum,
-        updatedAt,
-        previousClose,
-      );
+      const row = buildRow(asset.id, latest, cycle, emaTotal, momentum, updatedAt);
       const percentages4h = await fetch4hPercentagesAsc(
         supabaseUrl,
         serviceKey,
