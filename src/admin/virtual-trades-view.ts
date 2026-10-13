@@ -333,37 +333,49 @@ async function init() {
     // Still show rows even if settlement fails.
   }
 
-  emptyEl.hidden = true;
-  tableWrap.hidden = false;
+  function renderStatus() {
+    const wins = rows.filter((r) => r.status === "WIN").length;
+    const losses = rows.filter((r) => r.status === "LOSS").length;
+    const open = rows.filter((r) => r.status === "OPEN").length;
+    const totalPnl = rows
+      .map((r) => displayPnl(r))
+      .filter((n): n is number => n !== null)
+      .reduce((sum, n) => sum + n, 0);
 
-  const wins = rows.filter((r) => r.status === "WIN").length;
-  const losses = rows.filter((r) => r.status === "LOSS").length;
-  const open = rows.filter((r) => r.status === "OPEN").length;
-  const totalPnl = rows
-    .map((r) => displayPnl(r))
-    .filter((n): n is number => n !== null)
-    .reduce((sum, n) => sum + n, 0);
+    statusEl.textContent =
+      `${rows.length} trade${rows.length === 1 ? "" : "s"}` +
+      ` · ${wins} win / ${losses} loss / ${open} open` +
+      ` · P&L on $${STAKE_USD}/trade: ${formatPnl(totalPnl)}` +
+      (settled > 0 ? ` · settled ${settled} just now` : "");
+  }
 
-  statusEl.textContent =
-    `${rows.length} trade${rows.length === 1 ? "" : "s"}` +
-    ` · ${wins} win / ${losses} loss / ${open} open` +
-    ` · P&L on $${STAKE_USD}/trade: ${formatPnl(totalPnl)}` +
-    (settled > 0 ? ` · settled ${settled} just now` : "");
+  function renderRows() {
+    if (rows.length === 0) {
+      emptyEl.hidden = false;
+      tableWrap.hidden = true;
+      bodyEl.innerHTML = "";
+      statusEl.textContent = "";
+      return;
+    }
 
-  bodyEl.innerHTML = rows
-    .map((row) => {
-      const pnl = displayPnl(row);
-      const pnlClass =
-        pnl === null ? "" : pnl > 0 ? "xa-vt__pnl--win" : pnl < 0 ? "xa-vt__pnl--loss" : "";
-      const resultClass =
-        row.status === "WIN"
-          ? "xa-vt__result--win"
-          : row.status === "LOSS"
-            ? "xa-vt__result--loss"
-            : "xa-vt__result--open";
+    emptyEl.hidden = true;
+    tableWrap.hidden = false;
+    renderStatus();
 
-      return `
-      <tr>
+    bodyEl.innerHTML = rows
+      .map((row) => {
+        const pnl = displayPnl(row);
+        const pnlClass =
+          pnl === null ? "" : pnl > 0 ? "xa-vt__pnl--win" : pnl < 0 ? "xa-vt__pnl--loss" : "";
+        const resultClass =
+          row.status === "WIN"
+            ? "xa-vt__result--win"
+            : row.status === "LOSS"
+              ? "xa-vt__result--loss"
+              : "xa-vt__result--open";
+
+        return `
+      <tr data-trade-id="${row.id}">
         <td>${escapeHtml(String(row.id))}</td>
         <td>${escapeHtml(formatDateTime(row.timestamp))}</td>
         <td>${escapeHtml(row.market_title || row.market_slug)}</td>
@@ -375,9 +387,57 @@ async function init() {
         <td><span class="xa-vt__result ${resultClass}">${escapeHtml(resultLabel(row.status))}</span></td>
         <td class="${pnlClass}">${escapeHtml(row.status === "OPEN" ? "—" : formatPnl(pnl))}</td>
         <td>${escapeHtml(formatDateTime(row.closed_at))}</td>
+        <td>
+          <button
+            type="button"
+            class="xa-vt__delete"
+            data-delete-id="${row.id}"
+            data-delete-label="${escapeHtml(row.market_title || row.market_slug)}"
+          >Delete</button>
+        </td>
       </tr>`;
-    })
-    .join("");
+      })
+      .join("");
+  }
+
+  renderRows();
+
+  bodyEl.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLButtonElement) || !target.classList.contains("xa-vt__delete")) {
+      return;
+    }
+    const id = Number(target.dataset.deleteId);
+    if (!Number.isFinite(id)) return;
+    const label = target.dataset.deleteLabel || `trade #${id}`;
+    if (!window.confirm(`Delete virtual trade #${id} (${label})? You can re-place it from Create.`)) {
+      return;
+    }
+
+    void (async () => {
+      target.disabled = true;
+      statusEl.classList.remove("xa-users__status--error");
+      statusEl.textContent = `Deleting trade #${id}…`;
+      const { error: deleteError } = await session.supabase
+        .from("virtual_trades")
+        .delete()
+        .eq("id", id);
+      if (deleteError) {
+        target.disabled = false;
+        statusEl.textContent = deleteError.message;
+        statusEl.classList.add("xa-users__status--error");
+        return;
+      }
+      const idx = rows.findIndex((row) => row.id === id);
+      if (idx >= 0) rows.splice(idx, 1);
+      settled = 0;
+      renderRows();
+      statusEl.textContent =
+        rows.length === 0
+          ? `Deleted trade #${id}.`
+          : `Deleted trade #${id}. ${rows.length} remaining.`;
+    })();
+  });
 }
 
 void init();

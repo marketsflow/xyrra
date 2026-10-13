@@ -18,6 +18,9 @@ type CryptoPriceSignalRow = {
 };
 
 type FourHourPeriod = {
+  /** crypto_price.bucket_start (signal candle). */
+  signalStartSec: number;
+  /** Polymarket 4h window start (= signalStartSec + 4h). */
   startSec: number;
   endSec: number;
   startIso: string;
@@ -214,8 +217,10 @@ async function loadSignaledCryptoPrices(
 }
 
 /**
- * Pair each signaled crypto_price bar with the Polymarket window of the same start.
- * crypto_price.price_level is the previous 4h close (= spot at this window's open).
+ * Pair each signaled crypto_price bar with the *next* Polymarket 4h window.
+ *
+ * Signal candle bucket_start = T closes at T+4h; that signal is only known then,
+ * so the tradeable market is btc-updown-4h-{T+4h} (not the already-finished T window).
  */
 function groupSignaledPeriods(
   rows: CryptoPriceSignalRow[],
@@ -224,17 +229,20 @@ function groupSignaledPeriods(
   const byDay = new Map<string, FourHourPeriod[]>();
 
   for (const cryptoPrice of rows) {
-    const startMs = Date.parse(cryptoPrice.bucket_start);
-    if (!Number.isFinite(startMs)) continue;
-    const startSec = Math.floor(startMs / 1000);
+    const signalMs = Date.parse(cryptoPrice.bucket_start);
+    if (!Number.isFinite(signalMs)) continue;
+    const signalStartSec = Math.floor(signalMs / 1000);
     // Align to canonical 4h unix starts used by Polymarket slugs.
-    if (startSec % WINDOW_SEC !== 0) continue;
+    if (signalStartSec % WINDOW_SEC !== 0) continue;
 
+    // Next Polymarket window after the signal candle closes.
+    const startSec = signalStartSec + WINDOW_SEC;
     const endSec = startSec + WINDOW_SEC;
     // Only list Polymarket windows that have fully closed.
     if (endSec > closedPolyEndSec) continue;
 
     const period: FourHourPeriod = {
+      signalStartSec,
       startSec,
       endSec,
       startIso: new Date(startSec * 1000).toISOString(),
@@ -334,6 +342,34 @@ async function loadEventPriceToBeat(
   return asNumber(data?.price_to_beat);
 }
 
+/**
+ * Canonical strike: prefer polymarket_events.price_to_beat (stable), then the
+ * first tick that actually has price_to_beat (early ticks are often null).
+ */
+async function loadPriceToBeat(
+  supabase: SupabaseClient,
+  startSec: number,
+  tick: PolymarketTick | null,
+): Promise<number | null> {
+  const fromEvent = await loadEventPriceToBeat(supabase, startSec);
+  if (fromEvent !== null) return fromEvent;
+  if (tick?.price_to_beat !== null && tick?.price_to_beat !== undefined) {
+    return tick.price_to_beat;
+  }
+
+  const slug = marketSlugForStart(startSec);
+  const { data, error } = await supabase
+    .from("polymarket_ticks")
+    .select("price_to_beat")
+    .eq("event_slug", slug)
+    .not("price_to_beat", "is", null)
+    .order("recorded_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (error) throw new Error(error.message);
+  return asNumber(data?.price_to_beat);
+}
+
 function renderDays(container: HTMLElement, days: DayGroup[]) {
   if (days.length === 0) {
     container.innerHTML =
@@ -378,7 +414,7 @@ function renderPreview(
 ) {
   const title = formatPolymarketTitle(period.startSec, period.endSec);
   const cryptoAt = formatCryptoPriceAt(period.cryptoPrice.bucket_start);
-  const strike = priceToBeat ?? tick?.price_to_beat;
+  const strike = priceToBeat;
   const spot = tick?.spot_price;
 
   el.hidden = false;
@@ -386,9 +422,9 @@ function renderPreview(
     <p class="xa-vt__preview-title">Selected window</p>
     <dl class="xa-vt__preview-grid">
       <div><dt>Polymarket</dt><dd>${escapeHtml(title)}</dd></div>
-      <div><dt>crypto_price</dt><dd>${escapeHtml(cryptoAt)}</dd></div>
+      <div><dt>Signal crypto_price</dt><dd>${escapeHtml(cryptoAt)} → trade next 4h</dd></div>
       <div><dt>Signal</dt><dd>${escapeHtml(period.cryptoPrice.signal)}</dd></div>
-      <div><dt>Price level (prev 4h close)</dt><dd>${period.cryptoPrice.price_level == null ? "—" : escapeHtml(period.cryptoPrice.price_level.toLocaleString(undefined, { maximumFractionDigits: 2 }))}</dd></div>
+      <div><dt>Price level</dt><dd>${period.cryptoPrice.price_level == null ? "—" : escapeHtml(period.cryptoPrice.price_level.toLocaleString(undefined, { maximumFractionDigits: 2 }))}</dd></div>
       <div><dt>Price to beat</dt><dd>${strike == null ? "—" : escapeHtml(strike.toLocaleString(undefined, { style: "currency", currency: "USD" }))}</dd></div>
       <div><dt>Entry spot</dt><dd>${spot == null ? "Waiting for tick / missing" : escapeHtml(spot.toLocaleString(undefined, { style: "currency", currency: "USD" }))}</dd></div>
       <div><dt>Entry tick</dt><dd>${tick ? escapeHtml(new Date(tick.recorded_at).toISOString()) : "No Polymarket tick found for this window"}</dd></div>
@@ -416,8 +452,7 @@ async function placeVirtualTrade(
     );
   }
 
-  const priceToBeat =
-    tick.price_to_beat ?? (await loadEventPriceToBeat(supabase, period.startSec));
+  const priceToBeat = await loadPriceToBeat(supabase, period.startSec, tick);
   if (priceToBeat === null) {
     throw new Error("Polymarket price_to_beat is missing for this window.");
   }
@@ -601,8 +636,7 @@ async function init() {
     void (async () => {
       try {
         const tick = await loadEntryTick(session.supabase, period.startSec);
-        const priceToBeat =
-          tick?.price_to_beat ?? (await loadEventPriceToBeat(session.supabase, period.startSec));
+        const priceToBeat = await loadPriceToBeat(session.supabase, period.startSec, tick);
         if (selectedStartSec === startSec) {
           renderPreview(previewEl, period, tick, priceToBeat);
         }

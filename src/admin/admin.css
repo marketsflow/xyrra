@@ -2603,6 +2603,27 @@ body.xa-body {
   font-variant-numeric: tabular-nums;
 }
 
+.xa-vt__delete {
+  border: 1px solid rgba(185, 28, 28, 0.35);
+  background: #fff;
+  color: #b91c1c;
+  border-radius: 0.4rem;
+  padding: 0.3rem 0.65rem;
+  font: inherit;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.xa-vt__delete:hover {
+  background: #fef2f2;
+}
+
+.xa-vt__delete:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
 .xa-vt__pnl--loss {
   color: #991b1b;
   font-weight: 700;
