@@ -63,13 +63,19 @@
                 <a class="xa-crypto__back" href="/admin/virtual-trades/">← Back to Virtual Trades</a>
                 <h1>Create a virtual trade</h1>
                 <p class="xa-templates__lede">
-                  Dates below list closed Polymarket-style 4h windows (UTC). Select a period to run a
-                  virtual trade for that window.
+                  Only closed 4h windows that have a <code>crypto_price</code> signal are listed.
+                  Check a period, then place the trade using the first Polymarket tick at/after window start.
                 </p>
+              </div>
+              <div class="xa-polymarket__actions">
+                <button type="button" id="xa-vt-place-trade" class="xa-vt__place-trade" disabled>
+                  Place Trade
+                </button>
               </div>
             </div>
 
             <p id="xa-vt-create-status" class="xa-users__status" aria-live="polite"></p>
+            <div id="xa-vt-create-preview" class="xa-vt__preview" hidden></div>
             <div id="xa-vt-create-days" class="xa-vt__days"></div>
           </div>
         </main>

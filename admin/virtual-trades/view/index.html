@@ -72,9 +72,33 @@
             </div>
 
             <p id="xa-vt-view-status" class="xa-users__status" aria-live="polite"></p>
-            <div id="xa-vt-view-empty" class="xa-sent__empty">
+            <div id="xa-vt-view-empty" class="xa-sent__empty" hidden>
               <p class="xa-sent__empty-title">No virtual trades yet</p>
               <p>Select a closed 4h period on the create page to run your first simulation.</p>
+            </div>
+            <div id="xa-vt-view-table-wrap" class="xa-users__table-wrap" hidden>
+              <table class="xa-users__table">
+                <thead>
+                  <tr>
+                    <th scope="col">ID</th>
+                    <th scope="col">Entry</th>
+                    <th scope="col">Polymarket</th>
+                    <th scope="col">crypto_price</th>
+                    <th scope="col">Price to beat</th>
+                    <th scope="col">Price level</th>
+                    <th scope="col">Signal</th>
+                    <th scope="col">Spot</th>
+                    <th scope="col">Poly price</th>
+                    <th scope="col">Direction</th>
+                    <th scope="col">Status</th>
+                  </tr>
+                </thead>
+                <tbody id="xa-vt-view-body">
+                  <tr>
+                    <td colspan="11" class="xa-users__empty">Loading…</td>
+                  </tr>
+                </tbody>
+              </table>
             </div>
           </div>
         </main>

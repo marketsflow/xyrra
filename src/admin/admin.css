@@ -2485,3 +2485,90 @@ body.xa-body {
   font-size: 0.75rem;
   max-width: 28rem;
 }
+
+.xa-vt__period-signal {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.1rem 0.45rem;
+  border-radius: 0.4rem;
+  background: #eff6ff;
+  color: #1d4ed8;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.xa-vt__place-trade {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.55rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #d8d6e8;
+  background: #eef0f5;
+  color: #9aa0b5;
+  font: inherit;
+  font-size: 0.875rem;
+  font-weight: 700;
+  cursor: not-allowed;
+}
+
+.xa-vt__place-trade--active {
+  border-color: #1d4ed8;
+  background: #2563eb;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.18);
+}
+
+.xa-vt__place-trade--active:hover {
+  background: #1d4ed8;
+}
+
+.xa-vt__place-trade:disabled:not(.xa-vt__place-trade--active) {
+  opacity: 1;
+}
+
+.xa-vt__preview {
+  margin-top: 1rem;
+  padding: 1.1rem 1.25rem;
+  border: 1px solid #e0deed;
+  border-radius: 1rem;
+  background: #fff;
+}
+
+.xa-vt__preview-title {
+  margin: 0;
+  font-size: 0.9rem;
+  font-weight: 600;
+}
+
+.xa-vt__preview-grid {
+  display: grid;
+  gap: 0.75rem;
+  margin: 0.85rem 0 0;
+}
+
+@media (min-width: 720px) {
+  .xa-vt__preview-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.xa-vt__preview-grid dt {
+  margin: 0;
+  color: var(--xa-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.xa-vt__preview-grid dd {
+  margin: 0.2rem 0 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
+
+.xa-vt__preview-grid code {
+  font-size: 0.8rem;
+}
