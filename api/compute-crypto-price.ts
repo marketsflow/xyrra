@@ -16,8 +16,8 @@
 
  *
  * EMA (0–50): +10 per bullish ema_9_20_factor among 5m/15m/1h/4h/1D.
- * Momentum: crypto_momentum value at the same timestamp when present
- *   (prefers mom_4h for analysis TF 4h; else first non-null mom_*).
+ * Momentum: crypto_momentum.mom_4h at the same timestamp only (no fallback to
+ *   other mom_* columns — matches Momentum tab tf=4h).
  *
  * percentage_sum: sum of last 4 crypto_prices.percentage on TF 4h (as of bar).
  * After all other fields are set, first matching signal rule wins:
@@ -46,16 +46,8 @@ const UPSERT_CHUNK = 500;
 /** Default lookback when backfill=1 and days is omitted. */
 const DEFAULT_BACKFILL_DAYS = 7;
 const DEFAULT_MOMENTUM_CONFIG_ID = "default_v1";
-/** Prefer this mom_* column for crypto_price.momentum (matches ANALYSIS_TIMEFRAME). */
-const MOMENTUM_PREFERRED_COLUMN = "mom_4h" as const;
-const MOMENTUM_FALLBACK_COLUMNS = [
-  "mom_4h",
-  "mom_1d",
-  "mom_1h",
-  "mom_15m",
-  "mom_5m",
-  "mom_1m",
-] as const;
+/** Only this mom_* column is copied into crypto_price.momentum (ANALYSIS_TIMEFRAME). */
+const MOMENTUM_COLUMN = "mom_4h" as const;
 const SIGNAL_ABOVE = "Above";
 const SIGNAL_BELOW = "Below";
 /** Bars used for percentage_sum (last N × 4h close-%). */
@@ -764,15 +756,9 @@ function momentumTsKey(iso: string): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
-/** Pick mom_4h when set; otherwise first non-null mom_* on the row. */
+/** Copy mom_4h only — null when that column is missing (no other-TF fallback). */
 export function pickMomentumValue(row: Record<string, unknown>): number | null {
-  const preferred = parseNumber(row[MOMENTUM_PREFERRED_COLUMN]);
-  if (preferred !== null) return preferred;
-  for (const col of MOMENTUM_FALLBACK_COLUMNS) {
-    const v = parseNumber(row[col]);
-    if (v !== null) return v;
-  }
-  return null;
+  return parseNumber(row[MOMENTUM_COLUMN]);
 }
 
 async function fetchMomentumAtTimestamp(
@@ -786,7 +772,7 @@ async function fetchMomentumAtTimestamp(
   const base = supabaseUrl.replace(/\/$/, "");
   // Fetch a few rows at/before target so ISO format variants still match by ms.
   const res = await fetch(
-    `${base}/rest/v1/crypto_momentum?select=timestamp,mom_1m,mom_5m,mom_15m,mom_1h,mom_4h,mom_1d&asset_symbol=eq.${encodeURIComponent(assetSymbol)}&timestamp=lte.${encodeURIComponent(timestampIso)}&config_id=eq.${encodeURIComponent(DEFAULT_MOMENTUM_CONFIG_ID)}&order=timestamp.desc&limit=5`,
+    `${base}/rest/v1/crypto_momentum?select=timestamp,${MOMENTUM_COLUMN}&asset_symbol=eq.${encodeURIComponent(assetSymbol)}&timestamp=lte.${encodeURIComponent(timestampIso)}&config_id=eq.${encodeURIComponent(DEFAULT_MOMENTUM_CONFIG_ID)}&order=timestamp.desc&limit=5`,
     { headers: restHeaders(serviceKey) },
   );
   if (!res.ok) {
@@ -822,7 +808,7 @@ async function fetchMomentumByTimestamp(
   while (true) {
     const end = offset + PAGE_SIZE - 1;
     const res = await fetch(
-      `${base}/rest/v1/crypto_momentum?select=timestamp,mom_1m,mom_5m,mom_15m,mom_1h,mom_4h,mom_1d&asset_symbol=eq.${encodeURIComponent(assetSymbol)}&config_id=eq.${encodeURIComponent(DEFAULT_MOMENTUM_CONFIG_ID)}${fromFilter}&order=timestamp.asc`,
+      `${base}/rest/v1/crypto_momentum?select=timestamp,${MOMENTUM_COLUMN}&asset_symbol=eq.${encodeURIComponent(assetSymbol)}&config_id=eq.${encodeURIComponent(DEFAULT_MOMENTUM_CONFIG_ID)}${fromFilter}&order=timestamp.asc`,
       {
         headers: restHeaders(serviceKey, {
           Prefer: "count=exact",

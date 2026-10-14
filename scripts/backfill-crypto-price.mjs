@@ -5,7 +5,7 @@
  * Opt-in 1m source: SOURCE_TF=1 (or CADENCE=1m) for per-minute buckets.
  * Stored analysis timeframe is always 4h (S/R + crypto_price.timeframe=240).
  * EMA score: Σ +10 for each bullish ema_9_20_factor among 5m/15m/1h/4h/1D.
- * Momentum: crypto_momentum at the same timestamp when present (mom_4h preferred).
+ * Momentum: crypto_momentum.mom_4h at the same timestamp only (no other-TF fallback).
  * price_1m / price_level = crypto_prices.open at bucket_start (frozen; not live close).
  *
  * Usage:
