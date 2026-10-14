@@ -19,7 +19,8 @@
  * Momentum: crypto_momentum.mom_4h at the same timestamp only (no fallback to
  *   other mom_* columns — matches Momentum tab tf=4h).
  *
- * percentage_sum: sum of last 4 crypto_prices.percentage on TF 4h (as of bar).
+ * percentage_sum: sum of the previous 4 crypto_prices.percentage on TF 4h
+ *   (excludes the current bar so the sum is fixed at bucket open).
  * After all other fields are set, first matching signal rule wins:
  *   1) 0 < mom < 1% and %sum < 0.30 → Above
  *   2) 0 < mom < 1% and %sum > 0.80 → Above
@@ -222,9 +223,10 @@ export function computeEmaTotal(
 }
 
 /**
- * Sum of the last `PCT_LOOKBACK` 4h crypto_prices.percentage values
- * with bucket_start <= asOfBucketStart. Null when fewer than 4 bars exist or
- * any of those percentages is missing.
+ * Sum of the previous `PCT_LOOKBACK` 4h crypto_prices.percentage values
+ * with bucket_start < asOfBucketStart (excludes the current bar so the sum
+ * does not change while the open 4h candle's % updates). Null when fewer
+ * than 4 prior bars exist or any of those percentages is missing.
  */
 export function sumLast4hPercentages(
   percentagesAsc: PctPoint[],
@@ -236,7 +238,7 @@ export function sumLast4hPercentages(
   const eligible: PctPoint[] = [];
   for (const point of percentagesAsc) {
     const tMs = Date.parse(point.bucket_start);
-    if (!Number.isFinite(tMs) || tMs > asOfMs) continue;
+    if (!Number.isFinite(tMs) || tMs >= asOfMs) continue;
     eligible.push(point);
   }
   if (eligible.length < PCT_LOOKBACK) return null;
@@ -1101,7 +1103,7 @@ export async function computeCryptoPrice(
         supabaseUrl,
         serviceKey,
         asset.id,
-        // Enough prior 4h bars for the 4-bar % sum (plus the current bar).
+        // Enough prior 4h bars for the previous-4 % sum (excludes current bar).
         new Date(
           Date.parse(latest.bucket_start) -
             PCT_LOOKBACK * ANALYSIS_TIMEFRAME * 60_000,
