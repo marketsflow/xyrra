@@ -1,7 +1,7 @@
 /**
  * One-shot backfill: crypto_price from crypto_prices source candles.
  *
- * Default source = 4h (timeframe=240): one row per closed 4h candle.
+ * Default source = 4h (timeframe=240): one row per 4h candle (includes open bar).
  * Opt-in 1m source: SOURCE_TF=1 (or CADENCE=1m) for per-minute buckets.
  * Stored analysis timeframe is always 4h (S/R + crypto_price.timeframe=240).
  * EMA score: Σ +10 for each bullish ema_9_20_factor among 5m/15m/1h/4h/1D.

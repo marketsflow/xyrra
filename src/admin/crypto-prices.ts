@@ -1065,7 +1065,7 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
 
   if (rows.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="10" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (default: closed 4h candles).</td></tr>';
+      '<tr><td colspan="10" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (default: latest 4h crypto_prices candle, including open bar).</td></tr>';
     return;
   }
 

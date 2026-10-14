@@ -5,9 +5,11 @@
  * Source candle cadence (bucket_start / close) defaults to 4h crypto_prices;
  * pass sourceTimeframe=1 (or ?source=1) for 1m buckets.
  *
- * Incremental (cron, default): latest *closed* 4h candle → upsert that bar only
- * (does not invent per-minute rows).
- * Backfill: walk source candles from crypto_prices (optional DAYS).
+ * Incremental (cron, default): latest 4h crypto_prices candle → upsert that bar
+ * (includes the open/forming bar so levels match Prices and Polymarket window open).
+ * Backfill: walk source candles from crypto_prices (optional DAYS), including the
+ * current open bar when present.
+
  *
  * EMA (0–50): +10 per bullish ema_9_20_factor among 5m/15m/1h/4h/1D.
  * Momentum: crypto_momentum value at the same timestamp when present
@@ -910,7 +912,7 @@ async function backfillAsset(
     asset.id,
     sourceTimeframe,
     fromIso,
-    { closedOnly: true },
+    { closedOnly: false },
   );
   if (candles.length === 0) {
     return { rows: [], skippedNoCycle: 0 };
@@ -1065,14 +1067,15 @@ export async function computeCryptoPrice(
     const rows: CryptoPriceRow[] = [];
 
     for (const asset of assets) {
-      // Default 4h: only the latest *closed* 4h bar (cron every minute won't
-      // create 1m rows). Opt-in source=1 uses closed 1m bars.
+      // Default 4h: latest crypto_prices bar including the open/forming candle
+      // (same bucket as Prices / Polymarket 4h window start). Opt-in source=1
+      // uses the latest 1m bar the same way.
       const latest = await fetchLatestSourceCandle(
         supabaseUrl,
         serviceKey,
         asset.id,
         sourceTimeframe,
-        { closedOnly: true },
+        { closedOnly: false },
       );
       if (latest === null) {
         skippedNoPrice += 1;
