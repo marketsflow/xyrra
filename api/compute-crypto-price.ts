@@ -15,7 +15,8 @@
  * minute while the 4h bar is still forming.
 
  *
- * EMA (0–50): +10 per bullish ema_9_20_factor among 5m/15m/1h/4h/1D.
+ * EMA (0–50): +10 per bullish ema_9_20_factor among 5m/15m/1h/4h/1D,
+ *   scored as-of bucket_start (not the live latest MA).
  * Momentum: crypto_momentum.mom_4h at the same timestamp only (no fallback to
  *   other mom_* columns — matches Momentum tab tf=4h).
  *
@@ -444,26 +445,27 @@ async function fetchActiveCycle(
 }
 
 /**
- * Latest ema_9_20_factor per higher timeframe from crypto_moving_averages.
- * One newest-row query per TF (not a shared recent window) so slower TFs
- * like 4h/1D are not crowded out by frequent 5m/15m rows.
+ * ema_9_20_factor per higher timeframe as-of `asOfIso` (timestamp <= asOf).
+ * One query per TF so slower TFs (4h/1D) are not crowded out by 5m/15m rows.
+ * Keeps crypto_price.ema fixed for a bucket instead of tracking live MAs.
  */
-async function fetchLatestEmaFactorsByTimeframe(
+async function fetchEmaFactorsAsOf(
   supabaseUrl: string,
   serviceKey: string,
   assetId: number,
+  asOfIso: string,
 ): Promise<Map<number, number | null>> {
   const base = supabaseUrl.replace(/\/$/, "");
   const results = await Promise.all(
     EMA_SCORE_TIMEFRAMES.map(async (tf) => {
       const res = await fetch(
-        `${base}/rest/v1/crypto_moving_averages?select=ema_9_20_factor&asset_id=eq.${assetId}&timeframe=eq.${tf}&order=timestamp.desc&limit=1`,
+        `${base}/rest/v1/crypto_moving_averages?select=ema_9_20_factor&asset_id=eq.${assetId}&timeframe=eq.${tf}&timestamp=lte.${encodeURIComponent(asOfIso)}&order=timestamp.desc&limit=1`,
         { headers: restHeaders(serviceKey) },
       );
       if (!res.ok) {
         const text = await res.text();
         throw new Error(
-          `Failed to load crypto_moving_averages tf=${tf}: ${text.slice(0, 300)}`,
+          `Failed to load crypto_moving_averages tf=${tf} as-of ${asOfIso}: ${text.slice(0, 300)}`,
         );
       }
       const rows = (await res.json()) as Array<{ ema_9_20_factor?: unknown }>;
@@ -1075,10 +1077,11 @@ export async function computeCryptoPrice(
         continue;
       }
 
-      const emaFactors = await fetchLatestEmaFactorsByTimeframe(
+      const emaFactors = await fetchEmaFactorsAsOf(
         supabaseUrl,
         serviceKey,
         asset.id,
+        latest.bucket_start,
       );
       const emaTotal = computeEmaTotal(emaFactors);
 
