@@ -29,6 +29,10 @@
  *   4) -1% < mom < 0 and %sum > 0.80 → Below
  *   5) mom < 1% (fallback) → Below
  *   6) mom is null and %sum > 1.00 → Below
+ *   7) mom is null and (last 3 EMA values incl. current are reducing
+ *      OR last 3 Dist. to resistance incl. current are rising) → Below
+ *      "reducing" = non-increasing with a net drop (e.g. 50→50→30 counts)
+ *      "rising" = non-decreasing with a net rise (e.g. 3.46→3.60→3.73)
  * price_level is always price_1m (this bar's open / price at bucket_start; no ± offset).
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
@@ -60,6 +64,8 @@ const MOMENTUM_STRONG_PCT = 1;
 const PCT_SUM_WEAK = 0.3;
 const PCT_SUM_STRONG = 0.8;
 const PCT_SUM_VERY_STRONG = 1.0;
+/** Bars needed (incl. current) for no-momentum EMA / Dist. resistance reducing rule. */
+const SIGNAL_TREND_LOOKBACK = 3;
 
 export type ComputeCryptoPriceEnv = {
   SUPABASE_URL?: string;
@@ -254,12 +260,55 @@ export function sumLast4hPercentages(
 }
 
 /**
+ * True when the last 3 numeric values are reducing: non-increasing with a net
+ * drop (a >= b >= c and a > c). Allows plateaus then a drop (e.g. 50→50→30).
+ */
+export function isReducingSeries(values: Array<number | null | undefined>): boolean {
+  if (values.length < SIGNAL_TREND_LOOKBACK) return false;
+  const a = values[values.length - 3];
+  const b = values[values.length - 2];
+  const c = values[values.length - 1];
+  if (a === null || a === undefined) return false;
+  if (b === null || b === undefined) return false;
+  if (c === null || c === undefined) return false;
+  return a >= b && b >= c && a > c;
+}
+
+/**
+ * True when the last 3 numeric values are rising: non-decreasing with a net
+ * rise (a <= b <= c and a < c). Allows plateaus then a rise.
+ */
+export function isRisingSeries(values: Array<number | null | undefined>): boolean {
+  if (values.length < SIGNAL_TREND_LOOKBACK) return false;
+  const a = values[values.length - 3];
+  const b = values[values.length - 2];
+  const c = values[values.length - 1];
+  if (a === null || a === undefined) return false;
+  if (b === null || b === undefined) return false;
+  if (c === null || c === undefined) return false;
+  return a <= b && b <= c && a < c;
+}
+
+/** @deprecated Use isReducingSeries. */
+export function isStrictlyReducing(values: Array<number | null | undefined>): boolean {
+  return isReducingSeries(values);
+}
+
+export type SignalTrendPrior = {
+  ema: number | null;
+  distance_to_resistance: number | null;
+};
+
+/**
  * Persist percentage_sum, keep price_level = price_1m, then apply signal rules
- * (first match wins). See file header for the six rules.
+ * (first match wins). See file header for the rules.
+ * `priors` = prior crypto_price bars immediately before this one (oldest→newest),
+ * used for the no-momentum EMA / Dist. resistance reducing rule.
  */
 export function applySignalRules(
   row: CryptoPriceRow,
   pctSum: number | null,
+  priors: SignalTrendPrior[] = [],
 ): CryptoPriceRow {
   const price1m = roundPrice(row.price_1m);
   const withSum: CryptoPriceRow = {
@@ -303,6 +352,16 @@ export function applySignalRules(
 
   // 6) mom is null and %sum > 1.00 → Below
   if (pctSum !== null && pctSum > PCT_SUM_VERY_STRONG) {
+    return set(SIGNAL_BELOW);
+  }
+
+  // 7) mom is null and last 3 EMA reducing and/or Dist. to resistance rising → Below
+  const emaSeries = [...priors.map((p) => p.ema), withSum.ema];
+  const distSeries = [
+    ...priors.map((p) => p.distance_to_resistance),
+    withSum.distance_to_resistance,
+  ];
+  if (isReducingSeries(emaSeries) || isRisingSeries(distSeries)) {
     return set(SIGNAL_BELOW);
   }
 
@@ -839,6 +898,40 @@ async function fetchMomentumByTimestamp(
   return byTs;
 }
 
+/**
+ * Prior crypto_price bars immediately before `beforeBucketStart` (oldest→newest),
+ * for the no-momentum EMA / Dist. resistance reducing signal rule.
+ */
+async function fetchPriorSignalTrend(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+  beforeBucketStart: string,
+): Promise<SignalTrendPrior[]> {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const limit = SIGNAL_TREND_LOOKBACK - 1;
+  const res = await fetch(
+    `${base}/rest/v1/crypto_price?select=ema,distance_to_resistance&asset_id=eq.${assetId}&timeframe=eq.${ANALYSIS_TIMEFRAME}&bucket_start=lt.${encodeURIComponent(beforeBucketStart)}&order=bucket_start.desc&limit=${limit}`,
+    { headers: restHeaders(serviceKey) },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to load prior crypto_price trend: ${text.slice(0, 300)}`);
+  }
+  const rows = (await res.json()) as Array<{
+    ema?: unknown;
+    distance_to_resistance?: unknown;
+  }>;
+  // Queried newest-first; reverse to oldest→newest for the reducing check.
+  return rows
+    .slice()
+    .reverse()
+    .map((row) => ({
+      ema: parseNumber(row.ema),
+      distance_to_resistance: parseNumber(row.distance_to_resistance),
+    }));
+}
+
 async function insertCryptoPriceRows(
   supabaseUrl: string,
   serviceKey: string,
@@ -968,7 +1061,11 @@ async function backfillAsset(
     const momentum = momentumByTs.get(tMs) ?? null;
     const row = buildRow(asset.id, candle, cycle, emaTotal, momentum, updatedAt);
     const pctSum = sumLast4hPercentages(percentages4h, candle.bucket_start);
-    rows.push(applySignalRules(row, pctSum));
+    const priors = rows.slice(-(SIGNAL_TREND_LOOKBACK - 1)).map((r) => ({
+      ema: r.ema,
+      distance_to_resistance: r.distance_to_resistance,
+    }));
+    rows.push(applySignalRules(row, pctSum, priors));
   }
 
   return { rows, skippedNoCycle };
@@ -1113,7 +1210,13 @@ export async function computeCryptoPrice(
         ).toISOString(),
       );
       const pctSum = sumLast4hPercentages(percentages4h, latest.bucket_start);
-      rows.push(applySignalRules(row, pctSum));
+      const priors = await fetchPriorSignalTrend(
+        supabaseUrl,
+        serviceKey,
+        asset.id,
+        latest.bucket_start,
+      );
+      rows.push(applySignalRules(row, pctSum, priors));
     }
 
     rowsInserted = await insertCryptoPriceRows(supabaseUrl, serviceKey, rows);
