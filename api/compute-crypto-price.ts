@@ -6,9 +6,13 @@
  * pass sourceTimeframe=1 (or ?source=1) for 1m buckets.
  *
  * Incremental (cron, default): latest 4h crypto_prices candle → upsert that bar
- * (includes the open/forming bar so levels match Prices and Polymarket window open).
+ * (includes the open/forming bar so levels exist at Polymarket window open).
  * Backfill: walk source candles from crypto_prices (optional DAYS), including the
  * current open bar when present.
+ *
+ * price_1m / price_level use crypto_prices.open for that bucket_start (price at
+ * the labeled timestamp), not close — so they stay fixed and do not tick every
+ * minute while the 4h bar is still forming.
 
  *
  * EMA (0–50): +10 per bullish ema_9_20_factor among 5m/15m/1h/4h/1D.
@@ -23,7 +27,7 @@
  *   4) -1% < mom < 0 and %sum > 0.80 → Below
  *   5) mom < 1% (fallback) → Below
  *   6) mom is null and %sum > 1.00 → Below
- * price_level is always price_1m (this bar's close; no ± offset).
+ * price_level is always price_1m (this bar's open / price at bucket_start; no ± offset).
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
@@ -76,7 +80,7 @@ export type ComputeCryptoPriceOptions = {
   /** Backfill lookback in days (omit / 0 = all available source history). */
   days?: number;
   /**
-   * crypto_prices timeframe used for bucket_start/close.
+   * crypto_prices timeframe used for bucket_start/open.
    * Default 240 (4h). Set to 1 for per-minute rows.
    */
   sourceTimeframe?: number;
@@ -102,7 +106,8 @@ type MaPoint = {
 
 type PriceCandle = {
   bucket_start: string;
-  close: number;
+  /** crypto_prices.open — price at bucket_start (frozen; not the live close). */
+  open: number;
 };
 
 type PctPoint = {
@@ -401,7 +406,7 @@ async function fetchLatestSourceCandle(
   const base = supabaseUrl.replace(/\/$/, "");
   const limit = options.closedOnly ? 3 : 1;
   const res = await fetch(
-    `${base}/rest/v1/crypto_prices?select=bucket_start,close&asset_id=eq.${assetId}&timeframe=eq.${sourceTimeframe}&order=bucket_start.desc&limit=${limit}`,
+    `${base}/rest/v1/crypto_prices?select=bucket_start,open&asset_id=eq.${assetId}&timeframe=eq.${sourceTimeframe}&order=bucket_start.desc&limit=${limit}`,
     { headers: restHeaders(serviceKey) },
   );
   if (!res.ok) {
@@ -410,14 +415,14 @@ async function fetchLatestSourceCandle(
       `Failed to load latest crypto_prices tf=${sourceTimeframe}: ${text.slice(0, 300)}`,
     );
   }
-  const rows = (await res.json()) as Array<{ bucket_start?: unknown; close?: unknown }>;
+  const rows = (await res.json()) as Array<{ bucket_start?: unknown; open?: unknown }>;
   for (const row of rows) {
-    const close = parseNumber(row.close);
+    const open = parseNumber(row.open);
     const bucketStart =
       typeof row.bucket_start === "string" ? row.bucket_start : null;
-    if (close === null || !bucketStart) continue;
+    if (open === null || !bucketStart) continue;
     if (options.closedOnly && !isCandleClosed(bucketStart, sourceTimeframe)) continue;
-    return { bucket_start: bucketStart, close };
+    return { bucket_start: bucketStart, open };
   }
   return null;
 }
@@ -551,7 +556,7 @@ async function fetchSourceCandlesAsc(
   while (true) {
     const end = offset + PAGE_SIZE - 1;
     const res = await fetch(
-      `${base}/rest/v1/crypto_prices?select=bucket_start,close&asset_id=eq.${assetId}&timeframe=eq.${sourceTimeframe}${fromFilter}&order=bucket_start.asc`,
+      `${base}/rest/v1/crypto_prices?select=bucket_start,open&asset_id=eq.${assetId}&timeframe=eq.${sourceTimeframe}${fromFilter}&order=bucket_start.asc`,
       {
         headers: restHeaders(serviceKey, {
           Prefer: "count=exact",
@@ -565,14 +570,14 @@ async function fetchSourceCandlesAsc(
         `Failed to load crypto_prices tf=${sourceTimeframe}: ${text.slice(0, 300)}`,
       );
     }
-    const page = (await res.json()) as Array<{ bucket_start?: unknown; close?: unknown }>;
+    const page = (await res.json()) as Array<{ bucket_start?: unknown; open?: unknown }>;
     for (const row of page) {
-      const close = parseNumber(row.close);
+      const open = parseNumber(row.open);
       const bucketStart =
         typeof row.bucket_start === "string" ? row.bucket_start : null;
-      if (close === null || !bucketStart) continue;
+      if (open === null || !bucketStart) continue;
       if (options.closedOnly && !isCandleClosed(bucketStart, sourceTimeframe)) continue;
-      candles.push({ bucket_start: bucketStart, close });
+      candles.push({ bucket_start: bucketStart, open });
     }
     if (page.length < PAGE_SIZE) break;
     offset += PAGE_SIZE;
@@ -881,7 +886,7 @@ function buildRow(
   momentum: number | null,
   updatedAt: string,
 ): CryptoPriceRow {
-  const price = roundPrice(candle.close);
+  const price = roundPrice(candle.open);
   return {
     asset_id: assetId,
     bucket_start: candle.bucket_start,
