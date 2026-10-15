@@ -25,16 +25,17 @@
  *   (excludes the current bar so the sum is fixed at bucket open).
  * After all other fields are set, first matching signal rule wins:
  *   1) 0 < mom < 1% and %sum < -0.50 → Above
- *   2) 0 < mom < 1% and %sum > 0.80 → Above
+ *   2) 0 < mom < 1% and %sum > 1.00 → Below
  *   3) mom > 1% and %sum >= 0.99 → Below
  *   4) mom > 1% and %sum < 0.99 → Above
  *   5) -1% < mom < 0 and %sum > 0.80 → Below
  *   6) mom < 1% (fallback) → Below
- *   7) mom is null and %sum > 1.00 → Below
- *   8) mom is null and %sum < 1.50 and (last 3 EMA reducing
+ *   7) mom is null and %sum > 1.00 and EMA is not reducing → Below
+ *   8) mom is null and %sum > 1.00 and EMA is reducing → Below
+ *   9) mom is null and %sum < 0.10 and (last 3 EMA reducing
  *      OR last 3 Dist. to resistance rising) → Above
- *   9) mom is null and %sum > 0.50 and (last 3 EMA reducing
- *      OR last 3 Dist. to resistance rising) → Above
+ *  10) mom is null and %sum >= 0.10 and (last 3 EMA reducing
+ *      OR last 3 Dist. to resistance rising) → Below
  *      "reducing" = non-increasing with a net drop (e.g. 50→50→30 counts)
  *      "rising" = non-decreasing with a net rise (e.g. 3.46→3.60→3.73)
  * price_level is always price_1m (this bar's open / price at bucket_start; no ± offset).
@@ -68,11 +69,11 @@ const PCT_LOOKBACK = 4;
 const MOMENTUM_STRONG_PCT = 1;
 /** percentage_sum thresholds in percent units. */
 const PCT_SUM_NEGATIVE = -0.5;
-const PCT_SUM_MODERATE = 0.5;
 const PCT_SUM_STRONG = 0.8;
 const PCT_SUM_MOM_HIGH = 0.99;
 const PCT_SUM_VERY_STRONG = 1.0;
-const PCT_SUM_TREND_CAP = 1.5;
+/** Split for null-mom trend rules 8 (<) / 9 (>=). */
+const PCT_SUM_TREND_SPLIT = 0.1;
 /** Bars needed (incl. current) for no-momentum EMA / Dist. resistance reducing rule. */
 const SIGNAL_TREND_LOOKBACK = 3;
 
@@ -132,7 +133,7 @@ type CryptoPriceRow = {
   distance_from_support: number | null;
   distance_to_resistance: number | null;
   signal: string | null;
-  /** First-matching rule number (1–9); null when signal is null. */
+  /** First-matching rule number (1–10); null when signal is null. */
   signal_rule: number | null;
   price_level: number;
   /** % vs prior bar price_level; frozen (open-based), not live close. */
@@ -356,9 +357,9 @@ export function applySignalRules(
     if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum < PCT_SUM_NEGATIVE) {
       return set(SIGNAL_ABOVE, 1);
     }
-    // 2) 0 < mom < 1% and %sum > 0.80 → Above
-    if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
-      return set(SIGNAL_ABOVE, 2);
+    // 2) 0 < mom < 1% and %sum > 1.00 → Below
+    if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_VERY_STRONG) {
+      return set(SIGNAL_BELOW, 2);
     }
     // 3) mom > 1% and %sum >= 0.99 → Below
     if (mom > MOMENTUM_STRONG_PCT && pctSum !== null && pctSum >= PCT_SUM_MOM_HIGH) {
@@ -379,27 +380,32 @@ export function applySignalRules(
     return withSum;
   }
 
-  // 7) mom is null and %sum > 1.00 → Below
-  if (pctSum !== null && pctSum > PCT_SUM_VERY_STRONG) {
-    return set(SIGNAL_BELOW, 7);
-  }
-
   const emaSeries = [...priors.map((p) => p.ema), withSum.ema];
   const distSeries = [
     ...priors.map((p) => p.distance_to_resistance),
     withSum.distance_to_resistance,
   ];
-  const trendSignal =
-    isReducingSeries(emaSeries) || isRisingSeries(distSeries);
+  const emaReducing = isReducingSeries(emaSeries);
+  const trendSignal = emaReducing || isRisingSeries(distSeries);
 
-  // 8) mom is null and %sum < 1.50 and last 3 EMA reducing and/or Dist. rising → Above
-  if (trendSignal && pctSum !== null && pctSum < PCT_SUM_TREND_CAP) {
-    return set(SIGNAL_ABOVE, 8);
+  // 7) mom is null and %sum > 1.00 and EMA is not reducing → Below
+  if (pctSum !== null && pctSum > PCT_SUM_VERY_STRONG && !emaReducing) {
+    return set(SIGNAL_BELOW, 7);
   }
 
-  // 9) mom is null and %sum > 0.50 and last 3 EMA reducing and/or Dist. rising → Above
-  if (trendSignal && pctSum !== null && pctSum > PCT_SUM_MODERATE) {
+  // 8) mom is null and %sum > 1.00 and EMA is reducing → Below
+  if (pctSum !== null && pctSum > PCT_SUM_VERY_STRONG && emaReducing) {
+    return set(SIGNAL_BELOW, 8);
+  }
+
+  // 9) mom is null and %sum < 0.10 and last 3 EMA reducing and/or Dist. rising → Above
+  if (trendSignal && pctSum !== null && pctSum < PCT_SUM_TREND_SPLIT) {
     return set(SIGNAL_ABOVE, 9);
+  }
+
+  // 10) mom is null and %sum >= 0.10 and last 3 EMA reducing and/or Dist. rising → Below
+  if (trendSignal && pctSum !== null && pctSum >= PCT_SUM_TREND_SPLIT) {
+    return set(SIGNAL_BELOW, 10);
   }
 
   return withSum;
