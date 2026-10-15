@@ -25,11 +25,12 @@
  * After all other fields are set, first matching signal rule wins:
  *   1) 0 < mom < 1% and %sum < 0.30 → Above
  *   2) 0 < mom < 1% and %sum > 0.80 → Above
- *   3) mom > 1% → Below
- *   4) -1% < mom < 0 and %sum > 0.80 → Below
- *   5) mom < 1% (fallback) → Below
- *   6) mom is null and %sum > 1.00 → Below
- *   7) mom is null and (last 3 EMA values incl. current are reducing
+ *   3) mom > 1% and %sum > 0.80 → Below
+ *   4) mom > 1% and %sum < 1.00 → Above
+ *   5) -1% < mom < 0 and %sum > 0.80 → Below
+ *   6) mom < 1% (fallback) → Below
+ *   7) mom is null and %sum > 1.00 → Below
+ *   8) mom is null and (last 3 EMA values incl. current are reducing
  *      OR last 3 Dist. to resistance incl. current are rising) → Below
  *      "reducing" = non-increasing with a net drop (e.g. 50→50→30 counts)
  *      "rising" = non-decreasing with a net rise (e.g. 3.46→3.60→3.73)
@@ -325,7 +326,7 @@ export function applySignalRules(
 
   const mom = withSum.momentum;
 
-  // Rules 1–5 require a momentum value.
+  // Rules 1–6 require a momentum value.
   if (mom !== null) {
     // 1) 0 < mom < 1% and %sum < 0.30 → Above
     if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum < PCT_SUM_WEAK) {
@@ -335,27 +336,31 @@ export function applySignalRules(
     if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
       return set(SIGNAL_ABOVE);
     }
-    // 3) mom > 1% → Below
-    if (mom > MOMENTUM_STRONG_PCT) {
+    // 3) mom > 1% and %sum > 0.80 → Below
+    if (mom > MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
       return set(SIGNAL_BELOW);
     }
-    // 4) -1% < mom < 0 and %sum > 0.80 → Below
+    // 4) mom > 1% and %sum < 1.00 → Above
+    if (mom > MOMENTUM_STRONG_PCT && pctSum !== null && pctSum < PCT_SUM_VERY_STRONG) {
+      return set(SIGNAL_ABOVE);
+    }
+    // 5) -1% < mom < 0 and %sum > 0.80 → Below
     if (mom < 0 && mom > -MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
       return set(SIGNAL_BELOW);
     }
-    // 5) mom < 1% (fallback when no earlier rule matched) → Below
+    // 6) mom < 1% (fallback when no earlier rule matched) → Below
     if (mom < MOMENTUM_STRONG_PCT) {
       return set(SIGNAL_BELOW);
     }
     return withSum;
   }
 
-  // 6) mom is null and %sum > 1.00 → Below
+  // 7) mom is null and %sum > 1.00 → Below
   if (pctSum !== null && pctSum > PCT_SUM_VERY_STRONG) {
     return set(SIGNAL_BELOW);
   }
 
-  // 7) mom is null and last 3 EMA reducing and/or Dist. to resistance rising → Below
+  // 8) mom is null and last 3 EMA reducing and/or Dist. to resistance rising → Below
   const emaSeries = [...priors.map((p) => p.ema), withSum.ema];
   const distSeries = [
     ...priors.map((p) => p.distance_to_resistance),
