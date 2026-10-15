@@ -104,7 +104,10 @@ type PriceLevelRow = {
   distance_from_support: number | null;
   distance_to_resistance: number | null;
   ema: number | null;
-  /** crypto_prices.percentage for the same bucket (Prices tab % move). */
+  /**
+   * Stored crypto_price.price_level_pct — % vs prior bar price_level
+   * (frozen at open; does not tick every minute).
+   */
   percentage: number | null;
   momentum: number | null;
   percentage_sum: number | null;
@@ -495,7 +498,7 @@ function toPriceLevelRow(row: Record<string, unknown>): PriceLevelRow | null {
     distance_from_support: asNumber(row.distance_from_support),
     distance_to_resistance: asNumber(row.distance_to_resistance),
     ema: asNumber(row.ema),
-    percentage: asNumber(row.percentage),
+    percentage: asNumber(row.price_level_pct ?? row.percentage),
     momentum: asNumber(row.momentum),
     percentage_sum: asNumber(row.percentage_sum),
     signal_rule: asNumber(row.signal_rule),
@@ -772,7 +775,7 @@ async function loadPriceLevels(
   const { data, error } = await supabase
     .from("crypto_price")
     .select(
-      "id, bucket_start, price_1m, price_level, distance_from_support, distance_to_resistance, ema, momentum, percentage_sum, signal_rule, signal, updated_at, created_at",
+      "id, bucket_start, price_1m, price_level, distance_from_support, distance_to_resistance, ema, momentum, percentage_sum, price_level_pct, signal_rule, signal, updated_at, created_at",
     )
     .eq("asset_id", assetId)
     .eq("timeframe", timeframeMinutes)
@@ -786,36 +789,6 @@ async function loadPriceLevels(
   const rows = ((data as Record<string, unknown>[] | null) ?? [])
     .map(toPriceLevelRow)
     .filter((row): row is PriceLevelRow => row !== null);
-
-  // Join Prices-tab % move (crypto_prices.percentage) for the same buckets.
-  const bucketStarts = rows
-    .map((row) => row.bucket_start)
-    .filter((value): value is string => Boolean(value));
-  if (bucketStarts.length === 0) return { rows, error: null };
-
-  const { data: pctData, error: pctError } = await supabase
-    .from("crypto_prices")
-    .select("bucket_start, percentage")
-    .eq("asset_id", assetId)
-    .eq("timeframe", timeframeMinutes)
-    .in("bucket_start", bucketStarts);
-
-  if (pctError) {
-    return { rows, error: null };
-  }
-
-  const pctByBucket = new Map<string, number | null>();
-  for (const raw of (pctData as Record<string, unknown>[] | null) ?? []) {
-    const bucket = asString(raw.bucket_start);
-    if (!bucket) continue;
-    pctByBucket.set(bucket, asNumber(raw.percentage));
-  }
-
-  for (const row of rows) {
-    if (!row.bucket_start) continue;
-    if (!pctByBucket.has(row.bucket_start)) continue;
-    row.percentage = pctByBucket.get(row.bucket_start) ?? null;
-  }
 
   return { rows, error: null };
 }

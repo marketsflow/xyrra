@@ -37,6 +37,8 @@
  *      "reducing" = non-increasing with a net drop (e.g. 50→50→30 counts)
  *      "rising" = non-decreasing with a net rise (e.g. 3.46→3.60→3.73)
  * price_level is always price_1m (this bar's open / price at bucket_start; no ± offset).
+ * price_level_pct: (price_level - prev_price_level) / prev_price_level * 100 vs the
+ *   prior crypto_price bar. Uses frozen opens, so it does not tick every minute.
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
@@ -132,6 +134,8 @@ type CryptoPriceRow = {
   /** First-matching rule number (1–9); null when signal is null. */
   signal_rule: number | null;
   price_level: number;
+  /** % vs prior bar price_level; frozen (open-based), not live close. */
+  price_level_pct: number | null;
   ema: number | null;
   momentum: number | null;
   percentage_sum: number | null;
@@ -201,6 +205,15 @@ function roundPrice(value: number): number {
 
 function roundPct(value: number): number {
   return Math.round(value * 1e6) / 1e6;
+}
+
+/** (current - previous) / previous * 100; null when previous is missing/zero. */
+export function priceLevelChangePct(
+  current: number,
+  previous: number | null,
+): number | null {
+  if (previous === null || previous === 0) return null;
+  return roundPct(((current - previous) / previous) * 100);
 }
 
 /** Signed %: how far price is above support. */
@@ -925,6 +938,25 @@ async function fetchMomentumByTimestamp(
  * Prior crypto_price bars immediately before `beforeBucketStart` (oldest→newest),
  * for the no-momentum EMA / Dist. resistance reducing signal rule.
  */
+async function fetchPreviousPriceLevel(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+  beforeBucketStart: string,
+): Promise<number | null> {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const res = await fetch(
+    `${base}/rest/v1/crypto_price?select=price_level&asset_id=eq.${assetId}&timeframe=eq.${ANALYSIS_TIMEFRAME}&bucket_start=lt.${encodeURIComponent(beforeBucketStart)}&order=bucket_start.desc&limit=1`,
+    { headers: restHeaders(serviceKey) },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to load previous crypto_price level: ${text.slice(0, 300)}`);
+  }
+  const rows = (await res.json()) as Array<{ price_level?: unknown }>;
+  return parseNumber(rows[0]?.price_level);
+}
+
 async function fetchPriorSignalTrend(
   supabaseUrl: string,
   serviceKey: string,
@@ -1003,6 +1035,7 @@ function buildRow(
     signal: null,
     signal_rule: null,
     price_level: price,
+    price_level_pct: null,
     ema: emaTotal,
     momentum,
     percentage_sum: null,
@@ -1089,7 +1122,10 @@ async function backfillAsset(
       ema: r.ema,
       distance_to_resistance: r.distance_to_resistance,
     }));
-    rows.push(applySignalRules(row, pctSum, priors));
+    const withSignal = applySignalRules(row, pctSum, priors);
+    const prevLevel = rows.at(-1)?.price_level ?? null;
+    withSignal.price_level_pct = priceLevelChangePct(withSignal.price_level, prevLevel);
+    rows.push(withSignal);
   }
 
   return { rows, skippedNoCycle };
@@ -1240,7 +1276,15 @@ export async function computeCryptoPrice(
         asset.id,
         latest.bucket_start,
       );
-      rows.push(applySignalRules(row, pctSum, priors));
+      const withSignal = applySignalRules(row, pctSum, priors);
+      const prevLevel = await fetchPreviousPriceLevel(
+        supabaseUrl,
+        serviceKey,
+        asset.id,
+        latest.bucket_start,
+      );
+      withSignal.price_level_pct = priceLevelChangePct(withSignal.price_level, prevLevel);
+      rows.push(withSignal);
     }
 
     rowsInserted = await insertCryptoPriceRows(supabaseUrl, serviceKey, rows);
