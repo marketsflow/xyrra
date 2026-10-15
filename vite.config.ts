@@ -666,6 +666,8 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/admin/virtual-trades/create/" + search;
       } else if (path === "/admin/virtual-trades/view") {
         (req as IncomingMessage & { url?: string }).url = "/admin/virtual-trades/view/" + search;
+      } else if (path === "/admin/accounts") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/accounts/" + search;
       } else if (path === "/admin/articles") {
         (req as IncomingMessage & { url?: string }).url = "/admin/articles/" + search;
       } else if (path === "/admin/articles/new") {
@@ -805,6 +807,7 @@ export default defineConfig(({ mode }) => {
             __dirname,
             "admin/virtual-trades/view/index.html",
           ),
+          adminAccounts: resolve(__dirname, "admin/accounts/index.html"),
           adminArticles: resolve(__dirname, "admin/articles/index.html"),
           adminArticlesNew: resolve(__dirname, "admin/articles/new/index.html"),
           adminArticlesEdit: resolve(__dirname, "admin/articles/edit/index.html"),

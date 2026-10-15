@@ -2629,3 +2629,45 @@ body.xa-body {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
+
+.xa-accounts__summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: 0.85rem;
+  margin: 1.25rem 0 0;
+}
+
+.xa-accounts__stat {
+  padding: 0.9rem 1rem;
+  border: 1px solid #e0deed;
+  border-radius: 0.75rem;
+  background: #fafbfd;
+}
+
+.xa-accounts__stat--balance {
+  background: #eff6ff;
+  border-color: rgba(37, 99, 235, 0.25);
+}
+
+.xa-accounts__stat-label {
+  display: block;
+  color: var(--xa-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.xa-accounts__stat-value {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.xa-accounts__balance {
+  font-family: var(--xa-font-display);
+  font-size: 1.35rem;
+  font-weight: 700;
+}

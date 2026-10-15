@@ -31,7 +31,7 @@
  *   5) -1% < mom < 0 and %sum > 0.80 → Below
  *   6) mom < 1% (fallback) → Below
  *   7) mom is null and %sum > 1.00 and EMA is not reducing → Below
- *   8) mom is null and %sum > 1.00 and EMA is reducing → Below
+ *   8) mom is null and %sum > 1.00 and EMA is reducing → Above
  *   9) mom is null and %sum < 0.10 and (last 3 EMA reducing
  *      OR last 3 Dist. to resistance rising) → Above
  *  10) mom is null and %sum >= 0.10 and (last 3 EMA reducing
@@ -393,9 +393,9 @@ export function applySignalRules(
     return set(SIGNAL_BELOW, 7);
   }
 
-  // 8) mom is null and %sum > 1.00 and EMA is reducing → Below
+  // 8) mom is null and %sum > 1.00 and EMA is reducing → Above
   if (pctSum !== null && pctSum > PCT_SUM_VERY_STRONG && emaReducing) {
-    return set(SIGNAL_BELOW, 8);
+    return set(SIGNAL_ABOVE, 8);
   }
 
   // 9) mom is null and %sum < 0.10 and last 3 EMA reducing and/or Dist. rising → Above
