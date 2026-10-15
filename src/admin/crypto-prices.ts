@@ -104,6 +104,8 @@ type PriceLevelRow = {
   distance_from_support: number | null;
   distance_to_resistance: number | null;
   ema: number | null;
+  /** crypto_prices.percentage for the same bucket (Prices tab % move). */
+  percentage: number | null;
   momentum: number | null;
   percentage_sum: number | null;
   signal: string | null;
@@ -492,6 +494,7 @@ function toPriceLevelRow(row: Record<string, unknown>): PriceLevelRow | null {
     distance_from_support: asNumber(row.distance_from_support),
     distance_to_resistance: asNumber(row.distance_to_resistance),
     ema: asNumber(row.ema),
+    percentage: asNumber(row.percentage),
     momentum: asNumber(row.momentum),
     percentage_sum: asNumber(row.percentage_sum),
     signal: asString(row.signal),
@@ -781,6 +784,37 @@ async function loadPriceLevels(
   const rows = ((data as Record<string, unknown>[] | null) ?? [])
     .map(toPriceLevelRow)
     .filter((row): row is PriceLevelRow => row !== null);
+
+  // Join Prices-tab % move (crypto_prices.percentage) for the same buckets.
+  const bucketStarts = rows
+    .map((row) => row.bucket_start)
+    .filter((value): value is string => Boolean(value));
+  if (bucketStarts.length === 0) return { rows, error: null };
+
+  const { data: pctData, error: pctError } = await supabase
+    .from("crypto_prices")
+    .select("bucket_start, percentage")
+    .eq("asset_id", assetId)
+    .eq("timeframe", timeframeMinutes)
+    .in("bucket_start", bucketStarts);
+
+  if (pctError) {
+    return { rows, error: null };
+  }
+
+  const pctByBucket = new Map<string, number | null>();
+  for (const raw of (pctData as Record<string, unknown>[] | null) ?? []) {
+    const bucket = asString(raw.bucket_start);
+    if (!bucket) continue;
+    pctByBucket.set(bucket, asNumber(raw.percentage));
+  }
+
+  for (const row of rows) {
+    if (!row.bucket_start) continue;
+    if (!pctByBucket.has(row.bucket_start)) continue;
+    row.percentage = pctByBucket.get(row.bucket_start) ?? null;
+  }
+
   return { rows, error: null };
 }
 
@@ -1065,7 +1099,7 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
 
   if (rows.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="10" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (default: latest 4h crypto_prices candle, including open bar).</td></tr>';
+      '<tr><td colspan="11" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (default: latest 4h crypto_prices candle, including open bar).</td></tr>';
     return;
   }
 
@@ -1083,6 +1117,7 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
               ? '<span class="xa-muted">—</span>'
               : escapeHtml(String(row.ema))
           }</td>
+          <td>${renderPercentage(row.percentage)}</td>
           <td>${renderPercentage(row.momentum)}</td>
           <td>${renderPercentage(row.percentage_sum)}</td>
           <td>${
