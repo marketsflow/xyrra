@@ -30,8 +30,10 @@
  *   5) -1% < mom < 0 and %sum > 0.80 → Below
  *   6) mom < 1% (fallback) → Below
  *   7) mom is null and %sum > 1.00 → Below
- *   8) mom is null and (last 3 EMA values incl. current are reducing
- *      OR last 3 Dist. to resistance incl. current are rising) → Below
+ *   8) mom is null and %sum < 1.50 and (last 3 EMA reducing
+ *      OR last 3 Dist. to resistance rising) → Above
+ *   9) mom is null and %sum > 0.50 and (last 3 EMA reducing
+ *      OR last 3 Dist. to resistance rising) → Above
  *      "reducing" = non-increasing with a net drop (e.g. 50→50→30 counts)
  *      "rising" = non-decreasing with a net rise (e.g. 3.46→3.60→3.73)
  * price_level is always price_1m (this bar's open / price at bucket_start; no ± offset).
@@ -63,9 +65,11 @@ const PCT_LOOKBACK = 4;
 const MOMENTUM_STRONG_PCT = 1;
 /** percentage_sum thresholds in percent units. */
 const PCT_SUM_NEGATIVE = -1;
+const PCT_SUM_MODERATE = 0.5;
 const PCT_SUM_STRONG = 0.8;
 const PCT_SUM_MOM_HIGH = 0.99;
 const PCT_SUM_VERY_STRONG = 1.0;
+const PCT_SUM_TREND_CAP = 1.5;
 /** Bars needed (incl. current) for no-momentum EMA / Dist. resistance reducing rule. */
 const SIGNAL_TREND_LOOKBACK = 3;
 
@@ -361,14 +365,22 @@ export function applySignalRules(
     return set(SIGNAL_BELOW);
   }
 
-  // 8) mom is null and last 3 EMA reducing and/or Dist. to resistance rising → Below
   const emaSeries = [...priors.map((p) => p.ema), withSum.ema];
   const distSeries = [
     ...priors.map((p) => p.distance_to_resistance),
     withSum.distance_to_resistance,
   ];
-  if (isReducingSeries(emaSeries) || isRisingSeries(distSeries)) {
-    return set(SIGNAL_BELOW);
+  const trendSignal =
+    isReducingSeries(emaSeries) || isRisingSeries(distSeries);
+
+  // 8) mom is null and %sum < 1.50 and last 3 EMA reducing and/or Dist. rising → Above
+  if (trendSignal && pctSum !== null && pctSum < PCT_SUM_TREND_CAP) {
+    return set(SIGNAL_ABOVE);
+  }
+
+  // 9) mom is null and %sum > 0.50 and last 3 EMA reducing and/or Dist. rising → Above
+  if (trendSignal && pctSum !== null && pctSum > PCT_SUM_MODERATE) {
+    return set(SIGNAL_ABOVE);
   }
 
   return withSum;
