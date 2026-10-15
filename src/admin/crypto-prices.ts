@@ -108,6 +108,7 @@ type PriceLevelRow = {
   percentage: number | null;
   momentum: number | null;
   percentage_sum: number | null;
+  signal_rule: number | null;
   signal: string | null;
   updated_at: string | null;
   created_at: string | null;
@@ -497,6 +498,7 @@ function toPriceLevelRow(row: Record<string, unknown>): PriceLevelRow | null {
     percentage: asNumber(row.percentage),
     momentum: asNumber(row.momentum),
     percentage_sum: asNumber(row.percentage_sum),
+    signal_rule: asNumber(row.signal_rule),
     signal: asString(row.signal),
     updated_at: asString(row.updated_at),
     created_at: asString(row.created_at),
@@ -770,7 +772,7 @@ async function loadPriceLevels(
   const { data, error } = await supabase
     .from("crypto_price")
     .select(
-      "id, bucket_start, price_1m, price_level, distance_from_support, distance_to_resistance, ema, momentum, percentage_sum, signal, updated_at, created_at",
+      "id, bucket_start, price_1m, price_level, distance_from_support, distance_to_resistance, ema, momentum, percentage_sum, signal_rule, signal, updated_at, created_at",
     )
     .eq("asset_id", assetId)
     .eq("timeframe", timeframeMinutes)
@@ -1108,7 +1110,6 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
       (row) => `
         <tr>
           <td>${escapeHtml(formatDateTime(row.bucket_start ?? row.updated_at))}</td>
-          <td>${escapeHtml(formatPrice(row.price_1m))}</td>
           <td>${escapeHtml(formatPrice(row.price_level))}</td>
           <td>${renderPercentage(row.distance_from_support)}</td>
           <td>${renderPercentage(row.distance_to_resistance)}</td>
@@ -1120,6 +1121,11 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
           <td>${renderPercentage(row.percentage)}</td>
           <td>${renderPercentage(row.momentum)}</td>
           <td>${renderPercentage(row.percentage_sum)}</td>
+          <td>${
+            row.signal && row.signal_rule !== null
+              ? escapeHtml(String(row.signal_rule))
+              : '<span class="xa-muted">—</span>'
+          }</td>
           <td>${
             row.signal
               ? escapeHtml(row.signal)

@@ -23,7 +23,7 @@
  * percentage_sum: sum of the previous 4 crypto_prices.percentage on TF 4h
  *   (excludes the current bar so the sum is fixed at bucket open).
  * After all other fields are set, first matching signal rule wins:
- *   1) 0 < mom < 1% and %sum < -1.00 → Above
+ *   1) 0 < mom < 1% and %sum < -0.50 → Above
  *   2) 0 < mom < 1% and %sum > 0.80 → Above
  *   3) mom > 1% and %sum >= 0.99 → Below
  *   4) mom > 1% and %sum < 0.99 → Above
@@ -64,7 +64,7 @@ const PCT_LOOKBACK = 4;
 /** Momentum band edges in percent units (crypto_price.momentum). */
 const MOMENTUM_STRONG_PCT = 1;
 /** percentage_sum thresholds in percent units. */
-const PCT_SUM_NEGATIVE = -1;
+const PCT_SUM_NEGATIVE = -0.5;
 const PCT_SUM_MODERATE = 0.5;
 const PCT_SUM_STRONG = 0.8;
 const PCT_SUM_MOM_HIGH = 0.99;
@@ -129,6 +129,8 @@ type CryptoPriceRow = {
   distance_from_support: number | null;
   distance_to_resistance: number | null;
   signal: string | null;
+  /** First-matching rule number (1–9); null when signal is null. */
+  signal_rule: number | null;
   price_level: number;
   ema: number | null;
   momentum: number | null;
@@ -321,11 +323,14 @@ export function applySignalRules(
     ...row,
     price_level: price1m,
     percentage_sum: pctSum === null ? null : roundPct(pctSum),
+    signal: null,
+    signal_rule: null,
   };
 
-  const set = (signal: string): CryptoPriceRow => ({
+  const set = (signal: string, rule: number): CryptoPriceRow => ({
     ...withSum,
     signal,
+    signal_rule: rule,
     price_level: price1m,
   });
 
@@ -333,36 +338,36 @@ export function applySignalRules(
 
   // Rules 1–6 require a momentum value.
   if (mom !== null) {
-    // 1) 0 < mom < 1% and %sum < -1.00 → Above
+    // 1) 0 < mom < 1% and %sum < -0.50 → Above
     if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum < PCT_SUM_NEGATIVE) {
-      return set(SIGNAL_ABOVE);
+      return set(SIGNAL_ABOVE, 1);
     }
     // 2) 0 < mom < 1% and %sum > 0.80 → Above
     if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
-      return set(SIGNAL_ABOVE);
+      return set(SIGNAL_ABOVE, 2);
     }
     // 3) mom > 1% and %sum >= 0.99 → Below
     if (mom > MOMENTUM_STRONG_PCT && pctSum !== null && pctSum >= PCT_SUM_MOM_HIGH) {
-      return set(SIGNAL_BELOW);
+      return set(SIGNAL_BELOW, 3);
     }
     // 4) mom > 1% and %sum < 0.99 → Above
     if (mom > MOMENTUM_STRONG_PCT && pctSum !== null && pctSum < PCT_SUM_MOM_HIGH) {
-      return set(SIGNAL_ABOVE);
+      return set(SIGNAL_ABOVE, 4);
     }
     // 5) -1% < mom < 0 and %sum > 0.80 → Below
     if (mom < 0 && mom > -MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
-      return set(SIGNAL_BELOW);
+      return set(SIGNAL_BELOW, 5);
     }
     // 6) mom < 1% (fallback when no earlier rule matched) → Below
     if (mom < MOMENTUM_STRONG_PCT) {
-      return set(SIGNAL_BELOW);
+      return set(SIGNAL_BELOW, 6);
     }
     return withSum;
   }
 
   // 7) mom is null and %sum > 1.00 → Below
   if (pctSum !== null && pctSum > PCT_SUM_VERY_STRONG) {
-    return set(SIGNAL_BELOW);
+    return set(SIGNAL_BELOW, 7);
   }
 
   const emaSeries = [...priors.map((p) => p.ema), withSum.ema];
@@ -375,12 +380,12 @@ export function applySignalRules(
 
   // 8) mom is null and %sum < 1.50 and last 3 EMA reducing and/or Dist. rising → Above
   if (trendSignal && pctSum !== null && pctSum < PCT_SUM_TREND_CAP) {
-    return set(SIGNAL_ABOVE);
+    return set(SIGNAL_ABOVE, 8);
   }
 
   // 9) mom is null and %sum > 0.50 and last 3 EMA reducing and/or Dist. rising → Above
   if (trendSignal && pctSum !== null && pctSum > PCT_SUM_MODERATE) {
-    return set(SIGNAL_ABOVE);
+    return set(SIGNAL_ABOVE, 9);
   }
 
   return withSum;
@@ -996,6 +1001,7 @@ function buildRow(
     distance_from_support: distanceFromSupportPct(price, cycle.support),
     distance_to_resistance: distanceToResistancePct(price, cycle.resistance),
     signal: null,
+    signal_rule: null,
     price_level: price,
     ema: emaTotal,
     momentum,
