@@ -17,8 +17,9 @@
  *
  * EMA (0–50): +10 per bullish ema_9_20_factor among 5m/15m/1h/4h/1D,
  *   scored as-of bucket_start (not the live latest MA).
- * Momentum: crypto_momentum.mom_4h at the same timestamp only (no fallback to
- *   other mom_* columns — matches Momentum tab tf=4h).
+ * Momentum: crypto_momentum.mom_4h from the previous analysis bucket only
+ *   (no other mom_* fallback). Signals fire at timeframe open, so mom generated
+ *   for bucket T is stored on the following row T+4h (e.g. mom at 12:00 → 16:00).
  *
  * percentage_sum: sum of the previous 4 crypto_prices.percentage on TF 4h
  *   (excludes the current bar so the sum is fixed at bucket open).
@@ -855,6 +856,17 @@ function momentumTsKey(iso: string): number | null {
   return Number.isFinite(ms) ? ms : null;
 }
 
+/** Prior analysis-TF bucket start (ms) — source of mom for the current open. */
+function previousMomentumBucketMs(bucketStartMs: number): number {
+  return bucketStartMs - ANALYSIS_TIMEFRAME * 60_000;
+}
+
+function previousMomentumBucketIso(bucketStartIso: string): string | null {
+  const ms = Date.parse(bucketStartIso);
+  if (!Number.isFinite(ms)) return null;
+  return new Date(previousMomentumBucketMs(ms)).toISOString();
+}
+
 /** Copy mom_4h only — null when that column is missing (no other-TF fallback). */
 export function pickMomentumValue(row: Record<string, unknown>): number | null {
   return parseNumber(row[MOMENTUM_COLUMN]);
@@ -1078,11 +1090,18 @@ async function backfillAsset(
     ANALYSIS_TIMEFRAME,
   );
 
+  // Include one prior TF so mom for the first candle can shift forward.
+  const momentumFromIso =
+    fromIso === null
+      ? null
+      : new Date(
+          Date.parse(fromIso) - ANALYSIS_TIMEFRAME * 60_000,
+        ).toISOString();
   const momentumByTs = await fetchMomentumByTimestamp(
     supabaseUrl,
     serviceKey,
     asset.symbol,
-    fromIso,
+    momentumFromIso,
   );
 
   const percentages4h = await fetch4hPercentagesAsc(
@@ -1115,7 +1134,8 @@ async function backfillAsset(
       skippedNoCycle += 1;
       continue;
     }
-    const momentum = momentumByTs.get(tMs) ?? null;
+    // Mom for prior bucket lands on this open (signal at timeframe start).
+    const momentum = momentumByTs.get(previousMomentumBucketMs(tMs)) ?? null;
     const row = buildRow(asset.id, candle, cycle, emaTotal, momentum, updatedAt);
     const pctSum = sumLast4hPercentages(percentages4h, candle.bucket_start);
     const priors = rows.slice(-(SIGNAL_TREND_LOOKBACK - 1)).map((r) => ({
@@ -1252,12 +1272,16 @@ export async function computeCryptoPrice(
         skippedNoCycle += 1;
         continue;
       }
-      const momentum = await fetchMomentumAtTimestamp(
-        supabaseUrl,
-        serviceKey,
-        asset.symbol,
-        latest.bucket_start,
-      );
+      const momSourceIso = previousMomentumBucketIso(latest.bucket_start);
+      const momentum =
+        momSourceIso === null
+          ? null
+          : await fetchMomentumAtTimestamp(
+              supabaseUrl,
+              serviceKey,
+              asset.symbol,
+              momSourceIso,
+            );
       const row = buildRow(asset.id, latest, cycle, emaTotal, momentum, updatedAt);
       const percentages4h = await fetch4hPercentagesAsc(
         supabaseUrl,
