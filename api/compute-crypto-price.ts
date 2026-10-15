@@ -23,10 +23,10 @@
  * percentage_sum: sum of the previous 4 crypto_prices.percentage on TF 4h
  *   (excludes the current bar so the sum is fixed at bucket open).
  * After all other fields are set, first matching signal rule wins:
- *   1) 0 < mom < 1% and %sum < 0.30 → Above
+ *   1) 0 < mom < 1% and %sum < -1.00 → Above
  *   2) 0 < mom < 1% and %sum > 0.80 → Above
- *   3) mom > 1% and %sum > 0.80 → Below
- *   4) mom > 1% and %sum < 1.00 → Above
+ *   3) mom > 1% and %sum >= 0.99 → Below
+ *   4) mom > 1% and %sum < 0.99 → Above
  *   5) -1% < mom < 0 and %sum > 0.80 → Below
  *   6) mom < 1% (fallback) → Below
  *   7) mom is null and %sum > 1.00 → Below
@@ -62,8 +62,9 @@ const PCT_LOOKBACK = 4;
 /** Momentum band edges in percent units (crypto_price.momentum). */
 const MOMENTUM_STRONG_PCT = 1;
 /** percentage_sum thresholds in percent units. */
-const PCT_SUM_WEAK = 0.3;
+const PCT_SUM_NEGATIVE = -1;
 const PCT_SUM_STRONG = 0.8;
+const PCT_SUM_MOM_HIGH = 0.99;
 const PCT_SUM_VERY_STRONG = 1.0;
 /** Bars needed (incl. current) for no-momentum EMA / Dist. resistance reducing rule. */
 const SIGNAL_TREND_LOOKBACK = 3;
@@ -328,20 +329,20 @@ export function applySignalRules(
 
   // Rules 1–6 require a momentum value.
   if (mom !== null) {
-    // 1) 0 < mom < 1% and %sum < 0.30 → Above
-    if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum < PCT_SUM_WEAK) {
+    // 1) 0 < mom < 1% and %sum < -1.00 → Above
+    if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum < PCT_SUM_NEGATIVE) {
       return set(SIGNAL_ABOVE);
     }
     // 2) 0 < mom < 1% and %sum > 0.80 → Above
     if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
       return set(SIGNAL_ABOVE);
     }
-    // 3) mom > 1% and %sum > 0.80 → Below
-    if (mom > MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
+    // 3) mom > 1% and %sum >= 0.99 → Below
+    if (mom > MOMENTUM_STRONG_PCT && pctSum !== null && pctSum >= PCT_SUM_MOM_HIGH) {
       return set(SIGNAL_BELOW);
     }
-    // 4) mom > 1% and %sum < 1.00 → Above
-    if (mom > MOMENTUM_STRONG_PCT && pctSum !== null && pctSum < PCT_SUM_VERY_STRONG) {
+    // 4) mom > 1% and %sum < 0.99 → Above
+    if (mom > MOMENTUM_STRONG_PCT && pctSum !== null && pctSum < PCT_SUM_MOM_HIGH) {
       return set(SIGNAL_ABOVE);
     }
     // 5) -1% < mom < 0 and %sum > 0.80 → Below
