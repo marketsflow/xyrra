@@ -321,13 +321,14 @@ async function init() {
   const bodyEl = bodyNode;
   const selectAllEl = selectAllNode;
   const deleteSelectedBtn = deleteSelectedNode;
+  const supabase = session.supabase;
 
   const selectedIds = new Set<number>();
   let deleting = false;
 
   statusEl.textContent = "Loading virtual trades…";
 
-  const { data, error } = await session.supabase
+  const { data, error } = await supabase
     .from("virtual_trades")
     .select(
       "id, timestamp, market_slug, market_title, direction, entry_poly_price, entry_spot_price, strike_price, price_to_beat, price_level, crypto_price_at, signal_state, status, exit_poly_price, pnl_usd, pnl_percent, closed_at, position_size_usd",
@@ -354,7 +355,7 @@ async function init() {
 
   let settled = 0;
   try {
-    settled = await resolveOpenTrades(session.supabase, rows);
+    settled = await resolveOpenTrades(supabase, rows);
   } catch {
     // Still show rows even if settlement fails.
   }
@@ -463,7 +464,7 @@ async function init() {
     const ok: number[] = [];
     const failed: string[] = [];
     for (const id of ids) {
-      const { error: deleteError } = await session.supabase
+      const { error: deleteError } = await supabase
         .from("virtual_trades")
         .delete()
         .eq("id", id);
