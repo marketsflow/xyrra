@@ -36,7 +36,7 @@
  *      (checked before 8 so near-resistance overrides the general Below)
  *   8) mom is null and %sum > 1.00 and EMA is not reducing → Below
  *   9) mom is null and %sum < 1.20 and EMA is reducing
- *      and Dist. to resistance > -2% → Above
+ *      and Dist. to resistance > -2% and EMA < 20 → Above
  *  14) mom is null and %sum < 1.20 and EMA is reducing
  *      and Dist. to resistance < -2% → Below
  *  10) mom is null and %sum < 0.10 and EMA < 20 → Below
@@ -100,7 +100,7 @@ const PCT_SUM_TREND_SPLIT = 0.1;
 /**
  * Dist. to resistance band for null-mom rules (%):
  *   13: dist < +2 → Above
- *   9:  dist > -2 (with EMA reducing) → Above
+ *   9:  dist > -2 (with EMA reducing and EMA < 20) → Above
  *  14:  dist < -2 (with EMA reducing) → Below
  */
 const DIST_RESISTANCE_NEAR_PCT = 2;
@@ -500,13 +500,16 @@ export function applySignalRules(
     return set(SIGNAL_BELOW, 8);
   }
 
-  // 9) mom is null and %sum < 1.20 and EMA reducing and Dist. to resistance > -2% → Above
+  // 9) mom is null and %sum < 1.20 and EMA reducing and Dist. to resistance > -2%
+  //    and EMA < 20 → Above
   if (
     pctSum !== null &&
     pctSum < PCT_SUM_EMA_REDUCING_CAP &&
     emaReducing &&
     withSum.distance_to_resistance !== null &&
-    withSum.distance_to_resistance > -DIST_RESISTANCE_NEAR_PCT
+    withSum.distance_to_resistance > -DIST_RESISTANCE_NEAR_PCT &&
+    withSum.ema !== null &&
+    withSum.ema < EMA_LOW_THRESHOLD
   ) {
     return set(SIGNAL_ABOVE, 9);
   }
