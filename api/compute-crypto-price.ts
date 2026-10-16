@@ -35,7 +35,10 @@
  *  13) mom is null and %sum > 1.00 and Dist. to resistance < 2% → Above
  *      (checked before 8 so near-resistance overrides the general Below)
  *   8) mom is null and %sum > 1.00 and EMA is not reducing → Below
- *   9) mom is null and %sum < 1.20 and EMA is reducing → Above
+ *   9) mom is null and %sum < 1.20 and EMA is reducing
+ *      and Dist. to resistance > -2% → Above
+ *  14) mom is null and %sum < 1.20 and EMA is reducing
+ *      and Dist. to resistance < -2% → Below
  *  10) mom is null and %sum < 0.10 and EMA < 20 → Below
  *  11) mom is null and %sum < 0.10 and (last 3 EMA reducing
  *      OR last 3 Dist. to resistance rising) → Above
@@ -94,7 +97,12 @@ const PCT_SUM_VERY_STRONG = 1.0;
 const PCT_SUM_EMA_REDUCING_CAP = 1.2;
 /** Split for null-mom trend rules 11 (<) / 12 (>=). */
 const PCT_SUM_TREND_SPLIT = 0.1;
-/** Dist. to resistance ceiling for null-mom rule 13 (%). */
+/**
+ * Dist. to resistance band for null-mom rules (%):
+ *   13: dist < +2 → Above
+ *   9:  dist > -2 (with EMA reducing) → Above
+ *  14:  dist < -2 (with EMA reducing) → Below
+ */
 const DIST_RESISTANCE_NEAR_PCT = 2;
 /** EMA score ceiling for null-mom rule 10 (ema is 0–50). */
 const EMA_LOW_THRESHOLD = 20;
@@ -160,7 +168,7 @@ type CryptoPriceRow = {
   distance_from_support: number | null;
   distance_to_resistance: number | null;
   signal: string | null;
-  /** First-matching rule number (1–13); null when signal is null. */
+  /** First-matching rule number (1–14); null when signal is null. */
   signal_rule: number | null;
   price_level: number;
   /** % vs prior bar price_level; frozen (open-based), not live close. */
@@ -492,9 +500,26 @@ export function applySignalRules(
     return set(SIGNAL_BELOW, 8);
   }
 
-  // 9) mom is null and %sum < 1.20 and EMA is reducing → Above
-  if (pctSum !== null && pctSum < PCT_SUM_EMA_REDUCING_CAP && emaReducing) {
+  // 9) mom is null and %sum < 1.20 and EMA reducing and Dist. to resistance > -2% → Above
+  if (
+    pctSum !== null &&
+    pctSum < PCT_SUM_EMA_REDUCING_CAP &&
+    emaReducing &&
+    withSum.distance_to_resistance !== null &&
+    withSum.distance_to_resistance > -DIST_RESISTANCE_NEAR_PCT
+  ) {
     return set(SIGNAL_ABOVE, 9);
+  }
+
+  // 14) mom is null and %sum < 1.20 and EMA reducing and Dist. to resistance < -2% → Below
+  if (
+    pctSum !== null &&
+    pctSum < PCT_SUM_EMA_REDUCING_CAP &&
+    emaReducing &&
+    withSum.distance_to_resistance !== null &&
+    withSum.distance_to_resistance < -DIST_RESISTANCE_NEAR_PCT
+  ) {
+    return set(SIGNAL_BELOW, 14);
   }
 
   // 10) mom is null and %sum < 0.10 and EMA < 20 → Below
