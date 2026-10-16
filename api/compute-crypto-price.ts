@@ -32,8 +32,8 @@
  *   5) -1% < mom < 0 and %sum > 0.80 → Below
  *   6) mom < 1% and %sum <= -1.00 (fallback) → Above
  *   7) mom < 1% and %sum > -1.00 (fallback) → Below
- *  13) mom is null and %sum > 1.00 and Dist. to support < 2% → Above
- *      (checked before 8 so near-support overrides the general Below)
+ *  13) mom is null and %sum > 1.00 and Dist. to resistance < 2% → Above
+ *      (checked before 8 so near-resistance overrides the general Below)
  *   8) mom is null and %sum > 1.00 and EMA is not reducing → Below
  *   9) mom is null and %sum < 1.20 and EMA is reducing → Above
  *  10) mom is null and %sum < 0.10 and EMA < 20 → Below
@@ -93,8 +93,8 @@ const PCT_SUM_VERY_STRONG = 1.0;
 const PCT_SUM_EMA_REDUCING_CAP = 1.2;
 /** Split for null-mom trend rules 11 (<) / 12 (>=). */
 const PCT_SUM_TREND_SPLIT = 0.1;
-/** Dist. to support ceiling for null-mom rule 13 (%). */
-const DIST_SUPPORT_NEAR_PCT = 2;
+/** Dist. to resistance ceiling for null-mom rule 13 (%). */
+const DIST_RESISTANCE_NEAR_PCT = 2;
 /** EMA score ceiling for null-mom rule 10 (ema is 0–50). */
 const EMA_LOW_THRESHOLD = 20;
 /** Bars needed (incl. current) for no-momentum EMA / Dist. resistance reducing rule. */
@@ -475,13 +475,13 @@ export function applySignalRules(
   const emaReducing = isReducingSeries(emaSeries);
   const trendSignal = emaReducing || isRisingSeries(distSeries);
 
-  // 13) mom is null and %sum > 1.00 and Dist. to support < 2% → Above
-  // Checked before 8 so near-support Above wins over the general Below.
+  // 13) mom is null and %sum > 1.00 and Dist. to resistance < 2% → Above
+  // Checked before 8 so near-resistance Above wins over the general Below.
   if (
     pctSum !== null &&
     pctSum > PCT_SUM_VERY_STRONG &&
-    withSum.distance_from_support !== null &&
-    withSum.distance_from_support < DIST_SUPPORT_NEAR_PCT
+    withSum.distance_to_resistance !== null &&
+    withSum.distance_to_resistance < DIST_RESISTANCE_NEAR_PCT
   ) {
     return set(SIGNAL_ABOVE, 13);
   }
