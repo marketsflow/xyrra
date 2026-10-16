@@ -43,8 +43,8 @@
  *  10) mom is null and %sum < 0.10 and EMA < 20 → Below
  *  11) mom is null and %sum < 0.10 and (last 3 EMA reducing
  *      OR last 3 Dist. to resistance rising) → Above
- *  12) mom is null and %sum >= 0.10 and (last 3 EMA reducing
- *      OR last 3 Dist. to resistance rising) → Below
+ *  12) mom is null and 0.10 <= %sum <= 1.00 and last 3 EMA reducing
+ *      and price_level_pct < 0 and Dist. to resistance >= 1% → Below
  *      "reducing" = non-increasing with a net drop (e.g. 50→50→30 counts)
  *      "rising" = non-decreasing with a net rise (e.g. 3.46→3.60→3.73)
  * price_level is always price_1m (nearest 1m open at window start; no ± offset).
@@ -96,7 +96,7 @@ const PCT_SUM_MOM_HIGH = 0.99;
 const PCT_SUM_VERY_STRONG = 1.0;
 /** Cap for null-mom EMA-reducing rule 9. */
 const PCT_SUM_EMA_REDUCING_CAP = 1.2;
-/** Split for null-mom trend rules 11 (<) / 12 (>=). */
+/** Split for null-mom trend rules 11 (<) / 12 (>= lower bound). */
 const PCT_SUM_TREND_SPLIT = 0.1;
 /**
  * Dist. to resistance band for null-mom rules (%):
@@ -104,8 +104,11 @@ const PCT_SUM_TREND_SPLIT = 0.1;
  *   9:  dist to resistance > 1.5 and dist from support > 1.5
  *       (with EMA reducing and EMA < 20) → Above
  *  14:  dist < -2 (with EMA reducing) → Below
+ *  12:  dist >= 1 (with EMA reducing, %sum in [0.10, 1.00], pl_pct < 0) → Below
  */
 const DIST_RESISTANCE_NEAR_PCT = 2;
+/** Dist. to resistance floor for null-mom rule 12 (%). */
+const DIST_RESISTANCE_RULE12_MIN_PCT = 1;
 /** Dist. to resistance / from support floors for null-mom rule 9 (%). */
 const DIST_RESISTANCE_RULE9_MIN_PCT = 1.5;
 const DIST_SUPPORT_RULE9_MIN_PCT = 1.5;
@@ -424,17 +427,20 @@ export type SignalTrendPrior = {
  * (first match wins). See file header for the rules.
  * `priors` = prior crypto_price bars immediately before this one (oldest→newest),
  * used for the no-momentum EMA / Dist. resistance reducing rule.
+ * `priceLevelPct` = change vs prior bar's price_level (needed for rule 12).
  */
 export function applySignalRules(
   row: CryptoPriceRow,
   pctSum: number | null,
   priors: SignalTrendPrior[] = [],
+  priceLevelPct: number | null = null,
 ): CryptoPriceRow {
   const price1m = roundPrice(row.price_1m);
   const withSum: CryptoPriceRow = {
     ...row,
     price_level: price1m,
     percentage_sum: pctSum === null ? null : roundPct(pctSum),
+    price_level_pct: priceLevelPct,
     signal: null,
     signal_rule: null,
   };
@@ -548,8 +554,18 @@ export function applySignalRules(
     return set(SIGNAL_ABOVE, 11);
   }
 
-  // 12) mom is null and %sum >= 0.10 and last 3 EMA reducing and/or Dist. rising → Below
-  if (trendSignal && pctSum !== null && pctSum >= PCT_SUM_TREND_SPLIT) {
+  // 12) mom is null and 0.10 <= %sum <= 1.00 and EMA reducing
+  //     and price_level_pct < 0 and Dist. to resistance >= 1% → Below
+  if (
+    emaReducing &&
+    pctSum !== null &&
+    pctSum >= PCT_SUM_TREND_SPLIT &&
+    pctSum <= PCT_SUM_VERY_STRONG &&
+    priceLevelPct !== null &&
+    priceLevelPct < 0 &&
+    withSum.distance_to_resistance !== null &&
+    withSum.distance_to_resistance >= DIST_RESISTANCE_RULE12_MIN_PCT
+  ) {
     return set(SIGNAL_BELOW, 12);
   }
 
@@ -1669,9 +1685,9 @@ async function backfillAsset(
       ema: r.ema,
       distance_to_resistance: r.distance_to_resistance,
     }));
-    const withSignal = applySignalRules(row, pctSum, priors);
     const prevLevel = rows.at(-1)?.price_level ?? null;
-    withSignal.price_level_pct = priceLevelChangePct(withSignal.price_level, prevLevel);
+    const priceLevelPct = priceLevelChangePct(roundPrice(row.price_1m), prevLevel);
+    const withSignal = applySignalRules(row, pctSum, priors, priceLevelPct);
     rows.push(withSignal);
   }
 
@@ -1847,14 +1863,14 @@ export async function computeCryptoPrice(
         asset.id,
         latest.bucket_start,
       );
-      const withSignal = applySignalRules(row, pctSum, priors);
       const prevLevel = await fetchPreviousPriceLevel(
         supabaseUrl,
         serviceKey,
         asset.id,
         latest.bucket_start,
       );
-      withSignal.price_level_pct = priceLevelChangePct(withSignal.price_level, prevLevel);
+      const priceLevelPct = priceLevelChangePct(roundPrice(row.price_1m), prevLevel);
+      const withSignal = applySignalRules(row, pctSum, priors, priceLevelPct);
       await attachPolymarketFields(supabaseUrl, serviceKey, asset, [withSignal]);
       rows.push(withSignal);
     }
