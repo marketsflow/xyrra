@@ -460,45 +460,78 @@ function ruleOptionsFromDays(days: DayGroup[]): string[] {
   ].sort((a, b) => Number(a) - Number(b));
 }
 
+function formatPriceLevel(value: number | null) {
+  if (value === null) return "—";
+  return value.toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
+
+function sideFromSignal(signal: string) {
+  const direction = directionFromSignal(signal);
+  if (direction === "LONG_UP") return "UP";
+  if (direction === "LONG_DOWN") return "DOWN";
+  return "—";
+}
+
 function renderDays(container: HTMLElement, days: DayGroup[], emptyMessage: string) {
   if (days.length === 0) {
     container.innerHTML = `<p class="xa-muted">${escapeHtml(emptyMessage)}</p>`;
     return;
   }
 
-  container.innerHTML = days
-    .map(
-      (day) => `
-      <section class="xa-vt__day" data-date="${escapeHtml(day.dateKey)}">
-        <h2 class="xa-vt__day-title">${escapeHtml(day.dateLabel)}</h2>
-        <ul class="xa-vt__periods">
-          ${day.periods
-            .map((period) => {
+  const periods = days.flatMap((day) =>
+    day.periods.map((period) => ({ day, period })),
+  );
+
+  container.innerHTML = `
+    <div class="xa-users__table-wrap xa-vt__create-table-wrap">
+      <table class="xa-users__table xa-vt__create-table">
+        <thead>
+          <tr>
+            <th scope="col" class="xa-vt__check-col">
+              <span class="xa-vt__th-label">Select</span>
+            </th>
+            <th scope="col">Date</th>
+            <th scope="col">Window</th>
+            <th scope="col">Signal</th>
+            <th scope="col">Side</th>
+            <th scope="col">Rule</th>
+            <th scope="col">Price level</th>
+            <th scope="col">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${periods
+            .map(({ day, period }) => {
               const rule = period.cryptoPrice.signal_rule;
-              const ruleBadge =
-                rule == null
-                  ? ""
-                  : `<span class="xa-vt__period-rule">Rule ${escapeHtml(String(rule))}</span>`;
               return `
-            <li class="xa-vt__period">
-              <label class="xa-vt__period-label">
+            <tr>
+              <td class="xa-vt__check-col">
                 <input
                   type="checkbox"
                   class="xa-vt__period-check"
                   data-start-sec="${period.startSec}"
+                  aria-label="Select ${escapeHtml(day.dateLabel)} ${escapeHtml(period.label)}"
                 />
-                <span class="xa-vt__period-text">${escapeHtml(period.label)}</span>
-                <span class="xa-vt__period-signal">${escapeHtml(period.cryptoPrice.signal)}</span>
-                ${ruleBadge}
-              </label>
-              <span class="xa-vt__period-status" data-status-for="${period.startSec}" aria-live="polite"></span>
-            </li>`;
+              </td>
+              <td>${escapeHtml(day.dateLabel)}</td>
+              <td class="xa-vt__period-text">${escapeHtml(period.label)}</td>
+              <td><span class="xa-vt__period-signal">${escapeHtml(period.cryptoPrice.signal)}</span></td>
+              <td>${escapeHtml(sideFromSignal(period.cryptoPrice.signal))}</td>
+              <td>${
+                rule == null
+                  ? "—"
+                  : `<span class="xa-vt__period-rule">${escapeHtml(String(rule))}</span>`
+              }</td>
+              <td>${escapeHtml(formatPriceLevel(period.cryptoPrice.price_level))}</td>
+              <td>
+                <span class="xa-vt__period-status" data-status-for="${period.startSec}" aria-live="polite"></span>
+              </td>
+            </tr>`;
             })
             .join("")}
-        </ul>
-      </section>`,
-    )
-    .join("");
+        </tbody>
+      </table>
+    </div>`;
 }
 
 async function markAlreadyPlaced(

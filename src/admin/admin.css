@@ -2482,59 +2482,22 @@ body.xa-body {
 }
 
 .xa-vt__days {
-  display: grid;
-  gap: 1.25rem;
   margin-top: 1.25rem;
 }
 
-.xa-vt__day {
-  border: 1px solid #e0deed;
-  border-radius: 1rem;
-  background: #fff;
-  padding: 1.1rem 1.25rem;
+.xa-vt__create-table-wrap {
+  margin-top: 0;
 }
 
-.xa-vt__day-title {
-  margin: 0;
-  font-size: 1rem;
-  font-weight: 600;
-}
-
-.xa-vt__periods {
-  list-style: none;
-  margin: 0.85rem 0 0;
-  padding: 0;
-  display: grid;
-  gap: 0.45rem;
-}
-
-.xa-vt__period {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 0.75rem;
-  flex-wrap: wrap;
-  padding: 0.45rem 0.55rem;
-  border-radius: 0.65rem;
-}
-
-.xa-vt__period:hover {
-  background: #fafbff;
-}
-
-.xa-vt__period-label {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.65rem;
-  font-size: 0.875rem;
-  font-weight: 500;
-  cursor: pointer;
-}
-
-.xa-vt__period-check {
+.xa-vt__create-table .xa-vt__period-check {
   width: 1rem;
   height: 1rem;
   accent-color: #2563eb;
+  cursor: pointer;
+}
+
+.xa-vt__create-table tbody tr:has(.xa-vt__period-check:disabled) {
+  opacity: 0.72;
 }
 
 .xa-vt__period-text {
@@ -2544,7 +2507,6 @@ body.xa-body {
 .xa-vt__period-status {
   color: var(--xa-muted);
   font-size: 0.75rem;
-  max-width: 28rem;
 }
 
 .xa-vt__period-signal {
