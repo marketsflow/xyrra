@@ -198,6 +198,23 @@ async function loadBtcAssetId(supabase: SupabaseClient): Promise<number> {
   return id;
 }
 
+const RULED_PAGE = 1000;
+
+function mapCryptoPriceSignalRow(row: Record<string, unknown>): CryptoPriceSignalRow | null {
+  const bucketStart = asString(row.bucket_start);
+  const signal = asString(row.signal);
+  if (!bucketStart || !signal) return null;
+  return {
+    bucket_start: bucketStart,
+    signal,
+    signal_rule: asNumber(row.signal_rule),
+    price_level: asNumber(row.price_level),
+    price_1m: asNumber(row.price_1m),
+    ema: asNumber(row.ema),
+    momentum: asNumber(row.momentum),
+  };
+}
+
 async function loadSignaledCryptoPrices(
   supabase: SupabaseClient,
   assetId: number,
@@ -219,19 +236,44 @@ async function loadSignaledCryptoPrices(
 
   const rows: CryptoPriceSignalRow[] = [];
   for (const row of data ?? []) {
-    const bucketStart = asString(row.bucket_start);
-    const signal = asString(row.signal);
-    if (!bucketStart || !signal) continue;
-    rows.push({
-      bucket_start: bucketStart,
-      signal,
-      signal_rule: asNumber(row.signal_rule),
-      price_level: asNumber(row.price_level),
-      price_1m: asNumber(row.price_1m),
-      ema: asNumber(row.ema),
-      momentum: asNumber(row.momentum),
-    });
+    const mapped = mapCryptoPriceSignalRow(row as Record<string, unknown>);
+    if (mapped) rows.push(mapped);
   }
+  return rows;
+}
+
+/** All closed signaled bars that have a signal_rule (no week paging). */
+async function loadAllRuledCryptoPrices(
+  supabase: SupabaseClient,
+  assetId: number,
+): Promise<CryptoPriceSignalRow[]> {
+  const rows: CryptoPriceSignalRow[] = [];
+  let offset = 0;
+
+  while (true) {
+    const end = offset + RULED_PAGE - 1;
+    const { data, error } = await supabase
+      .from("crypto_price")
+      .select("bucket_start, signal, signal_rule, price_level, price_1m, ema, momentum")
+      .eq("asset_id", assetId)
+      .eq("timeframe", ANALYSIS_TIMEFRAME)
+      .not("signal", "is", null)
+      .neq("signal", "")
+      .not("signal_rule", "is", null)
+      .order("bucket_start", { ascending: false })
+      .range(offset, end);
+
+    if (error) throw new Error(error.message);
+
+    const page = data ?? [];
+    for (const row of page) {
+      const mapped = mapCryptoPriceSignalRow(row as Record<string, unknown>);
+      if (mapped && mapped.signal_rule !== null) rows.push(mapped);
+    }
+    if (page.length < RULED_PAGE) break;
+    offset += RULED_PAGE;
+  }
+
   return rows;
 }
 
@@ -418,11 +460,9 @@ function ruleOptionsFromDays(days: DayGroup[]): string[] {
   ].sort((a, b) => Number(a) - Number(b));
 }
 
-function renderDays(container: HTMLElement, days: DayGroup[], rangeLabel: string, ruleFilter = "") {
+function renderDays(container: HTMLElement, days: DayGroup[], emptyMessage: string) {
   if (days.length === 0) {
-    container.innerHTML = ruleFilter
-      ? `<p class="xa-muted">No periods match this rule filter for ${escapeHtml(rangeLabel)}.</p>`
-      : `<p class="xa-muted">No closed 4h periods with a crypto_price signal for ${escapeHtml(rangeLabel)}.</p>`;
+    container.innerHTML = `<p class="xa-muted">${escapeHtml(emptyMessage)}</p>`;
     return;
   }
 
@@ -682,8 +722,10 @@ async function init() {
   let loadingPage = false;
   let earliestSignalMs: number | null = null;
   let assetId: number | null = null;
-  let loadedDays: DayGroup[] = [];
-  let loadedRangeLabel = "";
+  let weekDays: DayGroup[] = [];
+  let weekRangeLabel = "";
+  let ruledDays: DayGroup[] | null = null;
+  let ruledDaysPromise: Promise<DayGroup[]> | null = null;
 
   function selectedPeriods(): FourHourPeriod[] {
     return [...selectedStartSecs]
@@ -729,6 +771,14 @@ async function init() {
     ruleFilterSelect.value = allowed.has(previous) ? previous : "";
   }
 
+  function registerPeriods(days: DayGroup[]) {
+    for (const day of days) {
+      for (const period of day.periods) {
+        periodByStart.set(period.startSec, period);
+      }
+    }
+  }
+
   function pruneSelectionToVisible(visible: DayGroup[]) {
     const visibleSecs = new Set(
       visible.flatMap((day) => day.periods.map((period) => period.startSec)),
@@ -740,12 +790,35 @@ async function init() {
     setPlaceTradeActive(remaining.length > 0);
   }
 
-  async function applyRuleFilter() {
-    const ruleFilter = ruleFilterSelect.value;
-    const visible = filterDaysByRule(loadedDays, ruleFilter);
-    renderDays(daysEl, visible, loadedRangeLabel, ruleFilter);
+  function ensureRuledDaysLoaded(): Promise<DayGroup[]> {
+    if (ruledDays) return Promise.resolve(ruledDays);
+    if (!ruledDaysPromise) {
+      ruledDaysPromise = (async () => {
+        if (assetId === null) {
+          assetId = await loadBtcAssetId(supabase);
+        }
+        const closedEndSec = currentClosedWindowEndSec();
+        const signaled = await loadAllRuledCryptoPrices(supabase, assetId);
+        ruledDays = groupSignaledPeriods(signaled, closedEndSec);
+        registerPeriods(ruledDays);
+        syncRuleFilterOptions(ruledDays);
+        return ruledDays;
+      })().catch((error) => {
+        ruledDaysPromise = null;
+        throw error;
+      });
+    }
+    return ruledDaysPromise;
+  }
+
+  async function paintVisibleDays(visible: DayGroup[], emptyMessage: string) {
+    renderDays(daysEl, visible, emptyMessage);
     pruneSelectionToVisible(visible);
-    await markAlreadyPlaced(supabase, daysEl, periodByStart.values());
+    await markAlreadyPlaced(
+      supabase,
+      daysEl,
+      visible.flatMap((day) => day.periods),
+    );
     for (const sec of selectedStartSecs) {
       const box = daysEl.querySelector<HTMLInputElement>(
         `.xa-vt__period-check[data-start-sec="${sec}"]`,
@@ -753,28 +826,71 @@ async function init() {
       if (box && !box.disabled) box.checked = true;
     }
     void refreshPreview();
+  }
 
-    const visibleCount = visible.reduce((n, day) => n + day.periods.length, 0);
-    const totalCount = loadedDays.reduce((n, day) => n + day.periods.length, 0);
+  async function applyRuleFilter() {
+    const ruleFilter = ruleFilterSelect.value;
     statusEl.classList.remove("xa-users__status--error");
-    if (selectedStartSecs.size > 0) {
-      const n = selectedStartSecs.size;
-      statusEl.textContent =
-        n === 1
-          ? `Selected ${selectedPeriods()[0]?.label ?? "1 period"}. Review details, then Place Trade.`
-          : `Selected ${n} periods. Click Place ${n} Trades.`;
-    } else if (ruleFilter && visibleCount === 0) {
-      statusEl.textContent = `No periods match this rule filter for ${loadedRangeLabel}.`;
-    } else if (ruleFilter) {
-      statusEl.textContent =
+
+    if (!ruleFilter) {
+      pagerEl.hidden = false;
+      updatePager(weekOffset, pageRange(weekOffset), loadingPage);
+      const weekCount = weekDays.reduce((n, day) => n + day.periods.length, 0);
+      await paintVisibleDays(
+        weekDays,
+        `No closed 4h periods with a crypto_price signal for ${weekRangeLabel}.`,
+      );
+      if (selectedStartSecs.size > 0) {
+        const n = selectedStartSecs.size;
+        statusEl.textContent =
+          n === 1
+            ? `Selected ${selectedPeriods()[0]?.label ?? "1 period"}. Review details, then Place Trade.`
+            : `Selected ${n} periods. Click Place ${n} Trades.`;
+      } else {
+        statusEl.textContent =
+          weekCount === 0
+            ? `No closed 4h periods with a crypto_price signal for ${weekRangeLabel}.`
+            : `Select one or more signaled 4h periods, then click Place Trade.`;
+      }
+      return;
+    }
+
+    pagerEl.hidden = true;
+    statusEl.textContent =
+      ruleFilter === "with"
+        ? "Loading all periods with rules…"
+        : `Loading all periods for rule ${ruleFilter}…`;
+
+    try {
+      const allRuled = await ensureRuledDaysLoaded();
+      const visible = filterDaysByRule(allRuled, ruleFilter);
+      const visibleCount = visible.reduce((n, day) => n + day.periods.length, 0);
+      const emptyMessage =
         ruleFilter === "with"
-          ? `Showing ${visibleCount} period${visibleCount === 1 ? "" : "s"} with rules (${totalCount} total). Select one or more, then Place Trade.`
-          : `Showing ${visibleCount} period${visibleCount === 1 ? "" : "s"} for rule ${ruleFilter}. Select one or more, then Place Trade.`;
-    } else {
-      statusEl.textContent =
-        totalCount === 0
-          ? `No closed 4h periods with a crypto_price signal for ${loadedRangeLabel}.`
-          : `Select one or more signaled 4h periods, then click Place Trade.`;
+          ? "No closed 4h periods with a signal rule."
+          : `No closed 4h periods for rule ${ruleFilter}.`;
+
+      await paintVisibleDays(visible, emptyMessage);
+
+      if (selectedStartSecs.size > 0) {
+        const n = selectedStartSecs.size;
+        statusEl.textContent =
+          n === 1
+            ? `Selected ${selectedPeriods()[0]?.label ?? "1 period"}. Review details, then Place Trade.`
+            : `Selected ${n} periods. Click Place ${n} Trades.`;
+      } else if (visibleCount === 0) {
+        statusEl.textContent = emptyMessage;
+      } else {
+        statusEl.textContent =
+          ruleFilter === "with"
+            ? `Showing all ${visibleCount} period${visibleCount === 1 ? "" : "s"} with rules. Select one or more, then Place Trade.`
+            : `Showing all ${visibleCount} period${visibleCount === 1 ? "" : "s"} for rule ${ruleFilter}. Select one or more, then Place Trade.`;
+      }
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unable to load periods with rules.";
+      statusEl.textContent = msg;
+      statusEl.classList.add("xa-users__status--error");
+      daysEl.innerHTML = "";
     }
   }
 
@@ -848,13 +964,17 @@ async function init() {
     loadingPage = true;
     clearSelectionUi();
     periodByStart.clear();
-    loadedDays = [];
-    loadedRangeLabel = "";
+    weekDays = [];
+    weekRangeLabel = "";
     statusEl.classList.remove("xa-users__status--error");
     statusEl.textContent = "Loading periods with crypto_price signals…";
 
     const pendingRange = pageRange(nextOffset);
-    updatePager(nextOffset, pendingRange, true);
+    if (!ruleFilterSelect.value) {
+      updatePager(nextOffset, pendingRange, true);
+    } else {
+      pagerEl.hidden = true;
+    }
 
     try {
       if (assetId === null) {
@@ -870,17 +990,14 @@ async function init() {
         range.beforeIso,
       );
       const days = groupSignaledPeriods(signaled, range.closedEndSec);
-      for (const day of days) {
-        for (const period of day.periods) {
-          periodByStart.set(period.startSec, period);
-        }
-      }
+      registerPeriods(days);
+      if (ruledDays) registerPeriods(ruledDays);
 
       weekOffset = nextOffset;
-      loadedDays = days;
-      loadedRangeLabel = range.label;
+      weekDays = days;
+      weekRangeLabel = range.label;
       filtersEl.hidden = false;
-      syncRuleFilterOptions(days);
+      if (!ruledDays) syncRuleFilterOptions(days);
       await applyRuleFilter();
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Unable to load crypto_price signals.";
@@ -890,7 +1007,11 @@ async function init() {
       filtersEl.hidden = true;
     } finally {
       loadingPage = false;
-      updatePager(weekOffset, pageRange(weekOffset), false);
+      if (!ruleFilterSelect.value) {
+        updatePager(weekOffset, pageRange(weekOffset), false);
+      } else {
+        pagerEl.hidden = true;
+      }
     }
   }
 
@@ -906,6 +1027,10 @@ async function init() {
   });
 
   await loadWeek(0);
+  // Populate rule options from the full history (not just the current week page).
+  void ensureRuledDaysLoaded().catch(() => {
+    // Week view still works if the ruled fetch fails; filter will surface the error on use.
+  });
 
   daysEl.addEventListener("change", (event) => {
     const target = event.target;
