@@ -2414,11 +2414,17 @@ body.xa-body {
   font-weight: 600;
 }
 
-.xa-crypto__market-cell {
-  max-width: 18rem;
+.xa-users__table th.xa-crypto__market-cell,
+.xa-users__table td.xa-crypto__market-cell {
+  max-width: 14rem;
+  min-width: 10rem;
+  width: 14rem;
   white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   line-height: 1.35;
   font-size: 0.8rem;
+  vertical-align: top;
 }
 
 .xa-crypto__pa-table th,
