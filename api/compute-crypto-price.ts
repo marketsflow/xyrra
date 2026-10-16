@@ -34,13 +34,18 @@
  *   7) mom < 1% and %sum > -1.00 (fallback) → Below
  *  13) mom is null and %sum > 1.00 and Dist. to resistance < 2% and > -2% → Above
  *      (checked before 8 so near-resistance overrides the general Below)
- *   8) mom is null and %sum > 1.00 and EMA is not reducing → Below
+ *   8) mom is null and %sum > 1.00 and EMA is not reducing
+ *      and (Dist. to resistance >= 0 or %sum >= 4) → Below
+ *      (through-resistance shorts only on extreme %sum extension)
  *   9) mom is null and %sum < 1.20 and EMA is reducing
  *      and Dist. to resistance > 1.5% and EMA < 20
  *      and Dist. from support > 1.5% → Above
  *  14) mom is null and %sum < 1.20 and EMA is reducing
  *      and Dist. to resistance < -2% → Below
- *  10) mom is null and %sum < 0.10 and EMA < 20 → Below
+ *  10) mom is null and EMA < 20 and Dist. to resistance >= 0
+ *      and (%sum < -2 or -1 <= %sum < 0.10)
+ *      and price_level_pct not in [0.10, 0.30) → Below
+ *      (excludes toxic mid band [-2, -1); blocks soft upticks)
  *  11) mom is null and %sum < 0.10 and (last 3 EMA reducing
  *      OR last 3 Dist. to resistance rising) → Above
  *  12) mom is null and 0.10 <= %sum <= 1.00 and last 3 EMA reducing
@@ -94,10 +99,21 @@ const PCT_SUM_FALLBACK = -1;
 const PCT_SUM_STRONG = 0.8;
 const PCT_SUM_MOM_HIGH = 0.99;
 const PCT_SUM_VERY_STRONG = 1.0;
+/** Extreme %sum needed for rule 8 when already through resistance (distR < 0). */
+const PCT_SUM_RULE8_THROUGH_RESIST = 4;
 /** Cap for null-mom EMA-reducing rule 9. */
 const PCT_SUM_EMA_REDUCING_CAP = 1.2;
 /** Split for null-mom trend rules 11 (<) / 12 (>= lower bound). */
 const PCT_SUM_TREND_SPLIT = 0.1;
+/**
+ * Rule 10 excludes the toxic mid %sum band [-2, -1): keep %sum < -2
+ * or -1 <= %sum < 0.10 (with EMA < 20, distR >= 0, pl_pct not soft-uptick).
+ */
+const PCT_SUM_RULE10_MID_LOW = -2;
+const PCT_SUM_RULE10_MID_HIGH = -1;
+/** Soft uptick band blocked for rule 10: [0.10, 0.30). */
+const PL_PCT_RULE10_BOUNCE_LOW = 0.1;
+const PL_PCT_RULE10_BOUNCE_HIGH = 0.3;
 /**
  * Dist. to resistance band for null-mom rules (%):
  *   13: -2 < dist < +2 → Above
@@ -105,8 +121,12 @@ const PCT_SUM_TREND_SPLIT = 0.1;
  *       (with EMA reducing and EMA < 20) → Above
  *  14:  dist < -2 (with EMA reducing) → Below
  *  12:  dist >= 1 (with EMA reducing, %sum in [0.10, 1.00], pl_pct < 0) → Below
+ *  10:  dist >= 0
+ *   8:  dist >= 0, or any dist when %sum >= 4
  */
 const DIST_RESISTANCE_NEAR_PCT = 2;
+/** Dist. to resistance floor for null-mom rule 10 (%). */
+const DIST_RESISTANCE_RULE10_MIN_PCT = 0;
 /** Dist. to resistance floor for null-mom rule 12 (%). */
 const DIST_RESISTANCE_RULE12_MIN_PCT = 1;
 /** Dist. to resistance / from support floors for null-mom rule 9 (%). */
@@ -507,8 +527,16 @@ export function applySignalRules(
     return set(SIGNAL_ABOVE, 13);
   }
 
-  // 8) mom is null and %sum > 1.00 and EMA is not reducing → Below
-  if (pctSum !== null && pctSum > PCT_SUM_VERY_STRONG && !emaReducing) {
+  // 8) mom is null and %sum > 1.00 and EMA is not reducing
+  //    and (Dist. to resistance >= 0 or %sum >= 4) → Below
+  //    Through-resistance (distR < 0) shorts only on extreme %sum extension.
+  if (
+    pctSum !== null &&
+    pctSum > PCT_SUM_VERY_STRONG &&
+    !emaReducing &&
+    withSum.distance_to_resistance !== null &&
+    (withSum.distance_to_resistance >= 0 || pctSum >= PCT_SUM_RULE8_THROUGH_RESIST)
+  ) {
     return set(SIGNAL_BELOW, 8);
   }
 
@@ -539,12 +567,24 @@ export function applySignalRules(
     return set(SIGNAL_BELOW, 14);
   }
 
-  // 10) mom is null and %sum < 0.10 and EMA < 20 → Below
-  if (
+  // 10) mom is null and EMA < 20 and Dist. to resistance >= 0
+  //     and (%sum < -2 or -1 <= %sum < 0.10)
+  //     and price_level_pct not in [0.10, 0.30) → Below
+  const pctSumRule10Ok =
     pctSum !== null &&
     pctSum < PCT_SUM_TREND_SPLIT &&
+    (pctSum < PCT_SUM_RULE10_MID_LOW || pctSum >= PCT_SUM_RULE10_MID_HIGH);
+  const plPctRule10Ok =
+    priceLevelPct === null ||
+    priceLevelPct < PL_PCT_RULE10_BOUNCE_LOW ||
+    priceLevelPct >= PL_PCT_RULE10_BOUNCE_HIGH;
+  if (
+    pctSumRule10Ok &&
     withSum.ema !== null &&
-    withSum.ema < EMA_LOW_THRESHOLD
+    withSum.ema < EMA_LOW_THRESHOLD &&
+    withSum.distance_to_resistance !== null &&
+    withSum.distance_to_resistance >= DIST_RESISTANCE_RULE10_MIN_PCT &&
+    plPctRule10Ok
   ) {
     return set(SIGNAL_BELOW, 10);
   }
