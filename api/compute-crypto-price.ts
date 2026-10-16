@@ -30,8 +30,9 @@
  *   3) mom > 1% and %sum >= 0.99 → Below
  *   4) mom > 1% and %sum < 0.99 → Above
  *   5) -1% < mom < 0 and %sum > 0.80 → Below
- *   6) mom < 1% and %sum <= -1.00 (fallback) → Above
- *   7) mom < 1% and %sum > -1.00 (fallback) → Below
+ *   6) mom < 1% and %sum <= -1.00 and Dist. to resistance >= 0
+ *      and EMA > 0 (fallback) → Above
+ *   7) mom < 1% and %sum > -1.00 and EMA >= 20 (fallback) → Below
  *  13) mom is null and %sum > 1.00 and Dist. to resistance < 2% and > -2% → Above
  *      (checked before 8 so near-resistance overrides the general Below)
  *   8) mom is null and %sum > 1.00 and EMA is not reducing
@@ -132,7 +133,7 @@ const DIST_RESISTANCE_RULE12_MIN_PCT = 1;
 /** Dist. to resistance / from support floors for null-mom rule 9 (%). */
 const DIST_RESISTANCE_RULE9_MIN_PCT = 1.5;
 const DIST_SUPPORT_RULE9_MIN_PCT = 1.5;
-/** EMA score ceiling for null-mom rule 10 (ema is 0–50). */
+/** EMA score threshold (ema is 0–50): rule 7 floor (>=), rules 9/10 ceiling (<). */
 const EMA_LOW_THRESHOLD = 20;
 /** Bars needed (incl. current) for no-momentum EMA / Dist. resistance reducing rule. */
 const SIGNAL_TREND_LOOKBACK = 3;
@@ -496,12 +497,27 @@ export function applySignalRules(
     if (mom < 0 && mom > -MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_STRONG) {
       return set(SIGNAL_BELOW, 5);
     }
-    // 6) mom < 1% and %sum <= -1.00 (fallback) → Above
-    if (mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum <= PCT_SUM_FALLBACK) {
+    // 6) mom < 1% and %sum <= -1.00 and Dist. to resistance >= 0
+    //    and EMA > 0 (fallback) → Above
+    if (
+      mom < MOMENTUM_STRONG_PCT &&
+      pctSum !== null &&
+      pctSum <= PCT_SUM_FALLBACK &&
+      withSum.distance_to_resistance !== null &&
+      withSum.distance_to_resistance >= 0 &&
+      withSum.ema !== null &&
+      withSum.ema > 0
+    ) {
       return set(SIGNAL_ABOVE, 6);
     }
-    // 7) mom < 1% and %sum > -1.00 (fallback) → Below
-    if (mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_FALLBACK) {
+    // 7) mom < 1% and %sum > -1.00 and EMA >= 20 (fallback) → Below
+    if (
+      mom < MOMENTUM_STRONG_PCT &&
+      pctSum !== null &&
+      pctSum > PCT_SUM_FALLBACK &&
+      withSum.ema !== null &&
+      withSum.ema >= EMA_LOW_THRESHOLD
+    ) {
       return set(SIGNAL_BELOW, 7);
     }
     return withSum;
