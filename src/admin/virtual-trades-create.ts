@@ -572,23 +572,42 @@ async function placeVirtualTrade(
 }
 
 async function init() {
-  const session = await requireAdminSession();
-  if (!session) return;
+  const adminSession = await requireAdminSession();
+  if (!adminSession) return;
 
-  initAdminShell(session, "virtual-trades");
+  initAdminShell(adminSession, "virtual-trades");
   setAdminLoading(false);
 
-  const daysEl = document.getElementById("xa-vt-create-days");
-  const statusEl = document.getElementById("xa-vt-create-status");
-  const previewEl = document.getElementById("xa-vt-create-preview");
-  const placeBtn = document.getElementById("xa-vt-place-trade") as HTMLButtonElement | null;
-  const pagerEl = document.getElementById("xa-vt-create-pager");
-  const pagerLabelEl = document.getElementById("xa-vt-pager-label");
-  const earlierBtn = document.getElementById("xa-vt-earlier") as HTMLButtonElement | null;
-  const laterBtn = document.getElementById("xa-vt-later") as HTMLButtonElement | null;
-  if (!daysEl || !statusEl || !previewEl || !placeBtn || !pagerEl || !pagerLabelEl || !earlierBtn || !laterBtn) {
+  const daysRoot = document.getElementById("xa-vt-create-days");
+  const statusRoot = document.getElementById("xa-vt-create-status");
+  const previewRoot = document.getElementById("xa-vt-create-preview");
+  const placeTradeBtn = document.getElementById("xa-vt-place-trade") as HTMLButtonElement | null;
+  const pagerRoot = document.getElementById("xa-vt-create-pager");
+  const pagerLabel = document.getElementById("xa-vt-pager-label");
+  const earlierWeekBtn = document.getElementById("xa-vt-earlier") as HTMLButtonElement | null;
+  const laterWeekBtn = document.getElementById("xa-vt-later") as HTMLButtonElement | null;
+  if (
+    !daysRoot ||
+    !statusRoot ||
+    !previewRoot ||
+    !placeTradeBtn ||
+    !pagerRoot ||
+    !pagerLabel ||
+    !earlierWeekBtn ||
+    !laterWeekBtn
+  ) {
     return;
   }
+
+  const daysEl = daysRoot;
+  const statusEl = statusRoot;
+  const previewEl = previewRoot;
+  const placeBtn = placeTradeBtn;
+  const pagerEl = pagerRoot;
+  const pagerLabelEl = pagerLabel;
+  const earlierBtn = earlierWeekBtn;
+  const laterBtn = laterWeekBtn;
+  const supabase = adminSession.supabase;
 
   const periodByStart = new Map<number, FourHourPeriod>();
   let selectedStartSec: number | null = null;
@@ -599,15 +618,15 @@ async function init() {
   let assetId: number | null = null;
 
   function setPlaceTradeActive(active: boolean) {
-    placeBtn!.disabled = !active || placing;
-    placeBtn!.classList.toggle("xa-vt__place-trade--active", active && !placing);
+    placeBtn.disabled = !active || placing;
+    placeBtn.classList.toggle("xa-vt__place-trade--active", active && !placing);
   }
 
   function clearSelectionUi() {
     selectedStartSec = null;
     setPlaceTradeActive(false);
-    previewEl!.hidden = true;
-    previewEl!.innerHTML = "";
+    previewEl.hidden = true;
+    previewEl.innerHTML = "";
   }
 
   function hasEarlierThan(fromIso: string) {
@@ -616,14 +635,14 @@ async function init() {
   }
 
   function updatePager(offset: number, range: ReturnType<typeof pageRange>, busy: boolean) {
-    pagerEl!.hidden = false;
-    pagerLabelEl!.textContent = range.label;
-    laterBtn!.disabled = busy || offset === 0;
-    earlierBtn!.disabled = busy || !hasEarlierThan(range.fromIso);
+    pagerEl.hidden = false;
+    pagerLabelEl.textContent = range.label;
+    laterBtn.disabled = busy || offset === 0;
+    earlierBtn.disabled = busy || !hasEarlierThan(range.fromIso);
   }
 
   async function loadEarliestSignalMs(id: number): Promise<number | null> {
-    const { data, error } = await session.supabase
+    const { data, error } = await supabase
       .from("crypto_price")
       .select("bucket_start")
       .eq("asset_id", id)
@@ -653,13 +672,13 @@ async function init() {
 
     try {
       if (assetId === null) {
-        assetId = await loadBtcAssetId(session.supabase);
+        assetId = await loadBtcAssetId(supabase);
         earliestSignalMs = await loadEarliestSignalMs(assetId);
       }
 
       const range = pageRange(nextOffset);
       const signaled = await loadSignaledCryptoPrices(
-        session.supabase,
+        supabase,
         assetId,
         range.fromIso,
         range.beforeIso,
@@ -673,7 +692,7 @@ async function init() {
 
       weekOffset = nextOffset;
       renderDays(daysEl, days, range.label);
-      await markAlreadyPlaced(session.supabase, daysEl, periodByStart.values());
+      await markAlreadyPlaced(supabase, daysEl, periodByStart.values());
 
       statusEl.textContent =
         days.length === 0
@@ -731,8 +750,8 @@ async function init() {
 
     void (async () => {
       try {
-        const tick = await loadEntryTick(session.supabase, period.startSec);
-        const priceToBeat = await loadPriceToBeat(session.supabase, period.startSec, tick);
+        const tick = await loadEntryTick(supabase, period.startSec);
+        const priceToBeat = await loadPriceToBeat(supabase, period.startSec, tick);
         if (selectedStartSec === startSec) {
           renderPreview(previewEl, period, tick, priceToBeat);
         }
@@ -762,7 +781,7 @@ async function init() {
       );
 
       try {
-        const result = await placeVirtualTrade(session.supabase, period);
+        const result = await placeVirtualTrade(supabase, period);
         if (statusFor) statusFor.textContent = `Placed #${result.id}`;
         statusEl.textContent = result.message;
         const checked = daysEl.querySelector<HTMLInputElement>(
