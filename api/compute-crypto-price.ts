@@ -46,7 +46,8 @@
  * price_level is always price_1m (nearest 1m open at window start; no ± offset).
  * price_level_pct: (price_level - prev_price_level) / prev_price_level * 100 vs the
  *   prior crypto_price bar. Uses frozen 1m opens, so it does not tick every minute.
- * When no 1m candle is within ±15m of the window start, that bar is skipped.
+ * When no 1m candle is within ±15m of the window start, reuse an existing
+ * crypto_price.price_1m for that bucket if present; otherwise skip the bar.
  *
  * BTC only — market_title + price_to_beat from Polymarket for the same 4h window
  *   (slug btc-updown-4h-{unix}). Prefer polymarket_events; fall back to ticks for
@@ -911,8 +912,58 @@ async function fetchClosestOneMinuteOpen(
 }
 
 /**
+ * Existing crypto_price.price_1m keyed by bucket_start ms (analysis TF).
+ * Used when a live 1m open is missing so rule backfills can still refresh
+ * historical rows that already have a stored price level.
+ */
+async function fetchExistingPrice1mByBucket(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+  bucketStarts: string[],
+): Promise<Map<number, number>> {
+  const out = new Map<number, number>();
+  if (bucketStarts.length === 0) return out;
+  const base = supabaseUrl.replace(/\/$/, "");
+  const unique = [
+    ...new Set(
+      bucketStarts
+        .map((s) => toUtcIso(s))
+        .filter((s): s is string => Boolean(s)),
+    ),
+  ];
+  const chunkSize = 80;
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const chunk = unique.slice(i, i + chunkSize);
+    const inList = chunk.map((s) => `"${s}"`).join(",");
+    const res = await fetch(
+      `${base}/rest/v1/crypto_price?select=bucket_start,price_1m&asset_id=eq.${assetId}&timeframe=eq.${ANALYSIS_TIMEFRAME}&bucket_start=in.(${inList})`,
+      { headers: restHeaders(serviceKey) },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to load existing crypto_price.price_1m: ${text.slice(0, 300)}`);
+    }
+    const rows = (await res.json()) as Array<{
+      bucket_start?: unknown;
+      price_1m?: unknown;
+    }>;
+    for (const row of rows) {
+      const bucketStart =
+        typeof row.bucket_start === "string" ? row.bucket_start : null;
+      const price1m = parseNumber(row.price_1m);
+      const ms = bucketStart ? bucketStartMs(bucketStart) : null;
+      if (ms === null || price1m === null) continue;
+      out.set(ms, price1m);
+    }
+  }
+  return out;
+}
+
+/**
  * Replace each candle.open with the nearest 1m open at that window start.
  * When source is already 1m, candles are returned unchanged.
+ * If no 1m open is found, fall back to an existing crypto_price.price_1m.
  */
 async function resolveCandlesWithOneMinuteOpen(
   supabaseUrl: string,
@@ -947,6 +998,7 @@ async function resolveCandlesWithOneMinuteOpen(
     }
   }
 
+  const stillMissing: PriceCandle[] = [];
   const closestConcurrency = 8;
   for (let i = 0; i < needClosest.length; i += closestConcurrency) {
     const chunk = needClosest.slice(i, i + closestConcurrency);
@@ -958,10 +1010,28 @@ async function resolveCandlesWithOneMinuteOpen(
     for (let j = 0; j < chunk.length; j++) {
       const open = opens[j];
       if (open === null) {
-        skippedNo1m += 1;
+        stillMissing.push(chunk[j]);
         continue;
       }
       resolved.push({ bucket_start: chunk[j].bucket_start, open });
+    }
+  }
+
+  if (stillMissing.length > 0) {
+    const existing = await fetchExistingPrice1mByBucket(
+      supabaseUrl,
+      serviceKey,
+      assetId,
+      stillMissing.map((c) => c.bucket_start),
+    );
+    for (const candle of stillMissing) {
+      const ms = bucketStartMs(candle.bucket_start);
+      const price1m = ms === null ? null : (existing.get(ms) ?? null);
+      if (price1m === null) {
+        skippedNo1m += 1;
+        continue;
+      }
+      resolved.push({ bucket_start: candle.bucket_start, open: price1m });
     }
   }
 
