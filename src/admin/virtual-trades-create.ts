@@ -391,10 +391,38 @@ async function loadPriceToBeat(
   return asNumber(data?.price_to_beat);
 }
 
-function renderDays(container: HTMLElement, days: DayGroup[], rangeLabel: string) {
+function filterDaysByRule(days: DayGroup[], ruleFilter: string): DayGroup[] {
+  if (!ruleFilter) return days;
+
+  return days
+    .map((day) => ({
+      ...day,
+      periods: day.periods.filter((period) => {
+        const rule = period.cryptoPrice.signal_rule;
+        if (ruleFilter === "with") return rule !== null;
+        return rule !== null && String(rule) === ruleFilter;
+      }),
+    }))
+    .filter((day) => day.periods.length > 0);
+}
+
+function ruleOptionsFromDays(days: DayGroup[]): string[] {
+  return [
+    ...new Set(
+      days
+        .flatMap((day) => day.periods)
+        .map((period) => period.cryptoPrice.signal_rule)
+        .filter((rule): rule is number => rule !== null)
+        .map((rule) => String(rule)),
+    ),
+  ].sort((a, b) => Number(a) - Number(b));
+}
+
+function renderDays(container: HTMLElement, days: DayGroup[], rangeLabel: string, ruleFilter = "") {
   if (days.length === 0) {
-    container.innerHTML =
-      `<p class="xa-muted">No closed 4h periods with a crypto_price signal for ${escapeHtml(rangeLabel)}.</p>`;
+    container.innerHTML = ruleFilter
+      ? `<p class="xa-muted">No periods match this rule filter for ${escapeHtml(rangeLabel)}.</p>`
+      : `<p class="xa-muted">No closed 4h periods with a crypto_price signal for ${escapeHtml(rangeLabel)}.</p>`;
     return;
   }
 
@@ -405,8 +433,13 @@ function renderDays(container: HTMLElement, days: DayGroup[], rangeLabel: string
         <h2 class="xa-vt__day-title">${escapeHtml(day.dateLabel)}</h2>
         <ul class="xa-vt__periods">
           ${day.periods
-            .map(
-              (period) => `
+            .map((period) => {
+              const rule = period.cryptoPrice.signal_rule;
+              const ruleBadge =
+                rule == null
+                  ? ""
+                  : `<span class="xa-vt__period-rule">Rule ${escapeHtml(String(rule))}</span>`;
+              return `
             <li class="xa-vt__period">
               <label class="xa-vt__period-label">
                 <input
@@ -416,10 +449,11 @@ function renderDays(container: HTMLElement, days: DayGroup[], rangeLabel: string
                 />
                 <span class="xa-vt__period-text">${escapeHtml(period.label)}</span>
                 <span class="xa-vt__period-signal">${escapeHtml(period.cryptoPrice.signal)}</span>
+                ${ruleBadge}
               </label>
               <span class="xa-vt__period-status" data-status-for="${period.startSec}" aria-live="polite"></span>
-            </li>`,
-            )
+            </li>`;
+            })
             .join("")}
         </ul>
       </section>`,
@@ -609,6 +643,10 @@ async function init() {
   const pagerLabel = document.getElementById("xa-vt-pager-label");
   const earlierWeekBtn = document.getElementById("xa-vt-earlier") as HTMLButtonElement | null;
   const laterWeekBtn = document.getElementById("xa-vt-later") as HTMLButtonElement | null;
+  const filtersRoot = document.getElementById("xa-vt-create-filters");
+  const filterRuleEl = document.getElementById(
+    "xa-vt-create-filter-rule",
+  ) as HTMLSelectElement | null;
   if (
     !daysRoot ||
     !statusRoot ||
@@ -617,7 +655,9 @@ async function init() {
     !pagerRoot ||
     !pagerLabel ||
     !earlierWeekBtn ||
-    !laterWeekBtn
+    !laterWeekBtn ||
+    !filtersRoot ||
+    !filterRuleEl
   ) {
     return;
   }
@@ -630,6 +670,7 @@ async function init() {
   const pagerLabelEl = pagerLabel;
   const earlierBtn = earlierWeekBtn;
   const laterBtn = laterWeekBtn;
+  const filtersEl = filtersRoot;
   const supabase = adminSession.supabase;
 
   const periodByStart = new Map<number, FourHourPeriod>();
@@ -640,6 +681,8 @@ async function init() {
   let loadingPage = false;
   let earliestSignalMs: number | null = null;
   let assetId: number | null = null;
+  let loadedDays: DayGroup[] = [];
+  let loadedRangeLabel = "";
 
   function selectedPeriods(): FourHourPeriod[] {
     return [...selectedStartSecs]
@@ -668,6 +711,70 @@ async function init() {
     setPlaceTradeActive(false);
     previewEl.hidden = true;
     previewEl.innerHTML = "";
+  }
+
+  function syncRuleFilterOptions(days: DayGroup[]) {
+    const previous = filterRuleEl.value;
+    const rules = ruleOptionsFromDays(days);
+    const allowed = new Set(["", "with", ...rules]);
+
+    filterRuleEl.innerHTML =
+      `<option value="">All</option>` +
+      `<option value="with">With rules</option>` +
+      rules
+        .map((rule) => `<option value="${escapeHtml(rule)}">Rule ${escapeHtml(rule)}</option>`)
+        .join("");
+
+    filterRuleEl.value = allowed.has(previous) ? previous : "";
+  }
+
+  function pruneSelectionToVisible(visible: DayGroup[]) {
+    const visibleSecs = new Set(
+      visible.flatMap((day) => day.periods.map((period) => period.startSec)),
+    );
+    for (const sec of [...selectedStartSecs]) {
+      if (!visibleSecs.has(sec)) selectedStartSecs.delete(sec);
+    }
+    const remaining = selectedPeriods();
+    setPlaceTradeActive(remaining.length > 0);
+  }
+
+  async function applyRuleFilter() {
+    const ruleFilter = filterRuleEl.value;
+    const visible = filterDaysByRule(loadedDays, ruleFilter);
+    renderDays(daysEl, visible, loadedRangeLabel, ruleFilter);
+    pruneSelectionToVisible(visible);
+    await markAlreadyPlaced(supabase, daysEl, periodByStart.values());
+    for (const sec of selectedStartSecs) {
+      const box = daysEl.querySelector<HTMLInputElement>(
+        `.xa-vt__period-check[data-start-sec="${sec}"]`,
+      );
+      if (box && !box.disabled) box.checked = true;
+    }
+    void refreshPreview();
+
+    const visibleCount = visible.reduce((n, day) => n + day.periods.length, 0);
+    const totalCount = loadedDays.reduce((n, day) => n + day.periods.length, 0);
+    statusEl.classList.remove("xa-users__status--error");
+    if (selectedStartSecs.size > 0) {
+      const n = selectedStartSecs.size;
+      statusEl.textContent =
+        n === 1
+          ? `Selected ${selectedPeriods()[0]?.label ?? "1 period"}. Review details, then Place Trade.`
+          : `Selected ${n} periods. Click Place ${n} Trades.`;
+    } else if (ruleFilter && visibleCount === 0) {
+      statusEl.textContent = `No periods match this rule filter for ${loadedRangeLabel}.`;
+    } else if (ruleFilter) {
+      statusEl.textContent =
+        ruleFilter === "with"
+          ? `Showing ${visibleCount} period${visibleCount === 1 ? "" : "s"} with rules (${totalCount} total). Select one or more, then Place Trade.`
+          : `Showing ${visibleCount} period${visibleCount === 1 ? "" : "s"} for rule ${ruleFilter}. Select one or more, then Place Trade.`;
+    } else {
+      statusEl.textContent =
+        totalCount === 0
+          ? `No closed 4h periods with a crypto_price signal for ${loadedRangeLabel}.`
+          : `Select one or more signaled 4h periods, then click Place Trade.`;
+    }
   }
 
   async function refreshPreview() {
@@ -740,6 +847,8 @@ async function init() {
     loadingPage = true;
     clearSelectionUi();
     periodByStart.clear();
+    loadedDays = [];
+    loadedRangeLabel = "";
     statusEl.classList.remove("xa-users__status--error");
     statusEl.textContent = "Loading periods with crypto_price signals…";
 
@@ -767,18 +876,17 @@ async function init() {
       }
 
       weekOffset = nextOffset;
-      renderDays(daysEl, days, range.label);
-      await markAlreadyPlaced(supabase, daysEl, periodByStart.values());
-
-      statusEl.textContent =
-        days.length === 0
-          ? `No closed 4h periods with a crypto_price signal for ${range.label}.`
-          : `Select one or more signaled 4h periods, then click Place Trade.`;
+      loadedDays = days;
+      loadedRangeLabel = range.label;
+      filtersEl.hidden = false;
+      syncRuleFilterOptions(days);
+      await applyRuleFilter();
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Unable to load crypto_price signals.";
       statusEl.textContent = msg;
       statusEl.classList.add("xa-users__status--error");
       daysEl.innerHTML = "";
+      filtersEl.hidden = true;
     } finally {
       loadingPage = false;
       updatePager(weekOffset, pageRange(weekOffset), false);
@@ -791,6 +899,9 @@ async function init() {
   laterBtn.addEventListener("click", () => {
     if (weekOffset === 0) return;
     void loadWeek(weekOffset - 1);
+  });
+  filterRuleEl.addEventListener("change", () => {
+    void applyRuleFilter();
   });
 
   await loadWeek(0);
