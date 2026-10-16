@@ -1095,7 +1095,7 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
           <td>${renderPercentage(row.momentum)}</td>
           <td>${renderPercentage(row.percentage_sum)}</td>
           <td>${
-            row.signal && row.signal_rule !== null
+            row.signal_rule !== null
               ? escapeHtml(String(row.signal_rule))
               : '<span class="xa-muted">—</span>'
           }</td>
