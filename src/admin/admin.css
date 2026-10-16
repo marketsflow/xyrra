@@ -2641,6 +2641,19 @@ body.xa-body {
   font-variant-numeric: tabular-nums;
 }
 
+.xa-vt__check-col {
+  width: 1%;
+  text-align: center;
+  vertical-align: middle;
+}
+
+.xa-vt__check-col input {
+  width: 1rem;
+  height: 1rem;
+  margin: 0;
+  cursor: pointer;
+}
+
 .xa-vt__delete {
   border: 1px solid rgba(185, 28, 28, 0.35);
   background: #fff;
@@ -2653,7 +2666,7 @@ body.xa-body {
   cursor: pointer;
 }
 
-.xa-vt__delete:hover {
+.xa-vt__delete:hover:not(:disabled) {
   background: #fef2f2;
 }
 

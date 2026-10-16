@@ -70,11 +70,14 @@
                 <h1>View Virtual trades</h1>
                 <p class="xa-templates__lede">
                   Closed 4h windows are settled automatically. Profit &amp; loss is shown for a
-                  <strong>$10</strong> stake per trade (binary Up/Down payout). Delete a trade to
-                  re-place it from Create.
+                  <strong>$10</strong> stake per trade (binary Up/Down payout). Select one or more
+                  trades to delete, then re-place them from Create.
                 </p>
               </div>
               <div class="xa-polymarket__actions">
+                <button type="button" id="xa-vt-delete-selected" class="xa-vt__delete" disabled>
+                  Delete selected
+                </button>
                 <a class="xa-templates__create" href="/admin/virtual-trades/create/">Create a virtual trade</a>
               </div>
             </div>
@@ -88,6 +91,13 @@
               <table class="xa-users__table">
                 <thead>
                   <tr>
+                    <th scope="col" class="xa-vt__check-col">
+                      <input
+                        type="checkbox"
+                        id="xa-vt-select-all"
+                        aria-label="Select all trades"
+                      />
+                    </th>
                     <th scope="col">ID</th>
                     <th scope="col">Entry</th>
                     <th scope="col">Polymarket</th>
@@ -104,7 +114,7 @@
                 </thead>
                 <tbody id="xa-vt-view-body">
                   <tr>
-                    <td colspan="12" class="xa-users__empty">Loading…</td>
+                    <td colspan="13" class="xa-users__empty">Loading…</td>
                   </tr>
                 </tbody>
               </table>

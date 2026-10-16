@@ -299,13 +299,31 @@ async function init() {
   const emptyNode = document.getElementById("xa-vt-view-empty");
   const tableWrapNode = document.getElementById("xa-vt-view-table-wrap");
   const bodyNode = document.getElementById("xa-vt-view-body");
-  if (!statusNode || !emptyNode || !tableWrapNode || !bodyNode) return;
+  const selectAllNode = document.getElementById("xa-vt-select-all") as HTMLInputElement | null;
+  const deleteSelectedNode = document.getElementById(
+    "xa-vt-delete-selected",
+  ) as HTMLButtonElement | null;
+  if (
+    !statusNode ||
+    !emptyNode ||
+    !tableWrapNode ||
+    !bodyNode ||
+    !selectAllNode ||
+    !deleteSelectedNode
+  ) {
+    return;
+  }
 
   // Locals after the null guard so nested helpers keep non-null types under tsc.
   const statusEl = statusNode;
   const emptyEl = emptyNode;
   const tableWrap = tableWrapNode;
   const bodyEl = bodyNode;
+  const selectAllEl = selectAllNode;
+  const deleteSelectedBtn = deleteSelectedNode;
+
+  const selectedIds = new Set<number>();
+  let deleting = false;
 
   statusEl.textContent = "Loading virtual trades…";
 
@@ -329,6 +347,8 @@ async function init() {
     statusEl.textContent = "";
     emptyEl.hidden = false;
     tableWrap.hidden = true;
+    selectAllEl.disabled = true;
+    deleteSelectedBtn.disabled = true;
     return;
   }
 
@@ -337,6 +357,23 @@ async function init() {
     settled = await resolveOpenTrades(session.supabase, rows);
   } catch {
     // Still show rows even if settlement fails.
+  }
+
+  function syncSelectionUi() {
+    const visibleIds = new Set(rows.map((row) => row.id));
+    for (const id of [...selectedIds]) {
+      if (!visibleIds.has(id)) selectedIds.delete(id);
+    }
+
+    const n = selectedIds.size;
+    const total = rows.length;
+    selectAllEl.disabled = deleting || total === 0;
+    selectAllEl.checked = total > 0 && n === total;
+    selectAllEl.indeterminate = n > 0 && n < total;
+
+    deleteSelectedBtn.disabled = deleting || n === 0;
+    deleteSelectedBtn.textContent =
+      n === 0 ? "Delete selected" : n === 1 ? "Delete 1 trade" : `Delete ${n} trades`;
   }
 
   function renderStatus() {
@@ -357,10 +394,12 @@ async function init() {
 
   function renderRows() {
     if (rows.length === 0) {
+      selectedIds.clear();
       emptyEl.hidden = false;
       tableWrap.hidden = true;
       bodyEl.innerHTML = "";
       statusEl.textContent = "";
+      syncSelectionUi();
       return;
     }
 
@@ -379,9 +418,20 @@ async function init() {
             : row.status === "LOSS"
               ? "xa-vt__result--loss"
               : "xa-vt__result--open";
+        const checked = selectedIds.has(row.id) ? " checked" : "";
 
         return `
       <tr data-trade-id="${row.id}">
+        <td class="xa-vt__check-col">
+          <input
+            type="checkbox"
+            class="xa-vt__row-check"
+            data-trade-id="${row.id}"
+            aria-label="Select trade #${row.id}"
+            ${checked}
+            ${deleting ? "disabled" : ""}
+          />
+        </td>
         <td>${escapeHtml(String(row.id))}</td>
         <td>${escapeHtml(formatDateTime(row.timestamp))}</td>
         <td>${escapeHtml(row.market_title || row.market_slug)}</td>
@@ -399,20 +449,115 @@ async function init() {
             class="xa-vt__delete"
             data-delete-id="${row.id}"
             data-delete-label="${escapeHtml(row.market_title || row.market_slug)}"
+            ${deleting ? "disabled" : ""}
           >Delete</button>
         </td>
       </tr>`;
       })
       .join("");
+
+    syncSelectionUi();
+  }
+
+  async function deleteTradeIds(ids: number[]): Promise<{ ok: number[]; failed: string[] }> {
+    const ok: number[] = [];
+    const failed: string[] = [];
+    for (const id of ids) {
+      const { error: deleteError } = await session.supabase
+        .from("virtual_trades")
+        .delete()
+        .eq("id", id);
+      if (deleteError) {
+        failed.push(`#${id}: ${deleteError.message}`);
+        continue;
+      }
+      ok.push(id);
+      const idx = rows.findIndex((row) => row.id === id);
+      if (idx >= 0) rows.splice(idx, 1);
+      selectedIds.delete(id);
+    }
+    return { ok, failed };
   }
 
   renderRows();
+
+  selectAllEl.addEventListener("change", () => {
+    if (deleting) return;
+    if (selectAllEl.checked) {
+      for (const row of rows) selectedIds.add(row.id);
+    } else {
+      selectedIds.clear();
+    }
+    bodyEl.querySelectorAll<HTMLInputElement>(".xa-vt__row-check").forEach((box) => {
+      box.checked = selectAllEl.checked;
+    });
+    syncSelectionUi();
+  });
+
+  bodyEl.addEventListener("change", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLInputElement) || !target.classList.contains("xa-vt__row-check")) {
+      return;
+    }
+    if (deleting) return;
+    const id = Number(target.dataset.tradeId);
+    if (!Number.isFinite(id)) return;
+    if (target.checked) selectedIds.add(id);
+    else selectedIds.delete(id);
+    syncSelectionUi();
+  });
+
+  deleteSelectedBtn.addEventListener("click", () => {
+    void (async () => {
+      const ids = [...selectedIds].filter((id) => rows.some((row) => row.id === id));
+      if (deleting || ids.length === 0) return;
+
+      const noun = ids.length === 1 ? "trade" : "trades";
+      if (
+        !window.confirm(
+          `Delete ${ids.length} virtual ${noun}? You can re-place them from Create.`,
+        )
+      ) {
+        return;
+      }
+
+      deleting = true;
+      syncSelectionUi();
+      bodyEl.querySelectorAll<HTMLInputElement>(".xa-vt__row-check").forEach((box) => {
+        box.disabled = true;
+      });
+      bodyEl.querySelectorAll<HTMLButtonElement>(".xa-vt__delete").forEach((btn) => {
+        btn.disabled = true;
+      });
+      statusEl.classList.remove("xa-users__status--error");
+      statusEl.textContent = `Deleting ${ids.length} ${noun}…`;
+
+      const { ok, failed } = await deleteTradeIds(ids);
+      settled = 0;
+      deleting = false;
+      renderRows();
+
+      if (failed.length === 0) {
+        statusEl.textContent =
+          rows.length === 0
+            ? `Deleted ${ok.length} ${ok.length === 1 ? "trade" : "trades"}.`
+            : `Deleted ${ok.length} ${ok.length === 1 ? "trade" : "trades"}. ${rows.length} remaining.`;
+      } else if (ok.length === 0) {
+        statusEl.textContent = failed.join(" · ");
+        statusEl.classList.add("xa-users__status--error");
+      } else {
+        statusEl.textContent = `Deleted ${ok.length} of ${ids.length}. Failed: ${failed.join(" · ")}`;
+        statusEl.classList.add("xa-users__status--error");
+      }
+    })();
+  });
 
   bodyEl.addEventListener("click", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLButtonElement) || !target.classList.contains("xa-vt__delete")) {
       return;
     }
+    if (deleting) return;
     const id = Number(target.dataset.deleteId);
     if (!Number.isFinite(id)) return;
     const label = target.dataset.deleteLabel || `trade #${id}`;
@@ -421,27 +566,26 @@ async function init() {
     }
 
     void (async () => {
+      deleting = true;
+      syncSelectionUi();
       target.disabled = true;
       statusEl.classList.remove("xa-users__status--error");
       statusEl.textContent = `Deleting trade #${id}…`;
-      const { error: deleteError } = await session.supabase
-        .from("virtual_trades")
-        .delete()
-        .eq("id", id);
-      if (deleteError) {
-        target.disabled = false;
-        statusEl.textContent = deleteError.message;
+
+      const { ok, failed } = await deleteTradeIds([id]);
+      settled = 0;
+      deleting = false;
+      renderRows();
+
+      if (failed.length > 0) {
+        statusEl.textContent = failed[0];
         statusEl.classList.add("xa-users__status--error");
         return;
       }
-      const idx = rows.findIndex((row) => row.id === id);
-      if (idx >= 0) rows.splice(idx, 1);
-      settled = 0;
-      renderRows();
       statusEl.textContent =
         rows.length === 0
-          ? `Deleted trade #${id}.`
-          : `Deleted trade #${id}. ${rows.length} remaining.`;
+          ? `Deleted trade #${ok[0]}.`
+          : `Deleted trade #${ok[0]}. ${rows.length} remaining.`;
     })();
   });
 }
