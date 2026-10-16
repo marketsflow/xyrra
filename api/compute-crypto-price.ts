@@ -26,8 +26,9 @@
  *   (excludes the current bar so the sum is fixed at bucket open).
  * After all other fields are set, first matching signal rule wins:
  *   1) 0 < mom < 1% and %sum < -0.50 → Above
- *   2) 0 < mom < 1% and %sum > 1.00 → Below
- *   3) mom > 1% and %sum >= 0.99 → Below
+ *   2) 0 < mom < 1% and %sum > 1.00 and Dist. from support >= 1.5% → Below
+ *   3) 1% < mom < 2% and %sum >= 0.99
+ *      and Dist. to resistance >= 0 and Dist. from support >= 1.5% → Below
  *   4) mom > 1% and %sum < 0.99 → Above
  *   5) -1% < mom < 0 and %sum > 0.80 → Below
  *   6) mom < 1% and %sum <= -1.00 and Dist. to resistance >= 0
@@ -94,6 +95,8 @@ const ONE_M_OPEN_MAX_DELTA_MS = 15 * 60_000;
 const PCT_LOOKBACK = 4;
 /** Momentum band edges in percent units (crypto_price.momentum). */
 const MOMENTUM_STRONG_PCT = 1;
+/** Upper mom cap for rule 3 (skip blow-off extensions). */
+const MOMENTUM_RULE3_MAX_PCT = 2;
 /** percentage_sum thresholds in percent units. */
 const PCT_SUM_NEGATIVE = -0.5;
 const PCT_SUM_FALLBACK = -1;
@@ -132,7 +135,10 @@ const DIST_RESISTANCE_RULE10_MIN_PCT = 0;
 const DIST_RESISTANCE_RULE12_MIN_PCT = 1;
 /** Dist. to resistance / from support floors for null-mom rule 9 (%). */
 const DIST_RESISTANCE_RULE9_MIN_PCT = 1.5;
+/** Dist. from support floor for rules 2, 3, and 9 (%). */
 const DIST_SUPPORT_RULE9_MIN_PCT = 1.5;
+const DIST_SUPPORT_RULE2_MIN_PCT = DIST_SUPPORT_RULE9_MIN_PCT;
+const DIST_SUPPORT_RULE3_MIN_PCT = DIST_SUPPORT_RULE9_MIN_PCT;
 /** EMA score threshold (ema is 0–50): rule 7 floor (>=), rules 9/10 ceiling (<). */
 const EMA_LOW_THRESHOLD = 20;
 /** Bars needed (incl. current) for no-momentum EMA / Dist. resistance reducing rule. */
@@ -481,12 +487,29 @@ export function applySignalRules(
     if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum < PCT_SUM_NEGATIVE) {
       return set(SIGNAL_ABOVE, 1);
     }
-    // 2) 0 < mom < 1% and %sum > 1.00 → Below
-    if (mom > 0 && mom < MOMENTUM_STRONG_PCT && pctSum !== null && pctSum > PCT_SUM_VERY_STRONG) {
+    // 2) 0 < mom < 1% and %sum > 1.00 and Dist. from support >= 1.5% → Below
+    if (
+      mom > 0 &&
+      mom < MOMENTUM_STRONG_PCT &&
+      pctSum !== null &&
+      pctSum > PCT_SUM_VERY_STRONG &&
+      withSum.distance_from_support !== null &&
+      withSum.distance_from_support >= DIST_SUPPORT_RULE2_MIN_PCT
+    ) {
       return set(SIGNAL_BELOW, 2);
     }
-    // 3) mom > 1% and %sum >= 0.99 → Below
-    if (mom > MOMENTUM_STRONG_PCT && pctSum !== null && pctSum >= PCT_SUM_MOM_HIGH) {
+    // 3) 1% < mom < 2% and %sum >= 0.99
+    //    and Dist. to resistance >= 0 and Dist. from support >= 1.5% → Below
+    if (
+      mom > MOMENTUM_STRONG_PCT &&
+      mom < MOMENTUM_RULE3_MAX_PCT &&
+      pctSum !== null &&
+      pctSum >= PCT_SUM_MOM_HIGH &&
+      withSum.distance_to_resistance !== null &&
+      withSum.distance_to_resistance >= 0 &&
+      withSum.distance_from_support !== null &&
+      withSum.distance_from_support >= DIST_SUPPORT_RULE3_MIN_PCT
+    ) {
       return set(SIGNAL_BELOW, 3);
     }
     // 4) mom > 1% and %sum < 0.99 → Above
