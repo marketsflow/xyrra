@@ -305,13 +305,25 @@ async function init() {
   const deleteSelectedNode = document.getElementById(
     "xa-vt-delete-selected",
   ) as HTMLButtonElement | null;
+  const filterSignalNode = document.getElementById(
+    "xa-vt-filter-signal",
+  ) as HTMLSelectElement | null;
+  const filterSideNode = document.getElementById("xa-vt-filter-side") as HTMLSelectElement | null;
+  const filterRuleNode = document.getElementById("xa-vt-filter-rule") as HTMLSelectElement | null;
+  const filterResultNode = document.getElementById(
+    "xa-vt-filter-result",
+  ) as HTMLSelectElement | null;
   if (
     !statusNode ||
     !emptyNode ||
     !tableWrapNode ||
     !bodyNode ||
     !selectAllNode ||
-    !deleteSelectedNode
+    !deleteSelectedNode ||
+    !filterSignalNode ||
+    !filterSideNode ||
+    !filterRuleNode ||
+    !filterResultNode
   ) {
     return;
   }
@@ -323,6 +335,10 @@ async function init() {
   const bodyEl = bodyNode;
   const selectAllEl = selectAllNode;
   const deleteSelectedBtn = deleteSelectedNode;
+  const filterSignalEl = filterSignalNode;
+  const filterSideEl = filterSideNode;
+  const filterRuleEl = filterRuleNode;
+  const filterResultEl = filterResultNode;
   const supabase = session.supabase;
 
   const selectedIds = new Set<number>();
@@ -362,14 +378,59 @@ async function init() {
     // Still show rows even if settlement fails.
   }
 
-  function syncSelectionUi() {
-    const visibleIds = new Set(rows.map((row) => row.id));
+  function sideLabel(direction: string) {
+    return direction.replace("LONG_", "");
+  }
+
+  function syncRuleFilterOptions() {
+    const previous = filterRuleEl.value;
+    const rules = [
+      ...new Set(
+        rows
+          .map((row) => row.signal_rule)
+          .filter((rule): rule is number => rule !== null)
+          .map((rule) => String(rule)),
+      ),
+    ].sort((a, b) => Number(a) - Number(b));
+
+    filterRuleEl.innerHTML =
+      `<option value="">All</option>` +
+      rules.map((rule) => `<option value="${escapeHtml(rule)}">${escapeHtml(rule)}</option>`).join("");
+
+    filterRuleEl.value = rules.includes(previous) ? previous : "";
+  }
+
+  function filteredRows(): VirtualTradeRow[] {
+    const signal = filterSignalEl.value;
+    const side = filterSideEl.value;
+    const rule = filterRuleEl.value;
+    const result = filterResultEl.value;
+
+    return rows.filter((row) => {
+      if (signal && row.signal_state !== signal) return false;
+      if (side && sideLabel(row.direction) !== side) return false;
+      if (rule) {
+        if (row.signal_rule === null || String(row.signal_rule) !== rule) return false;
+      }
+      if (result && row.status !== result) return false;
+      return true;
+    });
+  }
+
+  function filtersActive() {
+    return Boolean(
+      filterSignalEl.value || filterSideEl.value || filterRuleEl.value || filterResultEl.value,
+    );
+  }
+
+  function syncSelectionUi(visible: VirtualTradeRow[]) {
+    const visibleIds = new Set(visible.map((row) => row.id));
     for (const id of [...selectedIds]) {
       if (!visibleIds.has(id)) selectedIds.delete(id);
     }
 
     const n = selectedIds.size;
-    const total = rows.length;
+    const total = visible.length;
     selectAllEl.disabled = deleting || total === 0;
     selectAllEl.checked = total > 0 && n === total;
     selectAllEl.indeterminate = n > 0 && n < total;
@@ -379,17 +440,22 @@ async function init() {
       n === 0 ? "Delete selected" : n === 1 ? "Delete 1 trade" : `Delete ${n} trades`;
   }
 
-  function renderStatus() {
-    const wins = rows.filter((r) => r.status === "WIN").length;
-    const losses = rows.filter((r) => r.status === "LOSS").length;
-    const open = rows.filter((r) => r.status === "OPEN").length;
-    const totalPnl = rows
+  function renderStatus(visible: VirtualTradeRow[]) {
+    const wins = visible.filter((r) => r.status === "WIN").length;
+    const losses = visible.filter((r) => r.status === "LOSS").length;
+    const open = visible.filter((r) => r.status === "OPEN").length;
+    const totalPnl = visible
       .map((r) => displayPnl(r))
       .filter((n): n is number => n !== null)
       .reduce((sum, n) => sum + n, 0);
 
+    const shown =
+      filtersActive() && visible.length !== rows.length
+        ? `${visible.length} of ${rows.length} trade${rows.length === 1 ? "" : "s"}`
+        : `${rows.length} trade${rows.length === 1 ? "" : "s"}`;
+
     statusEl.textContent =
-      `${rows.length} trade${rows.length === 1 ? "" : "s"}` +
+      `${shown}` +
       ` · ${wins} win / ${losses} loss / ${open} open` +
       ` · P&L on $${STAKE_USD}/trade: ${formatPnl(totalPnl)}` +
       (settled > 0 ? ` · settled ${settled} just now` : "");
@@ -402,15 +468,25 @@ async function init() {
       tableWrap.hidden = true;
       bodyEl.innerHTML = "";
       statusEl.textContent = "";
-      syncSelectionUi();
+      syncSelectionUi([]);
       return;
     }
 
     emptyEl.hidden = true;
     tableWrap.hidden = false;
-    renderStatus();
+    const visible = filteredRows();
+    renderStatus(visible);
 
-    bodyEl.innerHTML = rows
+    if (visible.length === 0) {
+      bodyEl.innerHTML = `
+        <tr>
+          <td colspan="14" class="xa-users__empty">No trades match these filters.</td>
+        </tr>`;
+      syncSelectionUi([]);
+      return;
+    }
+
+    bodyEl.innerHTML = visible
       .map((row) => {
         const pnl = displayPnl(row);
         const pnlClass =
@@ -440,7 +516,7 @@ async function init() {
         <td>${escapeHtml(row.market_title || row.market_slug)}</td>
         <td>${escapeHtml(formatUsd(row.price_to_beat ?? row.strike_price))}</td>
         <td>${escapeHtml(row.signal_state)}</td>
-        <td>${escapeHtml(row.direction.replace("LONG_", ""))}</td>
+        <td>${escapeHtml(sideLabel(row.direction))}</td>
         <td>${row.entry_poly_price == null ? "—" : escapeHtml(row.entry_poly_price.toFixed(3))}</td>
         <td>${escapeHtml(formatUsd(row.entry_spot_price))}</td>
         <td>${row.signal_rule == null ? "—" : escapeHtml(String(row.signal_rule))}</td>
@@ -460,7 +536,7 @@ async function init() {
       })
       .join("");
 
-    syncSelectionUi();
+    syncSelectionUi(visible);
   }
 
   async function deleteTradeIds(ids: number[]): Promise<{ ok: number[]; failed: string[] }> {
@@ -483,19 +559,28 @@ async function init() {
     return { ok, failed };
   }
 
+  syncRuleFilterOptions();
   renderRows();
+
+  for (const el of [filterSignalEl, filterSideEl, filterRuleEl, filterResultEl]) {
+    el.addEventListener("change", () => {
+      if (deleting) return;
+      renderRows();
+    });
+  }
 
   selectAllEl.addEventListener("change", () => {
     if (deleting) return;
+    const visible = filteredRows();
     if (selectAllEl.checked) {
-      for (const row of rows) selectedIds.add(row.id);
+      for (const row of visible) selectedIds.add(row.id);
     } else {
-      selectedIds.clear();
+      for (const row of visible) selectedIds.delete(row.id);
     }
     bodyEl.querySelectorAll<HTMLInputElement>(".xa-vt__row-check").forEach((box) => {
       box.checked = selectAllEl.checked;
     });
-    syncSelectionUi();
+    syncSelectionUi(visible);
   });
 
   bodyEl.addEventListener("change", (event) => {
@@ -508,12 +593,13 @@ async function init() {
     if (!Number.isFinite(id)) return;
     if (target.checked) selectedIds.add(id);
     else selectedIds.delete(id);
-    syncSelectionUi();
+    syncSelectionUi(filteredRows());
   });
 
   deleteSelectedBtn.addEventListener("click", () => {
     void (async () => {
-      const ids = [...selectedIds].filter((id) => rows.some((row) => row.id === id));
+      const visibleIds = new Set(filteredRows().map((row) => row.id));
+      const ids = [...selectedIds].filter((id) => visibleIds.has(id));
       if (deleting || ids.length === 0) return;
 
       const noun = ids.length === 1 ? "trade" : "trades";
@@ -526,7 +612,7 @@ async function init() {
       }
 
       deleting = true;
-      syncSelectionUi();
+      syncSelectionUi(filteredRows());
       bodyEl.querySelectorAll<HTMLInputElement>(".xa-vt__row-check").forEach((box) => {
         box.disabled = true;
       });
@@ -539,6 +625,7 @@ async function init() {
       const { ok, failed } = await deleteTradeIds(ids);
       settled = 0;
       deleting = false;
+      syncRuleFilterOptions();
       renderRows();
 
       if (failed.length === 0) {
@@ -571,7 +658,7 @@ async function init() {
 
     void (async () => {
       deleting = true;
-      syncSelectionUi();
+      syncSelectionUi(filteredRows());
       target.disabled = true;
       statusEl.classList.remove("xa-users__status--error");
       statusEl.textContent = `Deleting trade #${id}…`;
@@ -579,6 +666,7 @@ async function init() {
       const { ok, failed } = await deleteTradeIds([id]);
       settled = 0;
       deleting = false;
+      syncRuleFilterOptions();
       renderRows();
 
       if (failed.length > 0) {

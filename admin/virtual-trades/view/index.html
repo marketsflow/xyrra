@@ -102,12 +102,39 @@
                     <th scope="col">Entry</th>
                     <th scope="col">Polymarket</th>
                     <th scope="col">Price to beat</th>
-                    <th scope="col">Signal</th>
-                    <th scope="col">Side</th>
+                    <th scope="col">
+                      <span class="xa-vt__th-label">Signal</span>
+                      <select id="xa-vt-filter-signal" class="xa-vt__th-filter" aria-label="Filter by signal">
+                        <option value="">All</option>
+                        <option value="Above">Above</option>
+                        <option value="Below">Below</option>
+                      </select>
+                    </th>
+                    <th scope="col">
+                      <span class="xa-vt__th-label">Side</span>
+                      <select id="xa-vt-filter-side" class="xa-vt__th-filter" aria-label="Filter by side">
+                        <option value="">All</option>
+                        <option value="UP">UP</option>
+                        <option value="DOWN">DOWN</option>
+                      </select>
+                    </th>
                     <th scope="col">Entry poly</th>
                     <th scope="col">Entry spot</th>
-                    <th scope="col">Rule</th>
-                    <th scope="col">Result</th>
+                    <th scope="col">
+                      <span class="xa-vt__th-label">Rule</span>
+                      <select id="xa-vt-filter-rule" class="xa-vt__th-filter" aria-label="Filter by rule">
+                        <option value="">All</option>
+                      </select>
+                    </th>
+                    <th scope="col">
+                      <span class="xa-vt__th-label">Result</span>
+                      <select id="xa-vt-filter-result" class="xa-vt__th-filter" aria-label="Filter by result">
+                        <option value="">All</option>
+                        <option value="OPEN">Open</option>
+                        <option value="WIN">Win</option>
+                        <option value="LOSS">Loss</option>
+                      </select>
+                    </th>
                     <th scope="col">P&amp;L ($10)</th>
                     <th scope="col">Closed</th>
                     <th scope="col">Actions</th>

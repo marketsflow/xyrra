@@ -2654,6 +2654,33 @@ body.xa-body {
   font-variant-numeric: tabular-nums;
 }
 
+.xa-vt__th-label {
+  display: block;
+}
+
+.xa-vt__th-filter {
+  display: block;
+  width: 100%;
+  min-width: 4.5rem;
+  margin-top: 0.35rem;
+  padding: 0.2rem 0.35rem;
+  border: 1px solid #d8dbe7;
+  border-radius: 0.35rem;
+  background: #fff;
+  color: #1f2337;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 500;
+  line-height: 1.3;
+  cursor: pointer;
+}
+
+.xa-vt__th-filter:focus {
+  outline: 2px solid rgba(29, 78, 216, 0.35);
+  outline-offset: 1px;
+  border-color: #93c5fd;
+}
+
 .xa-vt__check-col {
   width: 1%;
   text-align: center;
