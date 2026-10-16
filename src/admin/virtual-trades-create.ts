@@ -490,6 +490,25 @@ function renderPreview(
   `;
 }
 
+function renderMultiPreview(el: HTMLElement, periods: FourHourPeriod[]) {
+  const sorted = [...periods].sort((a, b) => b.startSec - a.startSec);
+  el.hidden = false;
+  el.innerHTML = `
+    <p class="xa-vt__preview-title">${sorted.length} windows selected</p>
+    <ul class="xa-vt__preview-list">
+      ${sorted
+        .map(
+          (period) => `
+        <li>
+          <span>${escapeHtml(period.label)}</span>
+          <span class="xa-vt__period-signal">${escapeHtml(period.cryptoPrice.signal)}</span>
+        </li>`,
+        )
+        .join("")}
+    </ul>
+  `;
+}
+
 async function placeVirtualTrade(
   supabase: SupabaseClient,
   period: FourHourPeriod,
@@ -610,23 +629,76 @@ async function init() {
   const supabase = adminSession.supabase;
 
   const periodByStart = new Map<number, FourHourPeriod>();
-  let selectedStartSec: number | null = null;
+  const selectedStartSecs = new Set<number>();
+  let previewFocusSec: number | null = null;
   let placing = false;
   let weekOffset = 0;
   let loadingPage = false;
   let earliestSignalMs: number | null = null;
   let assetId: number | null = null;
 
+  function selectedPeriods(): FourHourPeriod[] {
+    return [...selectedStartSecs]
+      .map((sec) => periodByStart.get(sec))
+      .filter((period): period is FourHourPeriod => Boolean(period));
+  }
+
+  function updatePlaceButtonLabel() {
+    if (placing) {
+      placeBtn.textContent = "Placing…";
+      return;
+    }
+    const n = selectedStartSecs.size;
+    placeBtn.textContent = n > 1 ? `Place ${n} Trades` : "Place Trade";
+  }
+
   function setPlaceTradeActive(active: boolean) {
     placeBtn.disabled = !active || placing;
     placeBtn.classList.toggle("xa-vt__place-trade--active", active && !placing);
+    updatePlaceButtonLabel();
   }
 
   function clearSelectionUi() {
-    selectedStartSec = null;
+    selectedStartSecs.clear();
+    previewFocusSec = null;
     setPlaceTradeActive(false);
     previewEl.hidden = true;
     previewEl.innerHTML = "";
+  }
+
+  async function refreshPreview() {
+    const periods = selectedPeriods();
+    if (periods.length === 0) {
+      previewEl.hidden = true;
+      previewEl.innerHTML = "";
+      previewFocusSec = null;
+      return;
+    }
+
+    if (periods.length > 1) {
+      renderMultiPreview(previewEl, periods);
+      return;
+    }
+
+    const period = periods[0];
+    const focusSec = period.startSec;
+    previewFocusSec = focusSec;
+    try {
+      const tick = await loadEntryTick(supabase, period.startSec);
+      const priceToBeat = await loadPriceToBeat(supabase, period.startSec, tick);
+      if (
+        previewFocusSec === focusSec &&
+        selectedStartSecs.size === 1 &&
+        selectedStartSecs.has(focusSec)
+      ) {
+        renderPreview(previewEl, period, tick, priceToBeat);
+      }
+    } catch (error) {
+      if (previewFocusSec !== focusSec || !selectedStartSecs.has(focusSec)) return;
+      const msg = error instanceof Error ? error.message : "Unable to load Polymarket entry tick.";
+      previewEl.hidden = false;
+      previewEl.innerHTML = `<p class="xa-users__status xa-users__status--error">${escapeHtml(msg)}</p>`;
+    }
   }
 
   function hasEarlierThan(fromIso: string) {
@@ -697,7 +769,7 @@ async function init() {
       statusEl.textContent =
         days.length === 0
           ? `No closed 4h periods with a crypto_price signal for ${range.label}.`
-          : `Select a signaled 4h period, then click Place Trade.`;
+          : `Select one or more signaled 4h periods, then click Place Trade.`;
     } catch (error) {
       const msg = error instanceof Error ? error.message : "Unable to load crypto_price signals.";
       statusEl.textContent = msg;
@@ -722,88 +794,105 @@ async function init() {
   daysEl.addEventListener("change", (event) => {
     const target = event.target;
     if (!(target instanceof HTMLInputElement) || target.type !== "checkbox") return;
+    if (target.disabled) return;
 
     const startSec = Number(target.dataset.startSec);
     if (!Number.isFinite(startSec)) return;
 
     if (!target.checked) {
-      if (selectedStartSec === startSec) clearSelectionUi();
+      selectedStartSecs.delete(startSec);
+      const remaining = selectedPeriods();
+      setPlaceTradeActive(remaining.length > 0);
+      statusEl.classList.remove("xa-users__status--error");
+      if (remaining.length === 0) {
+        statusEl.textContent = "Select one or more signaled 4h periods, then click Place Trade.";
+      } else if (remaining.length === 1) {
+        statusEl.textContent = `Selected ${remaining[0].label}. Review details, then Place Trade.`;
+      } else {
+        statusEl.textContent = `Selected ${remaining.length} periods. Click Place ${remaining.length} Trades.`;
+      }
+      void refreshPreview();
       return;
     }
-
-    // Single-select: uncheck others.
-    daysEl.querySelectorAll<HTMLInputElement>(".xa-vt__period-check").forEach((box) => {
-      if (box !== target) box.checked = false;
-    });
 
     const period = periodByStart.get(startSec);
     if (!period) {
       target.checked = false;
-      clearSelectionUi();
       return;
     }
 
-    selectedStartSec = startSec;
+    selectedStartSecs.add(startSec);
     setPlaceTradeActive(true);
     statusEl.classList.remove("xa-users__status--error");
-    statusEl.textContent = `Selected ${period.label}. Review details, then Place Trade.`;
+    const count = selectedStartSecs.size;
+    statusEl.textContent =
+      count === 1
+        ? `Selected ${period.label}. Review details, then Place Trade.`
+        : `Selected ${count} periods. Click Place ${count} Trades.`;
 
-    void (async () => {
-      try {
-        const tick = await loadEntryTick(supabase, period.startSec);
-        const priceToBeat = await loadPriceToBeat(supabase, period.startSec, tick);
-        if (selectedStartSec === startSec) {
-          renderPreview(previewEl, period, tick, priceToBeat);
-        }
-      } catch (error) {
-        if (selectedStartSec !== startSec) return;
-        const msg = error instanceof Error ? error.message : "Unable to load Polymarket entry tick.";
-        previewEl.hidden = false;
-        previewEl.innerHTML = `<p class="xa-users__status xa-users__status--error">${escapeHtml(msg)}</p>`;
-      }
-    })();
+    void refreshPreview();
   });
 
   placeBtn.addEventListener("click", () => {
     void (async () => {
-      if (placing || selectedStartSec === null) return;
-      const period = periodByStart.get(selectedStartSec);
-      if (!period) return;
+      const periods = selectedPeriods().sort((a, b) => a.startSec - b.startSec);
+      if (placing || periods.length === 0) return;
 
       placing = true;
       setPlaceTradeActive(true);
-      placeBtn.textContent = "Placing…";
       statusEl.classList.remove("xa-users__status--error");
-      statusEl.textContent = `Placing virtual trade for ${period.label}…`;
 
-      const statusFor = daysEl.querySelector<HTMLElement>(
-        `[data-status-for="${period.startSec}"]`,
-      );
+      const placedIds: number[] = [];
+      const failures: string[] = [];
 
-      try {
-        const result = await placeVirtualTrade(supabase, period);
-        if (statusFor) statusFor.textContent = `Placed #${result.id}`;
-        statusEl.textContent = result.message;
-        const checked = daysEl.querySelector<HTMLInputElement>(
-          `.xa-vt__period-check[data-start-sec="${period.startSec}"]`,
+      for (let i = 0; i < periods.length; i++) {
+        const period = periods[i];
+        statusEl.textContent =
+          periods.length === 1
+            ? `Placing virtual trade for ${period.label}…`
+            : `Placing ${i + 1} of ${periods.length}: ${period.label}…`;
+
+        const statusFor = daysEl.querySelector<HTMLElement>(
+          `[data-status-for="${period.startSec}"]`,
         );
-        if (checked) {
-          checked.disabled = true;
-          checked.checked = true;
+
+        try {
+          const result = await placeVirtualTrade(supabase, period);
+          if (statusFor) statusFor.textContent = `Placed #${result.id}`;
+          placedIds.push(result.id);
+          selectedStartSecs.delete(period.startSec);
+          const checked = daysEl.querySelector<HTMLInputElement>(
+            `.xa-vt__period-check[data-start-sec="${period.startSec}"]`,
+          );
+          if (checked) {
+            checked.disabled = true;
+            checked.checked = true;
+          }
+        } catch (error) {
+          const msg = error instanceof Error ? error.message : "Unable to place virtual trade.";
+          if (statusFor) statusFor.textContent = msg;
+          failures.push(`${period.label}: ${msg}`);
         }
-        selectedStartSec = null;
-        previewEl.hidden = true;
-        previewEl.innerHTML = "";
-        setPlaceTradeActive(false);
-      } catch (error) {
-        const msg = error instanceof Error ? error.message : "Unable to place virtual trade.";
-        if (statusFor) statusFor.textContent = msg;
-        statusEl.textContent = msg;
+      }
+
+      placing = false;
+
+      if (failures.length === 0) {
+        statusEl.textContent =
+          placedIds.length === 1
+            ? `Placed trade #${placedIds[0]}.`
+            : `Placed ${placedIds.length} trades (#${placedIds.join(", #")}).`;
+        clearSelectionUi();
+      } else if (placedIds.length === 0) {
+        statusEl.textContent = failures.join(" · ");
         statusEl.classList.add("xa-users__status--error");
-      } finally {
-        placing = false;
-        placeBtn.textContent = "Place Trade";
-        setPlaceTradeActive(selectedStartSec !== null);
+        setPlaceTradeActive(selectedStartSecs.size > 0);
+        void refreshPreview();
+      } else {
+        statusEl.textContent = `Placed ${placedIds.length} of ${periods.length}. Failed: ${failures.join(" · ")}`;
+        statusEl.classList.add("xa-users__status--error");
+        setPlaceTradeActive(selectedStartSecs.size > 0);
+        void refreshPreview();
       }
     })();
   });
