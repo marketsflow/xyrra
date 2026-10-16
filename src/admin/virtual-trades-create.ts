@@ -12,6 +12,7 @@ const DEFAULT_POSITION_USD = 10;
 type CryptoPriceSignalRow = {
   bucket_start: string;
   signal: string;
+  signal_rule: number | null;
   price_level: number | null;
   price_1m: number | null;
   ema: number | null;
@@ -205,7 +206,7 @@ async function loadSignaledCryptoPrices(
 ): Promise<CryptoPriceSignalRow[]> {
   const { data, error } = await supabase
     .from("crypto_price")
-    .select("bucket_start, signal, price_level, price_1m, ema, momentum")
+    .select("bucket_start, signal, signal_rule, price_level, price_1m, ema, momentum")
     .eq("asset_id", assetId)
     .eq("timeframe", ANALYSIS_TIMEFRAME)
     .not("signal", "is", null)
@@ -224,6 +225,7 @@ async function loadSignaledCryptoPrices(
     rows.push({
       bucket_start: bucketStart,
       signal,
+      signal_rule: asNumber(row.signal_rule),
       price_level: asNumber(row.price_level),
       price_1m: asNumber(row.price_1m),
       ema: asNumber(row.ema),
@@ -484,6 +486,7 @@ function renderPreview(
       <div><dt>Price level</dt><dd>${period.cryptoPrice.price_level == null ? "—" : escapeHtml(period.cryptoPrice.price_level.toLocaleString(undefined, { maximumFractionDigits: 2 }))}</dd></div>
       <div><dt>Price to beat</dt><dd>${strike == null ? "—" : escapeHtml(strike.toLocaleString(undefined, { style: "currency", currency: "USD" }))}</dd></div>
       <div><dt>Entry spot</dt><dd>${spot == null ? "Waiting for tick / missing" : escapeHtml(spot.toLocaleString(undefined, { style: "currency", currency: "USD" }))}</dd></div>
+      <div><dt>Rule</dt><dd>${period.cryptoPrice.signal_rule == null ? "—" : escapeHtml(String(period.cryptoPrice.signal_rule))}</dd></div>
       <div><dt>Entry tick</dt><dd>${tick ? escapeHtml(new Date(tick.recorded_at).toISOString()) : "No Polymarket tick found for this window"}</dd></div>
       <div><dt>Market slug</dt><dd><code>${escapeHtml(marketSlugForStart(period.startSec))}</code></dd></div>
     </dl>
@@ -564,6 +567,7 @@ async function placeVirtualTrade(
     crypto_price_at: period.cryptoPrice.bucket_start,
     xyrra_confidence: confidenceFromEma(period.cryptoPrice.ema),
     signal_state: period.cryptoPrice.signal,
+    signal_rule: period.cryptoPrice.signal_rule,
     position_size_usd: DEFAULT_POSITION_USD,
     status: "OPEN",
   };

@@ -16,6 +16,7 @@ type VirtualTradeRow = {
   direction: "LONG_UP" | "LONG_DOWN" | string;
   entry_poly_price: number | null;
   entry_spot_price: number | null;
+  signal_rule: number | null;
   strike_price: number | null;
   price_to_beat: number | null;
   price_level: number | null;
@@ -274,6 +275,7 @@ function mapRow(row: Record<string, unknown>): VirtualTradeRow {
     direction: asString(row.direction) || "",
     entry_poly_price: asNumber(row.entry_poly_price),
     entry_spot_price: asNumber(row.entry_spot_price),
+    signal_rule: asNumber(row.signal_rule),
     strike_price: asNumber(row.strike_price),
     price_to_beat: asNumber(row.price_to_beat),
     price_level: asNumber(row.price_level),
@@ -331,7 +333,7 @@ async function init() {
   const { data, error } = await supabase
     .from("virtual_trades")
     .select(
-      "id, timestamp, market_slug, market_title, direction, entry_poly_price, entry_spot_price, strike_price, price_to_beat, price_level, crypto_price_at, signal_state, status, exit_poly_price, pnl_usd, pnl_percent, closed_at, position_size_usd",
+      "id, timestamp, market_slug, market_title, direction, entry_poly_price, entry_spot_price, signal_rule, strike_price, price_to_beat, price_level, crypto_price_at, signal_state, status, exit_poly_price, pnl_usd, pnl_percent, closed_at, position_size_usd",
     )
     .order("timestamp", { ascending: false })
     .limit(200);
@@ -441,6 +443,7 @@ async function init() {
         <td>${escapeHtml(row.direction.replace("LONG_", ""))}</td>
         <td>${row.entry_poly_price == null ? "—" : escapeHtml(row.entry_poly_price.toFixed(3))}</td>
         <td>${escapeHtml(formatUsd(row.entry_spot_price))}</td>
+        <td>${row.signal_rule == null ? "—" : escapeHtml(String(row.signal_rule))}</td>
         <td><span class="xa-vt__result ${resultClass}">${escapeHtml(resultLabel(row.status))}</span></td>
         <td class="${pnlClass}">${escapeHtml(row.status === "OPEN" ? "—" : formatPnl(pnl))}</td>
         <td>${escapeHtml(formatDateTime(row.closed_at))}</td>

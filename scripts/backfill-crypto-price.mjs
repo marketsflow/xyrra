@@ -6,8 +6,9 @@
  * Stored analysis timeframe is always 4h (S/R + crypto_price.timeframe=240).
  * EMA score: Σ +10 for each bullish ema_9_20_factor among 5m/15m/1h/4h/1D.
  * Momentum: crypto_momentum.mom_4h at the same timestamp only (no other-TF fallback).
- * price_1m / price_level = crypto_prices.open at bucket_start (frozen; not live close).
- * BTC rows also get market_title + price_to_beat from Polymarket (events / ticks).
+ * price_1m / price_level = nearest 1m crypto_prices.open at the 4h window start
+ *   (not the 4h bar open). BTC rows also get market_title + price_to_beat from
+ *   Polymarket (events / ticks).
  *
  * Usage:
  *   npx tsx scripts/backfill-crypto-price.mjs
@@ -101,6 +102,7 @@ console.log(
       rowsInserted: result.rowsInserted,
       skippedNoPrice: result.skippedNoPrice,
       skippedNoCycle: result.skippedNoCycle,
+      skippedNo1m: result.skippedNo1m,
       sampleRows: result.rows,
     },
     null,

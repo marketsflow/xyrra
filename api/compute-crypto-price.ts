@@ -10,9 +10,10 @@
  * Backfill: walk source candles from crypto_prices (optional DAYS), including the
  * current open bar when present.
  *
- * price_1m / price_level use crypto_prices.open for that bucket_start (price at
- * the labeled timestamp), not close — so they stay fixed and do not tick every
- * minute while the 4h bar is still forming.
+ * price_1m / price_level always come from the 1m crypto_prices candle at (or
+ * closest to) the analysis window start — never from the 4h bar's open, which
+ * can drift from the live 1m series. Same value is stored as both price_1m and
+ * price_level so they stay fixed for the window.
 
  *
  * EMA (0–50): +10 per bullish ema_9_20_factor among 5m/15m/1h/4h/1D,
@@ -40,9 +41,10 @@
  *      OR last 3 Dist. to resistance rising) → Below
  *      "reducing" = non-increasing with a net drop (e.g. 50→50→30 counts)
  *      "rising" = non-decreasing with a net rise (e.g. 3.46→3.60→3.73)
- * price_level is always price_1m (this bar's open / price at bucket_start; no ± offset).
+ * price_level is always price_1m (nearest 1m open at window start; no ± offset).
  * price_level_pct: (price_level - prev_price_level) / prev_price_level * 100 vs the
- *   prior crypto_price bar. Uses frozen opens, so it does not tick every minute.
+ *   prior crypto_price bar. Uses frozen 1m opens, so it does not tick every minute.
+ * When no 1m candle is within ±15m of the window start, that bar is skipped.
  *
  * BTC only — market_title + price_to_beat from Polymarket for the same 4h window
  *   (slug btc-updown-4h-{unix}). Prefer polymarket_events; fall back to ticks for
@@ -73,6 +75,8 @@ const SIGNAL_BELOW = "Below";
 /** Only BTC 4h rows get Polymarket market / price_to_beat. */
 const BTC_SYMBOL = "BTC";
 const WINDOW_SEC = ANALYSIS_TIMEFRAME * 60;
+/** Max distance when picking the nearest 1m open for a 4h window start. */
+const ONE_M_OPEN_MAX_DELTA_MS = 15 * 60_000;
 /** Bars used for percentage_sum (last N × 4h close-%). */
 const PCT_LOOKBACK = 4;
 /** Momentum band edges in percent units (crypto_price.momentum). */
@@ -131,7 +135,10 @@ type MaPoint = {
 
 type PriceCandle = {
   bucket_start: string;
-  /** crypto_prices.open — price at bucket_start (frozen; not the live close). */
+  /**
+   * Price used for price_1m / price_level.
+   * For 4h analysis this is the nearest 1m open at window start (not the 4h open).
+   */
   open: number;
 };
 
@@ -178,6 +185,7 @@ type ComputeResult =
       rowsInserted: number;
       skippedNoPrice: number;
       skippedNoCycle: number;
+      skippedNo1m: number;
       rows: CryptoPriceRow[];
     }
   | { success: false; message: string; status?: number };
@@ -769,6 +777,193 @@ async function fetchSourceCandlesAsc(
   return candles;
 }
 
+function bucketStartMs(bucketStart: string): number | null {
+  const ms = Date.parse(bucketStart);
+  return Number.isFinite(ms) ? ms : null;
+}
+
+/** Canonical UTC ISO (…Z) so query strings never turn `+00:00` into a space. */
+function toUtcIso(bucketStart: string): string | null {
+  const ms = bucketStartMs(bucketStart);
+  return ms === null ? null : new Date(ms).toISOString();
+}
+
+/**
+ * Exact 1m opens keyed by bucket_start ms for the given timestamps.
+ */
+async function fetchOneMinuteOpensExact(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+  bucketStarts: string[],
+): Promise<Map<number, number>> {
+  const out = new Map<number, number>();
+  if (bucketStarts.length === 0) return out;
+  const base = supabaseUrl.replace(/\/$/, "");
+  const unique = [
+    ...new Set(
+      bucketStarts
+        .map((s) => toUtcIso(s))
+        .filter((s): s is string => Boolean(s)),
+    ),
+  ];
+  const chunkSize = 80;
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const chunk = unique.slice(i, i + chunkSize);
+    // Quote each ISO; use Z form so `+` is never decoded as a space in the query.
+    const inList = chunk.map((s) => `"${s}"`).join(",");
+    const res = await fetch(
+      `${base}/rest/v1/crypto_prices?select=bucket_start,open&asset_id=eq.${assetId}&timeframe=eq.${SOURCE_TIMEFRAME_1M}&bucket_start=in.(${inList})`,
+      { headers: restHeaders(serviceKey) },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to load 1m crypto_prices opens: ${text.slice(0, 300)}`);
+    }
+    const rows = (await res.json()) as Array<{ bucket_start?: unknown; open?: unknown }>;
+    for (const row of rows) {
+      const bucketStart =
+        typeof row.bucket_start === "string" ? row.bucket_start : null;
+      const open = parseNumber(row.open);
+      const ms = bucketStart ? bucketStartMs(bucketStart) : null;
+      if (ms === null || open === null) continue;
+      out.set(ms, open);
+    }
+  }
+  return out;
+}
+
+/**
+ * Nearest 1m open to targetIso within ±ONE_M_OPEN_MAX_DELTA_MS.
+ * Prefers exact bucket_start match when present.
+ */
+async function fetchClosestOneMinuteOpen(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+  targetIso: string,
+): Promise<number | null> {
+  const targetMs = bucketStartMs(targetIso);
+  if (targetMs === null) return null;
+  const base = supabaseUrl.replace(/\/$/, "");
+  const fromIso = new Date(targetMs - ONE_M_OPEN_MAX_DELTA_MS).toISOString();
+  const toIso = new Date(targetMs + ONE_M_OPEN_MAX_DELTA_MS).toISOString();
+
+  const [beforeRes, afterRes] = await Promise.all([
+    fetch(
+      `${base}/rest/v1/crypto_prices?select=bucket_start,open&asset_id=eq.${assetId}&timeframe=eq.${SOURCE_TIMEFRAME_1M}&bucket_start=gte.${encodeURIComponent(fromIso)}&bucket_start=lte.${encodeURIComponent(targetIso)}&order=bucket_start.desc&limit=1`,
+      { headers: restHeaders(serviceKey) },
+    ),
+    fetch(
+      `${base}/rest/v1/crypto_prices?select=bucket_start,open&asset_id=eq.${assetId}&timeframe=eq.${SOURCE_TIMEFRAME_1M}&bucket_start=gte.${encodeURIComponent(targetIso)}&bucket_start=lte.${encodeURIComponent(toIso)}&order=bucket_start.asc&limit=1`,
+      { headers: restHeaders(serviceKey) },
+    ),
+  ]);
+
+  if (!beforeRes.ok) {
+    const text = await beforeRes.text();
+    throw new Error(`Failed to load nearest 1m open (before): ${text.slice(0, 300)}`);
+  }
+  if (!afterRes.ok) {
+    const text = await afterRes.text();
+    throw new Error(`Failed to load nearest 1m open (after): ${text.slice(0, 300)}`);
+  }
+
+  type Row = { bucket_start?: unknown; open?: unknown };
+  const beforeRows = (await beforeRes.json()) as Row[];
+  const afterRows = (await afterRes.json()) as Row[];
+
+  const candidates: Array<{ ms: number; open: number }> = [];
+  for (const row of [...beforeRows, ...afterRows]) {
+    const bucketStart =
+      typeof row.bucket_start === "string" ? row.bucket_start : null;
+    const open = parseNumber(row.open);
+    const ms = bucketStart ? bucketStartMs(bucketStart) : null;
+    if (ms === null || open === null) continue;
+    if (Math.abs(ms - targetMs) > ONE_M_OPEN_MAX_DELTA_MS) continue;
+    candidates.push({ ms, open });
+  }
+  if (candidates.length === 0) return null;
+
+  candidates.sort((a, b) => {
+    const da = Math.abs(a.ms - targetMs);
+    const db = Math.abs(b.ms - targetMs);
+    if (da !== db) return da - db;
+    // Tie-break: prefer at-or-before the window start.
+    return b.ms - a.ms;
+  });
+  return candidates[0].open;
+}
+
+/**
+ * Replace each candle.open with the nearest 1m open at that window start.
+ * When source is already 1m, candles are returned unchanged.
+ */
+async function resolveCandlesWithOneMinuteOpen(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+  sourceTimeframe: number,
+  candles: PriceCandle[],
+): Promise<{ candles: PriceCandle[]; skippedNo1m: number }> {
+  if (candles.length === 0) return { candles, skippedNo1m: 0 };
+  if (sourceTimeframe === SOURCE_TIMEFRAME_1M) {
+    return { candles, skippedNo1m: 0 };
+  }
+
+  const exact = await fetchOneMinuteOpensExact(
+    supabaseUrl,
+    serviceKey,
+    assetId,
+    candles.map((c) => c.bucket_start),
+  );
+
+  const resolved: PriceCandle[] = [];
+  let skippedNo1m = 0;
+  const needClosest: PriceCandle[] = [];
+
+  for (const candle of candles) {
+    const ms = bucketStartMs(candle.bucket_start);
+    const open = ms === null ? null : (exact.get(ms) ?? null);
+    if (open !== null) {
+      resolved.push({ bucket_start: candle.bucket_start, open });
+    } else {
+      needClosest.push(candle);
+    }
+  }
+
+  const closestConcurrency = 8;
+  for (let i = 0; i < needClosest.length; i += closestConcurrency) {
+    const chunk = needClosest.slice(i, i + closestConcurrency);
+    const opens = await Promise.all(
+      chunk.map((c) =>
+        fetchClosestOneMinuteOpen(supabaseUrl, serviceKey, assetId, c.bucket_start),
+      ),
+    );
+    for (let j = 0; j < chunk.length; j++) {
+      const open = opens[j];
+      if (open === null) {
+        skippedNo1m += 1;
+        continue;
+      }
+      resolved.push({ bucket_start: chunk[j].bucket_start, open });
+    }
+  }
+
+  // Keep original source order (closest pass may append out of order).
+  const byMs = new Map(
+    resolved.map((c) => [bucketStartMs(c.bucket_start) ?? -1, c] as const),
+  );
+  const ordered: PriceCandle[] = [];
+  for (const candle of candles) {
+    const ms = bucketStartMs(candle.bucket_start);
+    if (ms === null) continue;
+    const hit = byMs.get(ms);
+    if (hit) ordered.push(hit);
+  }
+  return { candles: ordered, skippedNo1m };
+}
+
 async function fetchSrCyclesAsc(
   supabaseUrl: string,
   serviceKey: string,
@@ -1262,8 +1457,8 @@ async function backfillAsset(
   sourceTimeframe: number,
   fromIso: string | null,
   updatedAt: string,
-): Promise<{ rows: CryptoPriceRow[]; skippedNoCycle: number }> {
-  const candles = await fetchSourceCandlesAsc(
+): Promise<{ rows: CryptoPriceRow[]; skippedNoCycle: number; skippedNo1m: number }> {
+  const sourceCandles = await fetchSourceCandlesAsc(
     supabaseUrl,
     serviceKey,
     asset.id,
@@ -1271,8 +1466,19 @@ async function backfillAsset(
     fromIso,
     { closedOnly: false },
   );
+  if (sourceCandles.length === 0) {
+    return { rows: [], skippedNoCycle: 0, skippedNo1m: 0 };
+  }
+
+  const { candles, skippedNo1m } = await resolveCandlesWithOneMinuteOpen(
+    supabaseUrl,
+    serviceKey,
+    asset.id,
+    sourceTimeframe,
+    sourceCandles,
+  );
   if (candles.length === 0) {
-    return { rows: [], skippedNoCycle: 0 };
+    return { rows: [], skippedNoCycle: 0, skippedNo1m };
   }
 
   const maSeries = new Map<number, MaPoint[]>();
@@ -1350,7 +1556,7 @@ async function backfillAsset(
 
   await attachPolymarketFields(supabaseUrl, serviceKey, asset, rows);
 
-  return { rows, skippedNoCycle };
+  return { rows, skippedNoCycle, skippedNo1m };
 }
 
 /**
@@ -1389,6 +1595,7 @@ export async function computeCryptoPrice(
     let rowsInserted = 0;
     let skippedNoPrice = 0;
     let skippedNoCycle = 0;
+    let skippedNo1m = 0;
     const updatedAt = new Date().toISOString();
 
     if (mode === "backfill") {
@@ -1410,6 +1617,7 @@ export async function computeCryptoPrice(
           fromIso,
           updatedAt,
         );
+        skippedNo1m += result.skippedNo1m;
         if (result.rows.length === 0) {
           skippedNoPrice += 1;
           continue;
@@ -1434,6 +1642,7 @@ export async function computeCryptoPrice(
         rowsInserted,
         skippedNoPrice,
         skippedNoCycle,
+        skippedNo1m,
         rows: sampleRows,
       };
     }
@@ -1442,16 +1651,31 @@ export async function computeCryptoPrice(
 
     for (const asset of assets) {
       // Default 4h: latest crypto_prices bar including the open/forming candle
-      // (same bucket as Prices / Polymarket 4h window start). Opt-in source=1
-      // uses the latest 1m bar the same way.
-      const latest = await fetchLatestSourceCandle(
+      // (same bucket as Prices / Polymarket 4h window start). Price comes from
+      // the nearest 1m open at that start. Opt-in source=1 uses 1m buckets.
+      const latestSource = await fetchLatestSourceCandle(
         supabaseUrl,
         serviceKey,
         asset.id,
         sourceTimeframe,
         { closedOnly: false },
       );
-      if (latest === null) {
+      if (latestSource === null) {
+        skippedNoPrice += 1;
+        continue;
+      }
+
+      const { candles: resolved, skippedNo1m: no1m } =
+        await resolveCandlesWithOneMinuteOpen(
+          supabaseUrl,
+          serviceKey,
+          asset.id,
+          sourceTimeframe,
+          [latestSource],
+        );
+      skippedNo1m += no1m;
+      const latest = resolved[0];
+      if (!latest) {
         skippedNoPrice += 1;
         continue;
       }
@@ -1525,6 +1749,7 @@ export async function computeCryptoPrice(
       rowsInserted,
       skippedNoPrice,
       skippedNoCycle,
+      skippedNo1m,
       rows,
     };
   } catch (error) {
@@ -1587,6 +1812,7 @@ export default {
             rowsInserted: result.rowsInserted,
             skippedNoPrice: result.skippedNoPrice,
             skippedNoCycle: result.skippedNoCycle,
+            skippedNo1m: result.skippedNo1m,
             rows: result.rows,
           },
           { status: 200, headers: jsonHeaders() },
