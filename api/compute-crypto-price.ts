@@ -34,6 +34,10 @@
  *   6) mom < 1% and %sum <= -1.00 and Dist. to resistance >= 0
  *      and EMA > 0 (fallback) → Above
  *   7) mom < 1% and %sum > -1.00 and EMA >= 20 (fallback) → Below
+ *  20) -2% < mom < 0 and -1.5 < %sum < 0 and EMA <= 10
+ *      and Dist. to resistance >= 0 → Above (neg-mom bounce; after 1–7)
+ *  21) mom > 1% and %sum >= 0.99 and (mom >= 2 or Dist. to resistance < 0
+ *      or Dist. from support < 1.5%) → Above (strong-mom gap vs rule 3)
  *  13) mom is null and %sum > 1.00 and Dist. to resistance < 2% and > -2% → Above
  *      (checked before 8 so near-resistance overrides the general Below)
  *   8) mom is null and %sum > 1.00 and EMA is not reducing
@@ -52,6 +56,15 @@
  *      OR last 3 Dist. to resistance rising) → Above
  *  12) mom is null and 0.10 <= %sum <= 1.00 and last 3 EMA reducing
  *      and price_level_pct < 0 and Dist. to resistance >= 1% → Below
+ *  15) mom is null and -3% < Dist. to resistance < 0 and EMA >= 20
+ *      and %sum < 1.20 and (pl% null or pl% < 0.35) → Above (through-resist)
+ *  16) mom is null and Dist. from support < 0 and 0 < %sum <= 1.00 → Above
+ *  17) mom is null and Dist. from support > 3.5% and Dist. to resistance > 3.5%
+ *      and -0.5 < %sum < 0.30 and pl% > 0.20 → Above (mid-range bounce)
+ *  18) mom is null and -1.6 < %sum < -1.0 and EMA >= 20
+ *      and Dist. to resistance >= 5% and (pl% null or pl% > -0.10) → Above
+ *  19) mom is null and -2.5 < %sum < -2.0 and EMA >= 20
+ *      and Dist. to resistance >= 0 → Below (deep-neg washout)
  *      "reducing" = non-increasing with a net drop (e.g. 50→50→30 counts)
  *      "rising" = non-decreasing with a net rise (e.g. 3.46→3.60→3.73)
  * price_level is always price_1m (nearest 1m open at window start; no ± offset).
@@ -139,7 +152,35 @@ const DIST_RESISTANCE_RULE9_MIN_PCT = 1.5;
 const DIST_SUPPORT_RULE9_MIN_PCT = 1.5;
 const DIST_SUPPORT_RULE2_MIN_PCT = DIST_SUPPORT_RULE9_MIN_PCT;
 const DIST_SUPPORT_RULE3_MIN_PCT = DIST_SUPPORT_RULE9_MIN_PCT;
-/** EMA score threshold (ema is 0–50): rule 7 floor (>=), rules 9/10 ceiling (<). */
+/** Through-resistance band for null-mom rule 15 (%): -3 < distR < 0. */
+const DIST_RESISTANCE_RULE15_MIN_PCT = -3;
+const DIST_RESISTANCE_RULE15_MAX_PCT = 0;
+/** Soft pl% ceiling for through-resist rule 15 (%). */
+const PL_PCT_RULE15_MAX = 0.35;
+/** Mid-range bounce floors for null-mom rule 17 (%). */
+const DIST_SUPPORT_RULE17_MIN_PCT = 3.5;
+const DIST_RESISTANCE_RULE17_MIN_PCT = 3.5;
+const PCT_SUM_RULE17_MIN = -0.5;
+const PCT_SUM_RULE17_MAX = 0.3;
+const PL_PCT_RULE17_MIN = 0.2;
+/** Mild-neg bounce band for null-mom rule 18 (%sum). */
+const PCT_SUM_RULE18_MIN = -1.6;
+const PCT_SUM_RULE18_MAX = -1;
+const DIST_RESISTANCE_RULE18_MIN_PCT = 5;
+const PL_PCT_RULE18_MIN = -0.1;
+/** Deep-neg washout band for null-mom rule 19 (%sum). */
+const PCT_SUM_RULE19_MIN = -2.5;
+const PCT_SUM_RULE19_MAX = -2;
+/** Neg-mom bounce for rule 20. */
+const MOMENTUM_RULE20_MIN_PCT = -2;
+const PCT_SUM_RULE20_MIN = -1.5;
+const PCT_SUM_RULE20_MAX = 0;
+const EMA_RULE20_MAX = 10;
+/** Strong-mom continuation gap for rule 21 (vs rule 3 dist gates). */
+const MOMENTUM_RULE21_STRONG_PCT = 2;
+const DIST_SUPPORT_RULE21_MAX_PCT = DIST_SUPPORT_RULE3_MIN_PCT;
+/** EMA score threshold (ema is 0–50): rule 7 floor (>=), rules 9/10 ceiling (<);
+ *  rules 15/18/19 floor (>=). */
 const EMA_LOW_THRESHOLD = 20;
 /** Bars needed (incl. current) for no-momentum EMA / Dist. resistance reducing rule. */
 const SIGNAL_TREND_LOOKBACK = 3;
@@ -203,7 +244,7 @@ type CryptoPriceRow = {
   distance_from_support: number | null;
   distance_to_resistance: number | null;
   signal: string | null;
-  /** First-matching rule number (1–14); null when signal is null. */
+  /** First-matching rule number (1–21); null when signal is null. */
   signal_rule: number | null;
   price_level: number;
   /** % vs prior bar price_level; frozen (open-based), not live close. */
@@ -543,6 +584,35 @@ export function applySignalRules(
     ) {
       return set(SIGNAL_BELOW, 7);
     }
+    // 20) -2% < mom < 0 and -1.5 < %sum < 0 and EMA <= 10
+    //     and Dist. to resistance >= 0 → Above (neg-mom bounce)
+    if (
+      mom > MOMENTUM_RULE20_MIN_PCT &&
+      mom < 0 &&
+      pctSum !== null &&
+      pctSum > PCT_SUM_RULE20_MIN &&
+      pctSum < PCT_SUM_RULE20_MAX &&
+      withSum.ema !== null &&
+      withSum.ema <= EMA_RULE20_MAX &&
+      withSum.distance_to_resistance !== null &&
+      withSum.distance_to_resistance >= 0
+    ) {
+      return set(SIGNAL_ABOVE, 20);
+    }
+    // 21) mom > 1% and %sum >= 0.99 and (mom >= 2 or Dist. to resistance < 0
+    //     or Dist. from support < 1.5%) → Above (strong-mom gap vs rule 3)
+    if (
+      mom > MOMENTUM_STRONG_PCT &&
+      pctSum !== null &&
+      pctSum >= PCT_SUM_MOM_HIGH &&
+      (mom >= MOMENTUM_RULE21_STRONG_PCT ||
+        (withSum.distance_to_resistance !== null &&
+          withSum.distance_to_resistance < 0) ||
+        (withSum.distance_from_support !== null &&
+          withSum.distance_from_support < DIST_SUPPORT_RULE21_MAX_PCT))
+    ) {
+      return set(SIGNAL_ABOVE, 21);
+    }
     return withSum;
   }
 
@@ -646,6 +716,77 @@ export function applySignalRules(
     withSum.distance_to_resistance >= DIST_RESISTANCE_RULE12_MIN_PCT
   ) {
     return set(SIGNAL_BELOW, 12);
+  }
+
+  // 15) mom is null and -3% < Dist. to resistance < 0 and EMA >= 20
+  //     and %sum < 1.20 and (pl% null or pl% < 0.35) → Above (through-resist)
+  if (
+    pctSum !== null &&
+    pctSum < PCT_SUM_EMA_REDUCING_CAP &&
+    withSum.distance_to_resistance !== null &&
+    withSum.distance_to_resistance > DIST_RESISTANCE_RULE15_MIN_PCT &&
+    withSum.distance_to_resistance < DIST_RESISTANCE_RULE15_MAX_PCT &&
+    withSum.ema !== null &&
+    withSum.ema >= EMA_LOW_THRESHOLD &&
+    (priceLevelPct === null || priceLevelPct < PL_PCT_RULE15_MAX)
+  ) {
+    return set(SIGNAL_ABOVE, 15);
+  }
+
+  // 16) mom is null and Dist. from support < 0 and 0 < %sum <= 1.00 → Above
+  if (
+    pctSum !== null &&
+    pctSum > 0 &&
+    pctSum <= PCT_SUM_VERY_STRONG &&
+    withSum.distance_from_support !== null &&
+    withSum.distance_from_support < 0
+  ) {
+    return set(SIGNAL_ABOVE, 16);
+  }
+
+  // 17) mom is null and Dist. from support > 3.5% and Dist. to resistance > 3.5%
+  //     and -0.5 < %sum < 0.30 and pl% > 0.20 → Above (mid-range bounce)
+  if (
+    pctSum !== null &&
+    pctSum > PCT_SUM_RULE17_MIN &&
+    pctSum < PCT_SUM_RULE17_MAX &&
+    withSum.distance_from_support !== null &&
+    withSum.distance_from_support > DIST_SUPPORT_RULE17_MIN_PCT &&
+    withSum.distance_to_resistance !== null &&
+    withSum.distance_to_resistance > DIST_RESISTANCE_RULE17_MIN_PCT &&
+    priceLevelPct !== null &&
+    priceLevelPct > PL_PCT_RULE17_MIN
+  ) {
+    return set(SIGNAL_ABOVE, 17);
+  }
+
+  // 18) mom is null and -1.6 < %sum < -1.0 and EMA >= 20
+  //     and Dist. to resistance >= 5% and (pl% null or pl% > -0.10) → Above
+  if (
+    pctSum !== null &&
+    pctSum > PCT_SUM_RULE18_MIN &&
+    pctSum < PCT_SUM_RULE18_MAX &&
+    withSum.ema !== null &&
+    withSum.ema >= EMA_LOW_THRESHOLD &&
+    withSum.distance_to_resistance !== null &&
+    withSum.distance_to_resistance >= DIST_RESISTANCE_RULE18_MIN_PCT &&
+    (priceLevelPct === null || priceLevelPct > PL_PCT_RULE18_MIN)
+  ) {
+    return set(SIGNAL_ABOVE, 18);
+  }
+
+  // 19) mom is null and -2.5 < %sum < -2.0 and EMA >= 20
+  //     and Dist. to resistance >= 0 → Below (deep-neg washout)
+  if (
+    pctSum !== null &&
+    pctSum > PCT_SUM_RULE19_MIN &&
+    pctSum < PCT_SUM_RULE19_MAX &&
+    withSum.ema !== null &&
+    withSum.ema >= EMA_LOW_THRESHOLD &&
+    withSum.distance_to_resistance !== null &&
+    withSum.distance_to_resistance >= 0
+  ) {
+    return set(SIGNAL_BELOW, 19);
   }
 
   return withSum;
