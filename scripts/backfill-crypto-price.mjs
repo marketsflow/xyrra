@@ -7,6 +7,7 @@
  * EMA score: Σ +10 for each bullish ema_9_20_factor among 5m/15m/1h/4h/1D.
  * Momentum: crypto_momentum.mom_4h at the same timestamp only (no other-TF fallback).
  * price_1m / price_level = crypto_prices.open at bucket_start (frozen; not live close).
+ * BTC rows also get market_title + price_to_beat from Polymarket (events / ticks).
  *
  * Usage:
  *   npx tsx scripts/backfill-crypto-price.mjs

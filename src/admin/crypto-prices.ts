@@ -101,6 +101,8 @@ type PriceLevelRow = {
   bucket_start: string | null;
   price_1m: number | null;
   price_level: number | null;
+  market_title: string | null;
+  price_to_beat: number | null;
   distance_from_support: number | null;
   distance_to_resistance: number | null;
   ema: number | null;
@@ -192,6 +194,16 @@ function formatPrice(value: unknown, digits = 2) {
     minimumFractionDigits: Math.min(digits, fractionDigits),
     maximumFractionDigits: fractionDigits,
   });
+}
+
+/** e.g. US$82,019.64 — Polymarket BTC price to beat. */
+function formatUsdStrike(value: unknown) {
+  const n = asNumber(value);
+  if (n === null) return "—";
+  return `US$${n.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  })}`;
 }
 
 function formatVolume(value: unknown) {
@@ -495,6 +507,8 @@ function toPriceLevelRow(row: Record<string, unknown>): PriceLevelRow | null {
     bucket_start: asString(row.bucket_start),
     price_1m: asNumber(row.price_1m),
     price_level: asNumber(row.price_level),
+    market_title: asString(row.market_title),
+    price_to_beat: asNumber(row.price_to_beat),
     distance_from_support: asNumber(row.distance_from_support),
     distance_to_resistance: asNumber(row.distance_to_resistance),
     ema: asNumber(row.ema),
@@ -775,7 +789,7 @@ async function loadPriceLevels(
   const { data, error } = await supabase
     .from("crypto_price")
     .select(
-      "id, bucket_start, price_1m, price_level, distance_from_support, distance_to_resistance, ema, momentum, percentage_sum, price_level_pct, signal_rule, signal, updated_at, created_at",
+      "id, bucket_start, price_1m, price_level, market_title, price_to_beat, distance_from_support, distance_to_resistance, ema, momentum, percentage_sum, price_level_pct, signal_rule, signal, updated_at, created_at",
     )
     .eq("asset_id", assetId)
     .eq("timeframe", timeframeMinutes)
@@ -1074,7 +1088,7 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
 
   if (rows.length === 0) {
     tbody.innerHTML =
-      '<tr><td colspan="11" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (default: latest 4h crypto_prices candle, including open bar).</td></tr>';
+      '<tr><td colspan="13" class="xa-users__empty">No price levels for this timeframe yet. Run compute-crypto-price (default: latest 4h crypto_prices candle, including open bar).</td></tr>';
     return;
   }
 
@@ -1084,6 +1098,16 @@ function renderPriceLevels(rows: PriceLevelRow[]) {
         <tr>
           <td>${escapeHtml(formatDateTime(row.bucket_start ?? row.updated_at))}</td>
           <td>${escapeHtml(formatPrice(row.price_level))}</td>
+          <td class="xa-crypto__market-cell">${
+            row.market_title
+              ? escapeHtml(row.market_title)
+              : '<span class="xa-muted">—</span>'
+          }</td>
+          <td>${
+            row.price_to_beat === null
+              ? '<span class="xa-muted">—</span>'
+              : escapeHtml(formatUsdStrike(row.price_to_beat))
+          }</td>
           <td>${renderPercentage(row.distance_from_support)}</td>
           <td>${renderPercentage(row.distance_to_resistance)}</td>
           <td>${

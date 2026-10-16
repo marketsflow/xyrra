@@ -2414,6 +2414,13 @@ body.xa-body {
   font-weight: 600;
 }
 
+.xa-crypto__market-cell {
+  max-width: 18rem;
+  white-space: normal;
+  line-height: 1.35;
+  font-size: 0.8rem;
+}
+
 .xa-crypto__pa-table th,
 .xa-crypto__pa-table td {
   white-space: nowrap;

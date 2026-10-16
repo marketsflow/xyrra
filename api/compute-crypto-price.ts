@@ -44,6 +44,11 @@
  * price_level_pct: (price_level - prev_price_level) / prev_price_level * 100 vs the
  *   prior crypto_price bar. Uses frozen opens, so it does not tick every minute.
  *
+ * BTC only — market_title + price_to_beat from Polymarket for the same 4h window
+ *   (slug btc-updown-4h-{unix}). Prefer polymarket_events; fall back to ticks for
+ *   price_to_beat. Cron re-upserts the open bar every minute so strike fills in
+ *   once ingest has it.
+ *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
 
@@ -65,6 +70,9 @@ const DEFAULT_MOMENTUM_CONFIG_ID = "default_v1";
 const MOMENTUM_COLUMN = "mom_4h" as const;
 const SIGNAL_ABOVE = "Above";
 const SIGNAL_BELOW = "Below";
+/** Only BTC 4h rows get Polymarket market / price_to_beat. */
+const BTC_SYMBOL = "BTC";
+const WINDOW_SEC = ANALYSIS_TIMEFRAME * 60;
 /** Bars used for percentage_sum (last N × 4h close-%). */
 const PCT_LOOKBACK = 4;
 /** Momentum band edges in percent units (crypto_price.momentum). */
@@ -148,7 +156,16 @@ type CryptoPriceRow = {
   ema: number | null;
   momentum: number | null;
   percentage_sum: number | null;
+  /** Polymarket market label (BTC 4h only). */
+  market_title: string | null;
+  /** Polymarket BTC price to beat / strike (BTC 4h only). */
+  price_to_beat: number | null;
   updated_at: string;
+};
+
+type PolymarketWindow = {
+  market_title: string | null;
+  price_to_beat: number | null;
 };
 
 type ComputeResult =
@@ -214,6 +231,53 @@ function roundPrice(value: number): number {
 
 function roundPct(value: number): number {
   return Math.round(value * 1e6) / 1e6;
+}
+
+function roundStrike(value: number): number {
+  return Math.round(value * 1e6) / 1e6;
+}
+
+function marketSlugForStart(startSec: number) {
+  return `btc-updown-4h-${startSec}`;
+}
+
+function formatEtClock(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  }).formatToParts(date);
+  const hour = parts.find((p) => p.type === "hour")?.value ?? "";
+  const minute = parts.find((p) => p.type === "minute")?.value ?? "00";
+  const period = (parts.find((p) => p.type === "dayPeriod")?.value ?? "").toUpperCase();
+  return `${hour}:${minute}${period}`;
+}
+
+/** e.g. Bitcoin Up or Down - October 16, 12:00AM-4:00AM ET */
+function formatPolymarketTitle(startSec: number, endSec: number) {
+  const start = new Date(startSec * 1000);
+  const end = new Date(endSec * 1000);
+  const monthDay = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    month: "long",
+    day: "numeric",
+  }).format(start);
+  return `Bitcoin Up or Down - ${monthDay}, ${formatEtClock(start)}-${formatEtClock(end)} ET`;
+}
+
+function windowStartSecFromBucket(bucketStart: string): number | null {
+  const ms = Date.parse(bucketStart);
+  if (!Number.isFinite(ms)) return null;
+  const startSec = Math.floor(ms / 1000);
+  if (startSec % WINDOW_SEC !== 0) return null;
+  return startSec;
+}
+
+function asTrimmedString(value: unknown): string | null {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
 }
 
 /** (current - previous) / previous * 100; null when previous is missing/zero. */
@@ -1055,6 +1119,113 @@ async function insertCryptoPriceRows(
   return inserted;
 }
 
+async function fetchPolymarketEventsBySlugs(
+  supabaseUrl: string,
+  serviceKey: string,
+  slugs: string[],
+): Promise<Map<string, PolymarketWindow>> {
+  const out = new Map<string, PolymarketWindow>();
+  if (slugs.length === 0) return out;
+  const base = supabaseUrl.replace(/\/$/, "");
+  const unique = [...new Set(slugs)];
+  const chunkSize = 80;
+  for (let i = 0; i < unique.length; i += chunkSize) {
+    const chunk = unique.slice(i, i + chunkSize);
+    const inList = chunk.map((s) => `"${s.replaceAll('"', '\\"')}"`).join(",");
+    const res = await fetch(
+      `${base}/rest/v1/polymarket_events?select=slug,title,price_to_beat&slug=in.(${inList})`,
+      { headers: restHeaders(serviceKey) },
+    );
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`Failed to load polymarket_events: ${text.slice(0, 300)}`);
+    }
+    const rows = (await res.json()) as Array<{
+      slug?: unknown;
+      title?: unknown;
+      price_to_beat?: unknown;
+    }>;
+    for (const row of rows) {
+      const slug = asTrimmedString(row.slug);
+      if (!slug) continue;
+      out.set(slug, {
+        market_title: asTrimmedString(row.title),
+        price_to_beat: parseNumber(row.price_to_beat),
+      });
+    }
+  }
+  return out;
+}
+
+async function fetchPriceToBeatFromTicks(
+  supabaseUrl: string,
+  serviceKey: string,
+  slug: string,
+): Promise<number | null> {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const res = await fetch(
+    `${base}/rest/v1/polymarket_ticks?select=price_to_beat&event_slug=eq.${encodeURIComponent(slug)}&price_to_beat=not.is.null&order=recorded_at.asc&limit=1`,
+    { headers: restHeaders(serviceKey) },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to load polymarket_ticks price_to_beat: ${text.slice(0, 300)}`);
+  }
+  const rows = (await res.json()) as Array<{ price_to_beat?: unknown }>;
+  return parseNumber(rows[0]?.price_to_beat);
+}
+
+async function attachPolymarketFields(
+  supabaseUrl: string,
+  serviceKey: string,
+  asset: AssetRow,
+  rows: CryptoPriceRow[],
+): Promise<void> {
+  if (asset.symbol.toUpperCase() !== BTC_SYMBOL || rows.length === 0) return;
+
+  const slugs: string[] = [];
+  for (const row of rows) {
+    const startSec = windowStartSecFromBucket(row.bucket_start);
+    if (startSec === null) continue;
+    slugs.push(marketSlugForStart(startSec));
+  }
+  const eventsBySlug = await fetchPolymarketEventsBySlugs(supabaseUrl, serviceKey, slugs);
+
+  // First pass: title + event strike (no tick round-trips).
+  const needTick: Array<{ row: CryptoPriceRow; slug: string }> = [];
+  for (const row of rows) {
+    const startSec = windowStartSecFromBucket(row.bucket_start);
+    if (startSec === null) {
+      row.market_title = null;
+      row.price_to_beat = null;
+      continue;
+    }
+    const endSec = startSec + WINDOW_SEC;
+    const slug = marketSlugForStart(startSec);
+    const event = eventsBySlug.get(slug);
+    row.market_title = event?.market_title ?? formatPolymarketTitle(startSec, endSec);
+    if (event?.price_to_beat !== null && event?.price_to_beat !== undefined) {
+      row.price_to_beat = roundStrike(event.price_to_beat);
+    } else {
+      row.price_to_beat = null;
+      needTick.push({ row, slug });
+    }
+  }
+
+  // Second pass: tick fallback for missing strikes (batched concurrency).
+  const tickConcurrency = 8;
+  for (let i = 0; i < needTick.length; i += tickConcurrency) {
+    const chunk = needTick.slice(i, i + tickConcurrency);
+    const strikes = await Promise.all(
+      chunk.map((item) => fetchPriceToBeatFromTicks(supabaseUrl, serviceKey, item.slug)),
+    );
+    for (let j = 0; j < chunk.length; j++) {
+      const strike = strikes[j];
+      chunk[j].row.price_to_beat = strike === null ? null : roundStrike(strike);
+    }
+  }
+}
+
 function buildRow(
   assetId: number,
   candle: PriceCandle,
@@ -1078,6 +1249,8 @@ function buildRow(
     ema: emaTotal,
     momentum,
     percentage_sum: null,
+    market_title: null,
+    price_to_beat: null,
     updated_at: updatedAt,
   };
 }
@@ -1174,6 +1347,8 @@ async function backfillAsset(
     withSignal.price_level_pct = priceLevelChangePct(withSignal.price_level, prevLevel);
     rows.push(withSignal);
   }
+
+  await attachPolymarketFields(supabaseUrl, serviceKey, asset, rows);
 
   return { rows, skippedNoCycle };
 }
@@ -1335,6 +1510,7 @@ export async function computeCryptoPrice(
         latest.bucket_start,
       );
       withSignal.price_level_pct = priceLevelChangePct(withSignal.price_level, prevLevel);
+      await attachPolymarketFields(supabaseUrl, serviceKey, asset, [withSignal]);
       rows.push(withSignal);
     }
 
