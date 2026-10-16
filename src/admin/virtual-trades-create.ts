@@ -3,7 +3,8 @@ import { requireAdminSession, setAdminLoading } from "./auth-guard";
 import { initAdminShell } from "./shell";
 
 const WINDOW_SEC = 4 * 60 * 60;
-const LOOKBACK_DAYS = 7;
+const PAGE_DAYS = 7;
+const DAY_MS = 24 * 60 * 60 * 1000;
 const ANALYSIS_TIMEFRAME = 240;
 const BTC_SYMBOL = "BTC";
 const DEFAULT_POSITION_USD = 10;
@@ -154,18 +155,34 @@ function confidenceFromEma(ema: number | null): number {
   return Math.min(1, Math.max(0, Number(ratio.toFixed(4))));
 }
 
-function lookbackStartIso(nowMs = Date.now()) {
-  const startMs = Date.UTC(
-    new Date(nowMs).getUTCFullYear(),
-    new Date(nowMs).getUTCMonth(),
-    new Date(nowMs).getUTCDate() - (LOOKBACK_DAYS - 1),
-  );
-  return new Date(startMs).toISOString();
+function utcMidnightMs(nowMs = Date.now()) {
+  const d = new Date(nowMs);
+  return Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
 }
 
 function currentClosedWindowEndSec(nowMs = Date.now()) {
   const nowSec = Math.floor(nowMs / 1000);
   return Math.floor(nowSec / WINDOW_SEC) * WINDOW_SEC;
+}
+
+/** One PAGE_DAYS window. weekOffset 0 = most recent days; higher = earlier. */
+function pageRange(weekOffset: number, nowMs = Date.now()) {
+  const todayUtc = utcMidnightMs(nowMs);
+  const page0StartMs = todayUtc - (PAGE_DAYS - 1) * DAY_MS;
+  const fromMs = page0StartMs - weekOffset * PAGE_DAYS * DAY_MS;
+  const closedEndSec = currentClosedWindowEndSec(nowMs);
+  const beforeMs =
+    weekOffset === 0
+      ? closedEndSec * 1000
+      : page0StartMs - (weekOffset - 1) * PAGE_DAYS * DAY_MS;
+  // Inclusive end day for the label (beforeIso is exclusive).
+  const endLabelMs = weekOffset === 0 ? todayUtc : beforeMs - DAY_MS;
+  return {
+    fromIso: new Date(fromMs).toISOString(),
+    beforeIso: new Date(beforeMs).toISOString(),
+    closedEndSec,
+    label: `${formatUtcDateLabel(new Date(fromMs).toISOString().slice(0, 10))} – ${formatUtcDateLabel(new Date(Math.max(fromMs, endLabelMs)).toISOString().slice(0, 10))} UTC`,
+  };
 }
 
 async function loadBtcAssetId(supabase: SupabaseClient): Promise<number> {
@@ -372,10 +389,10 @@ async function loadPriceToBeat(
   return asNumber(data?.price_to_beat);
 }
 
-function renderDays(container: HTMLElement, days: DayGroup[]) {
+function renderDays(container: HTMLElement, days: DayGroup[], rangeLabel: string) {
   if (days.length === 0) {
     container.innerHTML =
-      `<p class="xa-muted">No closed 4h periods with a crypto_price signal in the last ${LOOKBACK_DAYS} UTC days.</p>`;
+      `<p class="xa-muted">No closed 4h periods with a crypto_price signal for ${escapeHtml(rangeLabel)}.</p>`;
     return;
   }
 
@@ -406,6 +423,44 @@ function renderDays(container: HTMLElement, days: DayGroup[]) {
       </section>`,
     )
     .join("");
+}
+
+async function markAlreadyPlaced(
+  supabase: SupabaseClient,
+  daysEl: HTMLElement,
+  periods: Iterable<FourHourPeriod>,
+) {
+  const startSecs = [...periods].map((p) => p.startSec);
+  if (startSecs.length === 0) return;
+
+  const slugs = startSecs.map((sec) => marketSlugForStart(sec));
+  const { data, error } = await supabase
+    .from("virtual_trades")
+    .select("market_slug")
+    .in("market_slug", slugs);
+  if (error) return;
+
+  const placed = new Set(
+    (data ?? [])
+      .map((row) => asString(row.market_slug))
+      .filter((slug): slug is string => Boolean(slug)),
+  );
+  for (const slug of placed) {
+    const match = /^btc-updown-4h-(\d+)$/.exec(slug);
+    if (!match) continue;
+    const startSec = Number(match[1]);
+    const box = daysEl.querySelector<HTMLInputElement>(
+      `.xa-vt__period-check[data-start-sec="${startSec}"]`,
+    );
+    const statusFor = daysEl.querySelector<HTMLElement>(
+      `[data-status-for="${startSec}"]`,
+    );
+    if (box) {
+      box.checked = true;
+      box.disabled = true;
+    }
+    if (statusFor) statusFor.textContent = "Already placed";
+  }
 }
 
 function renderPreview(
@@ -527,11 +582,21 @@ async function init() {
   const statusEl = document.getElementById("xa-vt-create-status");
   const previewEl = document.getElementById("xa-vt-create-preview");
   const placeBtn = document.getElementById("xa-vt-place-trade") as HTMLButtonElement | null;
-  if (!daysEl || !statusEl || !previewEl || !placeBtn) return;
+  const pagerEl = document.getElementById("xa-vt-create-pager");
+  const pagerLabelEl = document.getElementById("xa-vt-pager-label");
+  const earlierBtn = document.getElementById("xa-vt-earlier") as HTMLButtonElement | null;
+  const laterBtn = document.getElementById("xa-vt-later") as HTMLButtonElement | null;
+  if (!daysEl || !statusEl || !previewEl || !placeBtn || !pagerEl || !pagerLabelEl || !earlierBtn || !laterBtn) {
+    return;
+  }
 
   const periodByStart = new Map<number, FourHourPeriod>();
   let selectedStartSec: number | null = null;
   let placing = false;
+  let weekOffset = 0;
+  let loadingPage = false;
+  let earliestSignalMs: number | null = null;
+  let assetId: number | null = null;
 
   function setPlaceTradeActive(active: boolean) {
     placeBtn!.disabled = !active || placing;
@@ -545,66 +610,95 @@ async function init() {
     previewEl!.innerHTML = "";
   }
 
-  statusEl.textContent = "Loading periods with crypto_price signals…";
-
-  try {
-    const closedEndSec = currentClosedWindowEndSec();
-    const fromIso = lookbackStartIso();
-    const beforeIso = new Date(closedEndSec * 1000).toISOString();
-    const assetId = await loadBtcAssetId(session.supabase);
-    const signaled = await loadSignaledCryptoPrices(
-      session.supabase,
-      assetId,
-      fromIso,
-      beforeIso,
-    );
-    const days = groupSignaledPeriods(signaled, closedEndSec);
-    for (const day of days) {
-      for (const period of day.periods) {
-        periodByStart.set(period.startSec, period);
-      }
-    }
-    renderDays(daysEl, days);
-
-    const existingSlugs = await session.supabase
-      .from("virtual_trades")
-      .select("market_slug")
-      .like("market_slug", "btc-updown-4h-%");
-    if (!existingSlugs.error) {
-      const placed = new Set(
-        (existingSlugs.data ?? [])
-          .map((row) => asString(row.market_slug))
-          .filter((slug): slug is string => Boolean(slug)),
-      );
-      for (const slug of placed) {
-        const match = /^btc-updown-4h-(\d+)$/.exec(slug);
-        if (!match) continue;
-        const startSec = Number(match[1]);
-        const box = daysEl.querySelector<HTMLInputElement>(
-          `.xa-vt__period-check[data-start-sec="${startSec}"]`,
-        );
-        const statusFor = daysEl.querySelector<HTMLElement>(
-          `[data-status-for="${startSec}"]`,
-        );
-        if (box) {
-          box.checked = true;
-          box.disabled = true;
-        }
-        if (statusFor) statusFor.textContent = "Already placed";
-      }
-    }
-
-    statusEl.textContent =
-      days.length === 0
-        ? `No closed 4h periods with a crypto_price signal in the last ${LOOKBACK_DAYS} UTC days.`
-        : `Select a signaled 4h period, then click Place Trade.`;
-  } catch (error) {
-    const msg = error instanceof Error ? error.message : "Unable to load crypto_price signals.";
-    statusEl.textContent = msg;
-    statusEl.classList.add("xa-users__status--error");
-    daysEl.innerHTML = "";
-    return;
+  function hasEarlierThan(fromIso: string) {
+    const fromMs = Date.parse(fromIso);
+    return earliestSignalMs !== null && Number.isFinite(fromMs) && earliestSignalMs < fromMs;
   }
+
+  function updatePager(offset: number, range: ReturnType<typeof pageRange>, busy: boolean) {
+    pagerEl!.hidden = false;
+    pagerLabelEl!.textContent = range.label;
+    laterBtn!.disabled = busy || offset === 0;
+    earlierBtn!.disabled = busy || !hasEarlierThan(range.fromIso);
+  }
+
+  async function loadEarliestSignalMs(id: number): Promise<number | null> {
+    const { data, error } = await session.supabase
+      .from("crypto_price")
+      .select("bucket_start")
+      .eq("asset_id", id)
+      .eq("timeframe", ANALYSIS_TIMEFRAME)
+      .not("signal", "is", null)
+      .neq("signal", "")
+      .order("bucket_start", { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    const bucket = asString(data?.bucket_start);
+    if (!bucket) return null;
+    const ms = Date.parse(bucket);
+    return Number.isFinite(ms) ? ms : null;
+  }
+
+  async function loadWeek(nextOffset: number) {
+    if (loadingPage) return;
+    loadingPage = true;
+    clearSelectionUi();
+    periodByStart.clear();
+    statusEl.classList.remove("xa-users__status--error");
+    statusEl.textContent = "Loading periods with crypto_price signals…";
+
+    const pendingRange = pageRange(nextOffset);
+    updatePager(nextOffset, pendingRange, true);
+
+    try {
+      if (assetId === null) {
+        assetId = await loadBtcAssetId(session.supabase);
+        earliestSignalMs = await loadEarliestSignalMs(assetId);
+      }
+
+      const range = pageRange(nextOffset);
+      const signaled = await loadSignaledCryptoPrices(
+        session.supabase,
+        assetId,
+        range.fromIso,
+        range.beforeIso,
+      );
+      const days = groupSignaledPeriods(signaled, range.closedEndSec);
+      for (const day of days) {
+        for (const period of day.periods) {
+          periodByStart.set(period.startSec, period);
+        }
+      }
+
+      weekOffset = nextOffset;
+      renderDays(daysEl, days, range.label);
+      await markAlreadyPlaced(session.supabase, daysEl, periodByStart.values());
+
+      statusEl.textContent =
+        days.length === 0
+          ? `No closed 4h periods with a crypto_price signal for ${range.label}.`
+          : `Select a signaled 4h period, then click Place Trade.`;
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "Unable to load crypto_price signals.";
+      statusEl.textContent = msg;
+      statusEl.classList.add("xa-users__status--error");
+      daysEl.innerHTML = "";
+    } finally {
+      loadingPage = false;
+      updatePager(weekOffset, pageRange(weekOffset), false);
+    }
+  }
+
+  earlierBtn.addEventListener("click", () => {
+    void loadWeek(weekOffset + 1);
+  });
+  laterBtn.addEventListener("click", () => {
+    if (weekOffset === 0) return;
+    void loadWeek(weekOffset - 1);
+  });
+
+  await loadWeek(0);
 
   daysEl.addEventListener("change", (event) => {
     const target = event.target;
