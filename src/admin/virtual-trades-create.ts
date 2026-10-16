@@ -671,6 +671,7 @@ async function init() {
   const earlierBtn = earlierWeekBtn;
   const laterBtn = laterWeekBtn;
   const filtersEl = filtersRoot;
+  const ruleFilterSelect = filterRuleEl;
   const supabase = adminSession.supabase;
 
   const periodByStart = new Map<number, FourHourPeriod>();
@@ -714,18 +715,18 @@ async function init() {
   }
 
   function syncRuleFilterOptions(days: DayGroup[]) {
-    const previous = filterRuleEl.value;
+    const previous = ruleFilterSelect.value;
     const rules = ruleOptionsFromDays(days);
     const allowed = new Set(["", "with", ...rules]);
 
-    filterRuleEl.innerHTML =
+    ruleFilterSelect.innerHTML =
       `<option value="">All</option>` +
       `<option value="with">With rules</option>` +
       rules
         .map((rule) => `<option value="${escapeHtml(rule)}">Rule ${escapeHtml(rule)}</option>`)
         .join("");
 
-    filterRuleEl.value = allowed.has(previous) ? previous : "";
+    ruleFilterSelect.value = allowed.has(previous) ? previous : "";
   }
 
   function pruneSelectionToVisible(visible: DayGroup[]) {
@@ -740,7 +741,7 @@ async function init() {
   }
 
   async function applyRuleFilter() {
-    const ruleFilter = filterRuleEl.value;
+    const ruleFilter = ruleFilterSelect.value;
     const visible = filterDaysByRule(loadedDays, ruleFilter);
     renderDays(daysEl, visible, loadedRangeLabel, ruleFilter);
     pruneSelectionToVisible(visible);
@@ -900,7 +901,7 @@ async function init() {
     if (weekOffset === 0) return;
     void loadWeek(weekOffset - 1);
   });
-  filterRuleEl.addEventListener("change", () => {
+  ruleFilterSelect.addEventListener("change", () => {
     void applyRuleFilter();
   });
 
