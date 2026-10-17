@@ -4,6 +4,7 @@ import { connectMetaMask, isMetaMaskAvailable } from "../lib/polymarket/browser-
 import { loadLiveAccountSnapshot } from "../lib/polymarket/balance";
 import { formatUnknownError } from "../lib/polymarket/errors";
 import { formatDateTime, formatUsd, shortenAddress } from "../lib/polymarket/format";
+import { cacheClobCollateralUsd } from "../lib/polymarket/position-size";
 import {
   createBrowserSecureClient,
   loadWalletOverride,
@@ -75,6 +76,7 @@ async function refreshBalances() {
     setText("xa-live-collateral", formatUsd(snap.collateralUsd));
     setText("xa-live-portfolio", formatUsd(snap.portfolioUsd));
     setText("xa-live-updated", formatDateTime(snap.refreshedAt));
+    cacheClobCollateralUsd(snap.collateralUsd);
     setStatus("Balances updated from Polymarket CLOB.");
   } catch (error) {
     console.error("[live-trades] balance refresh failed", error);

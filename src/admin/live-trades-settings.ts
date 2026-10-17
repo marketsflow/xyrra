@@ -1,3 +1,8 @@
+import {
+  DEFAULT_POSITION_SIZE_PCT,
+  formatNextTradeConfirmation,
+  readCachedClobCollateralUsd,
+} from "../lib/polymarket/position-size";
 import { requireAdminSession, setAdminLoading } from "./auth-guard";
 import { initAdminShell } from "./shell";
 
@@ -58,10 +63,12 @@ function mapSettings(row: Record<string, unknown>): LiveTradeSettings {
         .sort((a, b) => a - b)
     : [];
 
+  const pct = asNumber(row.position_size_pct);
   return {
     id: asNumber(row.id) ?? 1,
     automation_enabled: Boolean(row.automation_enabled),
-    position_size_pct: asNumber(row.position_size_pct) ?? 10,
+    // Always fall back to 10% — never treat missing as full balance.
+    position_size_pct: pct !== null && pct > 0 ? pct : DEFAULT_POSITION_SIZE_PCT,
     max_open_trades: asNumber(row.max_open_trades) ?? 1,
     daily_loss_limit_usd: asNumber(row.daily_loss_limit_usd),
     allowed_signal_rules: rules,
@@ -101,6 +108,23 @@ function setAllRules(checked: boolean) {
   });
 }
 
+function readPctFromInput(): number {
+  const pctEl = $("xa-live-settings-pct") as HTMLInputElement | null;
+  const pct = asNumber(pctEl?.value);
+  if (pct === null || pct <= 0) return DEFAULT_POSITION_SIZE_PCT;
+  return Math.min(pct, 100);
+}
+
+function updateStakeConfirmation() {
+  const confirmEl = $("xa-live-settings-stake-confirm");
+  if (!confirmEl) return;
+
+  const pct = readPctFromInput();
+  const collateral = readCachedClobCollateralUsd();
+  confirmEl.textContent = formatNextTradeConfirmation(pct, collateral);
+  confirmEl.classList.toggle("xa-live-settings__confirm--warn", pct >= 100);
+}
+
 function fillForm(settings: LiveTradeSettings) {
   const automation = $("xa-live-settings-automation") as HTMLInputElement | null;
   const pct = $("xa-live-settings-pct") as HTMLInputElement | null;
@@ -111,7 +135,7 @@ function fillForm(settings: LiveTradeSettings) {
   const updatedEl = $("xa-live-settings-updated");
 
   if (automation) automation.checked = settings.automation_enabled;
-  if (pct) pct.value = String(settings.position_size_pct);
+  if (pct) pct.value = String(settings.position_size_pct || DEFAULT_POSITION_SIZE_PCT);
   if (maxOpen) maxOpen.value = String(settings.max_open_trades);
   if (dailyLoss) {
     dailyLoss.value =
@@ -122,6 +146,7 @@ function fillForm(settings: LiveTradeSettings) {
   if (updatedEl) updatedEl.textContent = formatUpdatedAt(settings.updated_at);
 
   updateAutomationBadge(settings.automation_enabled);
+  updateStakeConfirmation();
 }
 
 function updateAutomationBadge(enabled: boolean) {
@@ -146,14 +171,20 @@ function readForm(): {
   const dailyLossEl = $("xa-live-settings-daily-loss") as HTMLInputElement | null;
   const notesEl = $("xa-live-settings-notes") as HTMLTextAreaElement | null;
 
-  const position_size_pct = asNumber(pctEl?.value);
+  let position_size_pct = asNumber(pctEl?.value);
+  // Empty / invalid → keep the safe 10% default (never imply 100%).
+  if (position_size_pct === null || position_size_pct <= 0) {
+    position_size_pct = DEFAULT_POSITION_SIZE_PCT;
+    if (pctEl) pctEl.value = String(DEFAULT_POSITION_SIZE_PCT);
+  }
+  if (position_size_pct > 100) {
+    throw new Error("Position size percent cannot exceed 100.");
+  }
+
   const max_open_trades = asNumber(maxOpenEl?.value);
   const dailyRaw = dailyLossEl?.value.trim() ?? "";
   const daily_loss_limit_usd = dailyRaw === "" ? null : asNumber(dailyRaw);
 
-  if (position_size_pct === null || position_size_pct <= 0 || position_size_pct > 100) {
-    throw new Error("Position size percent must be between 0.01 and 100 (e.g. 10 for 10%).");
-  }
   if (max_open_trades === null || max_open_trades < 1 || max_open_trades > 50) {
     throw new Error("Max open trades must be between 1 and 50.");
   }
@@ -171,6 +202,12 @@ function readForm(): {
   };
 }
 
+function confirmNextTradeAmount(positionSizePct: number): boolean {
+  const collateral = readCachedClobCollateralUsd();
+  const message = formatNextTradeConfirmation(positionSizePct, collateral);
+  return window.confirm(`${message}\n\nSave these settings?`);
+}
+
 const SETTINGS_SELECT =
   "id, automation_enabled, position_size_pct, max_open_trades, daily_loss_limit_usd, allowed_signal_rules, notes, updated_at";
 
@@ -182,6 +219,12 @@ async function init() {
 
   const rulesEl = $("xa-live-settings-rules");
   if (rulesEl) renderRuleCheckboxes(rulesEl, []);
+
+  const pctInput = $("xa-live-settings-pct") as HTMLInputElement | null;
+  if (pctInput && !pctInput.value) {
+    pctInput.value = String(DEFAULT_POSITION_SIZE_PCT);
+  }
+  updateStakeConfirmation();
 
   setStatus("Loading settings…");
 
@@ -207,7 +250,7 @@ async function init() {
   }
 
   fillForm(mapSettings(data as Record<string, unknown>));
-  setStatus("Settings loaded. Automation stays off until you enable and save.");
+  setStatus("Settings loaded. Default stake is 10% of CLOB unless you change it.");
 
   $("xa-live-settings-select-all")?.addEventListener("click", () => {
     setAllRules(true);
@@ -219,6 +262,17 @@ async function init() {
   $("xa-live-settings-automation")?.addEventListener("change", (event) => {
     const target = event.target as HTMLInputElement;
     updateAutomationBadge(target.checked);
+  });
+
+  pctInput?.addEventListener("input", () => {
+    updateStakeConfirmation();
+  });
+  pctInput?.addEventListener("blur", () => {
+    const pct = asNumber(pctInput.value);
+    if (pct === null || pct <= 0) {
+      pctInput.value = String(DEFAULT_POSITION_SIZE_PCT);
+      updateStakeConfirmation();
+    }
   });
 
   const form = $("xa-live-settings-form") as HTMLFormElement | null;
@@ -233,6 +287,12 @@ async function init() {
           throw new Error(
             "Turn on automation only after selecting at least one signal rule (or leave automation off).",
           );
+        }
+
+        updateStakeConfirmation();
+        if (!confirmNextTradeAmount(payload.position_size_pct)) {
+          setStatus("Save cancelled.");
+          return;
         }
 
         setStatus("Saving…");
@@ -254,10 +314,12 @@ async function init() {
         if (!saved) throw new Error("Save succeeded but no row was returned.");
 
         fillForm(mapSettings(saved as Record<string, unknown>));
+        const collateral = readCachedClobCollateralUsd();
+        const confirmMsg = formatNextTradeConfirmation(payload.position_size_pct, collateral);
         setStatus(
           payload.automation_enabled
-            ? `Saved. Automation ON · ${payload.position_size_pct}% of CLOB collateral.`
-            : `Saved. Automation OFF · ${payload.position_size_pct}% of CLOB collateral.`,
+            ? `Saved. Automation ON. ${confirmMsg}`
+            : `Saved. Automation OFF. ${confirmMsg}`,
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unable to save settings.";

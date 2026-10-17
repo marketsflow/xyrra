@@ -119,7 +119,8 @@
                       min="0.01"
                       max="100"
                       step="0.01"
-                      placeholder="e.g. 10"
+                      value="10"
+                      placeholder="10"
                       required
                     />
                   </label>
@@ -147,9 +148,21 @@
                   </label>
                 </div>
                 <p class="xa-live-settings__hint">
-                  Stake is always a percent of live CLOB collateral at order time. Enter
-                  <strong>10</strong> for 10% (e.g. $0.47 when collateral is $4.71). Daily loss limit
-                  is a kill switch once the bot is live.
+                  Default is always <strong>10%</strong> of live CLOB collateral — never the full
+                  balance unless you change this field. Stake is recalculated at order time.
+                </p>
+                <p
+                  id="xa-live-settings-stake-confirm"
+                  class="xa-live-settings__confirm"
+                  role="status"
+                  aria-live="polite"
+                >
+                  Next trade will be placed for 10% of current CLOB collateral.
+                </p>
+                <p class="xa-live-settings__hint">
+                  Dollar preview uses the CLOB balance from
+                  <a href="/admin/live-trades/account/">Live Account</a> (refresh there first). Daily
+                  loss limit is a kill switch once the bot is live.
                 </p>
               </section>
 

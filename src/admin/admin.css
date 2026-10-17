@@ -2875,6 +2875,24 @@ body.xa-body {
   line-height: 1.45;
 }
 
+.xa-live-settings__confirm {
+  margin: 0.85rem 0 0;
+  padding: 0.85rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid rgba(37, 99, 235, 0.28);
+  background: #eff6ff;
+  color: #1e3a8a;
+  font-size: 0.92rem;
+  font-weight: 600;
+  line-height: 1.45;
+}
+
+.xa-live-settings__confirm--warn {
+  border-color: rgba(180, 83, 9, 0.35);
+  background: #fffbeb;
+  color: #92400e;
+}
+
 .xa-live-settings__grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
