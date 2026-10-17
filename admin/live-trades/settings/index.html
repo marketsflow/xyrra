@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#f8f9fd" />
+    <title>Live Settings | Admin | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/admin/admin.css" />
+  </head>
+  <body class="xa-body">
+    <div id="xa-admin-loading" class="xa-loading" role="status" aria-live="polite">
+      Checking session…
+    </div>
+
+    <div class="xa-admin" id="xa-admin-app" hidden>
+      <header class="xa-admin__bar">
+        <a class="xa-brand" href="/admin/" aria-label="Xyrra admin home">
+          <img src="/images/new/xyrra-logo.png" alt="" width="954" height="115" decoding="async" />
+        </a>
+        <div class="xa-admin__bar-actions">
+          <div class="xa-admin__meta">
+            <strong id="xa-admin-email">…</strong>
+            <span id="xa-admin-role">…</span>
+          </div>
+          <button type="button" id="xa-admin-signout" class="xa-admin__signout">Sign out</button>
+        </div>
+      </header>
+
+      <div class="xa-admin__layout">
+        <aside class="xa-admin__sidebar" aria-label="Admin navigation">
+          <nav class="xa-admin__nav">
+            <a class="xa-admin__nav-link" data-xa-nav="dashboard" href="/admin/">Dashboard</a>
+            <a class="xa-admin__nav-link" data-xa-nav="users" href="/admin/users/">Users</a>
+            <a class="xa-admin__nav-link" data-xa-nav="articles" href="/admin/articles/">Articles</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-templates" href="/admin/email-templates/">Email Templates</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-lists" href="/admin/email-lists/">Email Lists</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-outreach" href="/admin/email-outreach/">Email Outreach</a>
+            <a class="xa-admin__nav-link" data-xa-nav="emails-sent" href="/admin/emails-sent/">Emails Sent</a>
+            <a class="xa-admin__nav-link" data-xa-nav="stock-prices" href="/admin/stock-prices/">Stock Prices</a>
+            <a class="xa-admin__nav-link" data-xa-nav="polymarket" href="/admin/polymarket/">Polymarket</a>
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="polymarket-crypto-prices"
+              href="/admin/polymarket/crypto-prices/"
+              >Crypto Prices</a
+            >
+            <a class="xa-admin__nav-link" data-xa-nav="virtual-trades" href="/admin/virtual-trades/">Virtual Trades</a>
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="accounts"
+              href="/admin/accounts/"
+              >Accounts</a
+            >
+            <a class="xa-admin__nav-link" data-xa-nav="live-trades" href="/admin/live-trades/">Live Trades</a>
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="live-trades-account"
+              href="/admin/live-trades/account/"
+              >Account</a
+            >
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="live-trades-settings"
+              href="/admin/live-trades/settings/"
+              >Settings</a
+            >
+          </nav>
+        </aside>
+
+        <main class="xa-admin__main">
+          <div class="xa-admin__panel">
+            <div class="xa-users__header">
+              <div>
+                <h1>Live Settings</h1>
+                <p class="xa-templates__lede">
+                  Control automation, position size, and which crypto signal rules may place live
+                  Polymarket trades. Defaults keep automation
+                  <strong>off</strong> until you opt in.
+                </p>
+              </div>
+              <span
+                id="xa-live-settings-badge"
+                class="xa-live-settings__badge xa-live-settings__badge--off"
+                >Automation OFF</span
+              >
+            </div>
+
+            <p id="xa-live-settings-status" class="xa-users__status" aria-live="polite"></p>
+
+            <form id="xa-live-settings-form" class="xa-live-settings__form">
+              <section class="xa-live-settings__section" aria-labelledby="xa-live-auto-title">
+                <h2 id="xa-live-auto-title" class="xa-polymarket__section-title">Automation</h2>
+                <label class="xa-live-settings__switch">
+                  <input id="xa-live-settings-automation" type="checkbox" />
+                  <span>Enable automated live trading</span>
+                </label>
+                <p class="xa-live-settings__hint">
+                  When off, no live orders are placed — even if a signal fires. Turn on only after
+                  Account is connected and rules are selected.
+                </p>
+              </section>
+
+              <section class="xa-live-settings__section" aria-labelledby="xa-live-size-title">
+                <h2 id="xa-live-size-title" class="xa-polymarket__section-title">Sizing &amp; limits</h2>
+                <div class="xa-live-settings__grid">
+                  <label class="xa-field">
+                    Position size (USD)
+                    <input
+                      id="xa-live-settings-position"
+                      type="number"
+                      min="0.01"
+                      max="10000"
+                      step="0.01"
+                      required
+                    />
+                  </label>
+                  <label class="xa-field">
+                    Max open trades
+                    <input
+                      id="xa-live-settings-max-open"
+                      type="number"
+                      min="1"
+                      max="50"
+                      step="1"
+                      required
+                    />
+                  </label>
+                  <label class="xa-field">
+                    Daily loss limit (USD, optional)
+                    <input
+                      id="xa-live-settings-daily-loss"
+                      type="number"
+                      min="0.01"
+                      max="10000"
+                      step="0.01"
+                      placeholder="Leave blank to disable"
+                    />
+                  </label>
+                </div>
+                <p class="xa-live-settings__hint">
+                  Start small relative to CLOB collateral. Daily loss limit is a kill switch once the
+                  bot is live (halt after that much realized loss today).
+                </p>
+              </section>
+
+              <section class="xa-live-settings__section" aria-labelledby="xa-live-rules-title">
+                <div class="xa-live-settings__rules-header">
+                  <h2 id="xa-live-rules-title" class="xa-polymarket__section-title">
+                    Allowed signal rules
+                  </h2>
+                  <div class="xa-live-settings__rules-actions">
+                    <button type="button" id="xa-live-settings-select-all" class="xa-sent__ghost">
+                      Select all
+                    </button>
+                    <button type="button" id="xa-live-settings-clear-rules" class="xa-sent__ghost">
+                      Clear
+                    </button>
+                  </div>
+                </div>
+                <p class="xa-live-settings__hint">
+                  Rules match <code>crypto_price.signal_rule</code> (1–21). None selected = no live
+                  trades, even with automation on.
+                </p>
+                <div
+                  id="xa-live-settings-rules"
+                  class="xa-live-settings__rules"
+                  role="group"
+                  aria-label="Signal rules 1 to 21"
+                ></div>
+              </section>
+
+              <section class="xa-live-settings__section" aria-labelledby="xa-live-notes-title">
+                <h2 id="xa-live-notes-title" class="xa-polymarket__section-title">Notes</h2>
+                <label class="xa-field">
+                  Admin notes (optional)
+                  <textarea
+                    id="xa-live-settings-notes"
+                    class="xa-live-settings__notes"
+                    rows="3"
+                    placeholder="e.g. Testing rules 3 and 7 with $1 stakes"
+                  ></textarea>
+                </label>
+              </section>
+
+              <div class="xa-live-settings__footer">
+                <p class="xa-live-settings__meta">
+                  Last updated (UTC): <strong id="xa-live-settings-updated">—</strong>
+                </p>
+                <button type="submit" id="xa-live-settings-save" class="xa-admin__signout">
+                  Save settings
+                </button>
+              </div>
+            </form>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/src/admin/live-trades-settings.ts"></script>
+  </body>
+</html>

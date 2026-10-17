@@ -2814,3 +2814,147 @@ body.xa-body {
   outline: 2px solid rgba(37, 99, 235, 0.35);
   outline-offset: 1px;
 }
+
+.xa-live-settings__badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.xa-live-settings__badge--off {
+  background: #f3f4f8;
+  color: #5b5f76;
+  border: 1px solid #e0deed;
+}
+
+.xa-live-settings__badge--on {
+  background: #ecfdf5;
+  color: #047857;
+  border: 1px solid rgba(4, 120, 87, 0.28);
+}
+
+.xa-live-settings__form {
+  margin-top: 1.25rem;
+  display: grid;
+  gap: 1.5rem;
+}
+
+.xa-live-settings__section {
+  padding: 1rem 1.1rem;
+  border: 1px solid #e0deed;
+  border-radius: 0.85rem;
+  background: #fafbfd;
+}
+
+.xa-live-settings__switch {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.65rem;
+  margin-top: 0.35rem;
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1f1b2e;
+  cursor: pointer;
+}
+
+.xa-live-settings__switch input {
+  width: 1.05rem;
+  height: 1.05rem;
+}
+
+.xa-live-settings__hint {
+  margin: 0.65rem 0 0;
+  color: var(--xa-muted);
+  font-size: 0.85rem;
+  line-height: 1.45;
+}
+
+.xa-live-settings__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.85rem;
+  margin-top: 0.5rem;
+}
+
+.xa-live-settings__rules-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem;
+}
+
+.xa-live-settings__rules-header .xa-polymarket__section-title {
+  margin: 0;
+}
+
+.xa-live-settings__rules-actions {
+  display: flex;
+  gap: 0.45rem;
+}
+
+.xa-live-settings__rules {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(3.4rem, 1fr));
+  gap: 0.45rem;
+  margin-top: 0.85rem;
+}
+
+.xa-live-settings__rule {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 0.45rem 0.35rem;
+  border: 1px solid #e0deed;
+  border-radius: 0.55rem;
+  background: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.xa-live-settings__rule:has(input:checked) {
+  background: #eff6ff;
+  border-color: rgba(37, 99, 235, 0.35);
+  color: #1d4ed8;
+}
+
+.xa-live-settings__notes {
+  width: 100%;
+  margin-top: 0.35rem;
+  padding: 0.75rem 0.85rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.12);
+  background: #fff;
+  font: inherit;
+  font-size: 0.875rem;
+  resize: vertical;
+  min-height: 4.5rem;
+}
+
+.xa-live-settings__notes:focus {
+  outline: none;
+  border-color: var(--xa-accent);
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.15);
+}
+
+.xa-live-settings__footer {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.85rem;
+}
+
+.xa-live-settings__meta {
+  margin: 0;
+  color: var(--xa-muted);
+  font-size: 0.85rem;
+}

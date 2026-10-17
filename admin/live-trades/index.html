@@ -66,6 +66,12 @@
               href="/admin/live-trades/account/"
               >Account</a
             >
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="live-trades-settings"
+              href="/admin/live-trades/settings/"
+              >Settings</a
+            >
           </nav>
         </aside>
 
@@ -95,14 +101,30 @@
                   <span class="xa-templates__chevron" aria-hidden="true">›</span>
                 </a>
               </li>
+              <li class="xa-templates__item">
+                <a class="xa-templates__link" href="/admin/live-trades/settings/">
+                  <span class="xa-templates__icon" aria-hidden="true">⚙</span>
+                  <span class="xa-templates__meta">
+                    <span class="xa-templates__name">Settings</span>
+                    <span class="xa-templates__subject"
+                      >Automation switch, position size, signal rules, loss limits</span
+                    >
+                  </span>
+                  <span class="xa-templates__chevron" aria-hidden="true">›</span>
+                </a>
+              </li>
             </ul>
 
             <section class="xa-live__roadmap" aria-labelledby="xa-live-roadmap-title">
               <h2 id="xa-live-roadmap-title" class="xa-polymarket__section-title">Structure</h2>
               <ol class="xa-live__steps">
                 <li>
-                  <strong>Account (now)</strong> — browser MetaMask +
+                  <strong>Account</strong> — browser MetaMask +
                   <code>createSecureClient</code> + collateral balance.
+                </li>
+                <li>
+                  <strong>Settings (now)</strong> — automation on/off, stake, allowed signal rules,
+                  max opens, daily loss kill switch.
                 </li>
                 <li>
                   <strong>Place / View (next)</strong> — same signal flow as Virtual Trades, posting real

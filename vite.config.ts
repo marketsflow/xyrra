@@ -672,6 +672,8 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/admin/live-trades/" + search;
       } else if (path === "/admin/live-trades/account") {
         (req as IncomingMessage & { url?: string }).url = "/admin/live-trades/account/" + search;
+      } else if (path === "/admin/live-trades/settings") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/live-trades/settings/" + search;
       } else if (path === "/admin/articles") {
         (req as IncomingMessage & { url?: string }).url = "/admin/articles/" + search;
       } else if (path === "/admin/articles/new") {
@@ -816,6 +818,10 @@ export default defineConfig(({ mode }) => {
           adminLiveTradesAccount: resolve(
             __dirname,
             "admin/live-trades/account/index.html",
+          ),
+          adminLiveTradesSettings: resolve(
+            __dirname,
+            "admin/live-trades/settings/index.html",
           ),
           adminArticles: resolve(__dirname, "admin/articles/index.html"),
           adminArticlesNew: resolve(__dirname, "admin/articles/new/index.html"),
