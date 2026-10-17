@@ -160,11 +160,19 @@ async function refreshBotWallet() {
         Authorization: `Bearer ${accessToken}`,
       },
     });
-    const payload = (await response.json()) as {
+    const raw = await response.text();
+    let payload: {
       success?: boolean;
       message?: string;
       account?: BotAccountPayload;
-    };
+    } = {};
+    try {
+      payload = raw ? (JSON.parse(raw) as typeof payload) : {};
+    } catch {
+      throw new Error(
+        raw.trim().slice(0, 280) || `Bot wallet API returned non-JSON (${response.status})`,
+      );
+    }
 
     if (!response.ok || !payload.success || !payload.account) {
       throw new Error(payload.message || `Request failed (${response.status})`);

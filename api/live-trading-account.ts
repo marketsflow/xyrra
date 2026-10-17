@@ -350,7 +350,7 @@ export async function fetchLiveTradingAccount(
 }
 
 export const config = {
-  maxDuration: 30,
+  maxDuration: 60,
 };
 
 export default {

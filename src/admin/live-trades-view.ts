@@ -315,10 +315,36 @@ async function init() {
   if (!statusEl || !emptyEl || !tableWrap || !bodyEl) return;
 
   const supabase = session.supabase;
+  const emptyDetailEl = emptyEl.querySelector("p:not(.xa-sent__empty-title)");
 
-  async function loadTrades() {
-    statusEl!.classList.remove("xa-users__status--error");
-    statusEl!.textContent = "Loading live trades…";
+  function formatBotStatus(action: string | undefined, message: string | undefined): string {
+    const detail = (message || "").trim();
+    switch (action) {
+      case "placed":
+        return detail || "Bot placed a live trade.";
+      case "already_exists":
+        return detail || "Bot checked — a live trade already exists for this 4h window.";
+      case "no_signal":
+        return detail || "Bot ran — no Price Levels signal on the current 4h window.";
+      case "rule_blocked":
+        return detail || "Bot ran — signal rule is not allowed in Settings.";
+      case "risk_blocked":
+        return detail || "Bot ran — blocked by risk limits (max open / daily loss / balance).";
+      case "skipped":
+        return detail || "Bot ran — skipped (automation off, or missing setup).";
+      case "failed":
+        return detail || "Bot ran — order failed.";
+      default:
+        return detail || `Bot finished (${action || "ok"}).`;
+    }
+  }
+
+  async function loadTrades(options?: { statusMessage?: string; isError?: boolean }) {
+    const keepMessage = options?.statusMessage;
+    if (!keepMessage) {
+      statusEl!.classList.remove("xa-users__status--error");
+      statusEl!.textContent = "Loading live trades…";
+    }
 
     const { data, error } = await supabase
       .from("live_trades")
@@ -337,9 +363,22 @@ async function init() {
     const rows = (data ?? []).map((row) => mapRow(row as Record<string, unknown>));
 
     if (rows.length === 0) {
-      statusEl!.textContent = "";
       emptyEl!.hidden = false;
       tableWrap!.hidden = true;
+      if (keepMessage) {
+        statusEl!.textContent = keepMessage;
+        statusEl!.classList.toggle("xa-users__status--error", Boolean(options?.isError));
+        if (emptyDetailEl) {
+          emptyDetailEl.textContent = keepMessage;
+        }
+      } else {
+        statusEl!.textContent = "No live trades yet. Click Run bot now to check the current 4h window.";
+        statusEl!.classList.remove("xa-users__status--error");
+        if (emptyDetailEl) {
+          emptyDetailEl.textContent =
+            "Enable automation in Settings, allow at least one signal rule, then wait for a 4h Price Levels signal — or click Run bot now.";
+        }
+      }
       return;
     }
 
@@ -354,10 +393,17 @@ async function init() {
     }
 
     renderRows(bodyEl!, rows);
-    statusEl!.textContent =
-      settled > 0
-        ? `Loaded ${rows.length} live trade${rows.length === 1 ? "" : "s"} · settled ${settled}.`
-        : `Loaded ${rows.length} live trade${rows.length === 1 ? "" : "s"}.`;
+
+    if (keepMessage) {
+      statusEl!.textContent = keepMessage;
+      statusEl!.classList.toggle("xa-users__status--error", Boolean(options?.isError));
+    } else {
+      statusEl!.classList.remove("xa-users__status--error");
+      statusEl!.textContent =
+        settled > 0
+          ? `Loaded ${rows.length} live trade${rows.length === 1 ? "" : "s"} · settled ${settled}.`
+          : `Loaded ${rows.length} live trade${rows.length === 1 ? "" : "s"}.`;
+    }
   }
 
   await loadTrades();
@@ -397,8 +443,10 @@ async function init() {
         if (!res.ok || body.success === false) {
           throw new Error(body.message || `Bot returned ${res.status}`);
         }
-        statusEl.textContent = body.message || `Bot: ${body.action ?? "done"}`;
-        await loadTrades();
+
+        const botMessage = formatBotStatus(body.action, body.message);
+        const isError = body.action === "failed";
+        await loadTrades({ statusMessage: botMessage, isError });
       } catch (error) {
         const msg = error instanceof Error ? error.message : "Bot run failed.";
         statusEl.textContent = msg;

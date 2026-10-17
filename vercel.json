@@ -74,8 +74,8 @@
       "maxDuration": 60
     },
     "api/live-trading-account.ts": {
-      "memory": 512,
-      "maxDuration": 30
+      "memory": 1024,
+      "maxDuration": 60
     },
     "api/ingest-polymarket.ts": {
       "memory": 256,
@@ -103,7 +103,7 @@
       "maxDuration": 300
     },
     "api/place-live-trades.ts": {
-      "memory": 512,
+      "memory": 1024,
       "maxDuration": 60
     },
     "api/articles-page.ts": {
