@@ -2,6 +2,7 @@ import type { AccountIdentity, SecureClient } from "@polymarket/client";
 import { isAddress, type Address, type WalletClient } from "viem";
 import { connectMetaMask, isMetaMaskAvailable } from "../lib/polymarket/browser-wallet";
 import { loadLiveAccountSnapshot } from "../lib/polymarket/balance";
+import { formatUnknownError } from "../lib/polymarket/errors";
 import { formatDateTime, formatUsd, shortenAddress } from "../lib/polymarket/format";
 import {
   createBrowserSecureClient,
@@ -76,8 +77,8 @@ async function refreshBalances() {
     setText("xa-live-updated", formatDateTime(snap.refreshedAt));
     setStatus("Balances updated from Polymarket CLOB.");
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Unable to load balances.";
-    setStatus(msg, true);
+    console.error("[live-trades] balance refresh failed", error);
+    setStatus(formatUnknownError(error, "Unable to load balances."), true);
   } finally {
     if (refreshBtn) refreshBtn.disabled = false;
   }
@@ -106,6 +107,14 @@ async function authenticateAndLoad() {
   await refreshBalances();
 }
 
+function showMetaMaskConnected(address: Address) {
+  setText("xa-live-metamask", shortenAddress(address));
+  const mm = $("xa-live-metamask");
+  if (mm) mm.setAttribute("title", address);
+  $("xa-live-disconnected")?.setAttribute("hidden", "");
+  $("xa-live-connected")?.removeAttribute("hidden");
+}
+
 async function onConnect() {
   const connectBtn = $("xa-live-connect") as HTMLButtonElement | null;
   if (connectBtn) connectBtn.disabled = true;
@@ -115,6 +124,7 @@ async function onConnect() {
       throw new Error("MetaMask was not found. Install the extension, then reload this page.");
     }
 
+    setStatus("Opening MetaMask…");
     const { address, walletClient } = await connectMetaMask();
     state = {
       address,
@@ -122,16 +132,20 @@ async function onConnect() {
       client: null,
       account: null,
     };
-    setText("xa-live-metamask", shortenAddress(address));
-    const mm = $("xa-live-metamask");
-    if (mm) mm.setAttribute("title", address);
+    showMetaMaskConnected(address);
 
-    await authenticateAndLoad();
+    try {
+      await authenticateAndLoad();
+    } catch (authError) {
+      console.error("[live-trades] Polymarket auth failed", authError);
+      // Keep MetaMask session so the user can set a wallet override and retry.
+      setStatus(formatUnknownError(authError, "Polymarket authentication failed."), true);
+    }
   } catch (error) {
+    console.error("[live-trades] MetaMask connect failed", error);
     state = null;
     setConnectedUi(false);
-    const msg = error instanceof Error ? error.message : "Unable to connect MetaMask.";
-    setStatus(msg, true);
+    setStatus(formatUnknownError(error, "Unable to connect MetaMask."), true);
   } finally {
     if (connectBtn && !state?.client) connectBtn.disabled = false;
   }
@@ -158,8 +172,8 @@ async function onApplyWallet() {
   try {
     await authenticateAndLoad();
   } catch (error) {
-    const msg = error instanceof Error ? error.message : "Unable to re-authenticate.";
-    setStatus(msg, true);
+    console.error("[live-trades] reconnect failed", error);
+    setStatus(formatUnknownError(error, "Unable to re-authenticate."), true);
   }
 }
 

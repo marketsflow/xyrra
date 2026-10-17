@@ -7,13 +7,18 @@ import {
   type WalletClient,
 } from "viem";
 import { polygon } from "viem/chains";
+import { formatUnknownError } from "./errors";
 
 const POLYGON_CHAIN_ID_HEX = `0x${polygon.id.toString(16)}`;
 
-export type EthereumProvider = EIP1193Provider & {
+type ProviderCandidate = EIP1193Provider & {
+  isMetaMask?: boolean;
+  providers?: ProviderCandidate[];
   on?: (event: string, listener: (...args: unknown[]) => void) => void;
   removeListener?: (event: string, listener: (...args: unknown[]) => void) => void;
 };
+
+export type EthereumProvider = ProviderCandidate;
 
 declare global {
   interface Window {
@@ -21,8 +26,26 @@ declare global {
   }
 }
 
+function asProvider(value: unknown): ProviderCandidate | null {
+  if (!value || typeof value !== "object") return null;
+  if (!("request" in value) || typeof (value as { request: unknown }).request !== "function") {
+    return null;
+  }
+  return value as ProviderCandidate;
+}
+
+/** Prefer MetaMask when multiple injected wallets share `window.ethereum`. */
 export function getEthereumProvider(): EthereumProvider | null {
-  return typeof window !== "undefined" && window.ethereum ? window.ethereum : null;
+  if (typeof window === "undefined") return null;
+  const ethereum = asProvider(window.ethereum);
+  if (!ethereum) return null;
+
+  const nested = Array.isArray(ethereum.providers)
+    ? ethereum.providers.map(asProvider).filter((p): p is ProviderCandidate => Boolean(p))
+    : [];
+
+  const metamask = nested.find((p) => p.isMetaMask) ?? (ethereum.isMetaMask ? ethereum : null);
+  return metamask ?? nested[0] ?? ethereum;
 }
 
 export function isMetaMaskAvailable() {
@@ -46,20 +69,30 @@ async function ensurePolygon(provider: EthereumProvider) {
         ? Number((error as { code: unknown }).code)
         : null;
     // 4902 = chain not added in MetaMask
-    if (code !== 4902) throw error;
+    if (code !== 4902) {
+      throw new Error(
+        formatUnknownError(error, "Unable to switch MetaMask to Polygon (chain 137)."),
+      );
+    }
 
-    await provider.request({
-      method: "wallet_addEthereumChain",
-      params: [
-        {
-          chainId: POLYGON_CHAIN_ID_HEX,
-          chainName: "Polygon",
-          nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
-          rpcUrls: ["https://polygon-rpc.com"],
-          blockExplorerUrls: ["https://polygonscan.com"],
-        },
-      ],
-    });
+    try {
+      await provider.request({
+        method: "wallet_addEthereumChain",
+        params: [
+          {
+            chainId: POLYGON_CHAIN_ID_HEX,
+            chainName: "Polygon",
+            nativeCurrency: { name: "POL", symbol: "POL", decimals: 18 },
+            rpcUrls: ["https://polygon-rpc.com"],
+            blockExplorerUrls: ["https://polygonscan.com"],
+          },
+        ],
+      });
+    } catch (addError) {
+      throw new Error(
+        formatUnknownError(addError, "Unable to add Polygon to MetaMask."),
+      );
+    }
   }
 }
 
@@ -73,14 +106,25 @@ export async function connectMetaMask(): Promise<{
     throw new Error("MetaMask was not found. Install the extension, then reload this page.");
   }
 
-  await ensurePolygon(provider);
+  // Request accounts first — some MetaMask builds reject chain switches before unlock.
+  let requested: string[];
+  try {
+    requested = (await provider.request({
+      method: "eth_requestAccounts",
+    })) as string[];
+  } catch (error) {
+    throw new Error(formatUnknownError(error, "MetaMask account request was rejected."));
+  }
 
-  const requested = (await provider.request({
-    method: "eth_requestAccounts",
-  })) as string[];
   const raw = requested[0];
   if (!raw) {
     throw new Error("No MetaMask account was selected.");
+  }
+
+  try {
+    await ensurePolygon(provider);
+  } catch (error) {
+    throw new Error(formatUnknownError(error, "Unable to switch MetaMask to Polygon."));
   }
 
   const address = getAddress(raw);

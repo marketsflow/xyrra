@@ -6,6 +6,7 @@ import {
 } from "@polymarket/client";
 import { signerFrom } from "@polymarket/client/viem";
 import { getAddress, type Address, type WalletClient } from "viem";
+import { formatUnknownError } from "./errors";
 
 const WALLET_OVERRIDE_KEY = "xyrra-live-polymarket-wallet";
 
@@ -69,10 +70,21 @@ export async function createBrowserSecureClient(options: {
   }
 
   const wallet = await resolveAccountWallet(signerAddress, options.wallet);
-  const client = await createSecureClient({
-    signer: signerFrom(options.walletClient),
-    ...(wallet ? { wallet } : {}),
-  });
 
-  return { client, account: client.account };
+  try {
+    const client = await createSecureClient({
+      signer: signerFrom(options.walletClient),
+      ...(wallet ? { wallet } : {}),
+    });
+    return { client, account: client.account };
+  } catch (error) {
+    throw new Error(
+      formatUnknownError(
+        error,
+        wallet
+          ? `Polymarket auth failed for wallet ${wallet}.`
+          : "Polymarket auth failed. Approve the MetaMask signature, or set your Polymarket profile wallet below.",
+      ),
+    );
+  }
 }
