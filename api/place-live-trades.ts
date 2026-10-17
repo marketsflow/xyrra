@@ -25,8 +25,6 @@ const BTC_SYMBOL = "BTC";
 const DEFAULT_POSITION_SIZE_PCT = 10;
 const COLLATERAL_SCALE = 10n ** 6n;
 const MIN_STAKE_USD = 0.1;
-/** Polymarket closest non-georestricted Vercel region (eu-west-1 / Ireland). */
-const POLYMARKET_SAFE_REGIONS = ["dub1"] as const;
 const CLOB_BASE = "https://clob.polymarket.com";
 const GEOBLOCK_URL = "https://polymarket.com/api/geoblock";
 /** Require ask notional ≥ stake × buffer before attempting a FAK buy. */
@@ -1061,7 +1059,8 @@ export async function placeLiveTrades(
 
 export const config = {
   maxDuration: 60,
-  regions: [...POLYMARKET_SAFE_REGIONS],
+  // Literal only — Vercel config parser rejects spreads (Unhandled type: SpreadElement).
+  regions: ["dub1"],
 };
 
 export default {
