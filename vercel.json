@@ -73,10 +73,15 @@
       "memory": 256,
       "maxDuration": 60
     },
+    "api/live-trading-account.ts": {
+      "memory": 512,
+      "maxDuration": 30
+    },
     "api/ingest-polymarket.ts": {
       "memory": 256,
       "maxDuration": 10
     },
+
     "api/ingest-crypto.ts": {
       "memory": 256,
       "maxDuration": 10

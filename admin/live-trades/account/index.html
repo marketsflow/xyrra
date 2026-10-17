@@ -81,90 +81,157 @@
               <div>
                 <h1>Live Account</h1>
                 <p class="xa-templates__lede">
-                  Connect MetaMask (Polygon), then authenticate with Polymarket’s SDK to read CLOB
-                  collateral balance for the linked trading wallet.
+                  Automated trades use the <strong>always-on server wallet</strong> (private key in
+                  env). You do not need MetaMask connected for the bot to fire.
                 </p>
               </div>
               <div class="xa-polymarket__actions">
-                <button type="button" id="xa-live-refresh" class="xa-sent__ghost" disabled>
-                  Refresh
-                </button>
-                <button type="button" id="xa-live-disconnect" class="xa-sent__ghost" disabled>
-                  Disconnect
-                </button>
-                <button type="button" id="xa-live-connect" class="xa-admin__signout">
-                  Connect MetaMask
+                <button type="button" id="xa-bot-refresh" class="xa-admin__signout">
+                  Refresh bot wallet
                 </button>
               </div>
             </div>
 
-            <p id="xa-live-status" class="xa-users__status" aria-live="polite"></p>
-
-            <p id="xa-live-disconnected" class="xa-users__summary">
-              Not connected. MetaMask signs CLOB auth; funds sit on your Polymarket account wallet
-              (Safe / proxy / deposit), not necessarily the MetaMask address itself.
-            </p>
-
-            <div id="xa-live-connected" hidden>
+            <section class="xa-live-settings__section" aria-labelledby="xa-bot-title">
+              <div class="xa-live-settings__rules-header">
+                <h2 id="xa-bot-title" class="xa-polymarket__section-title">Always-on bot wallet</h2>
+                <span
+                  id="xa-bot-badge"
+                  class="xa-live-settings__badge xa-live-settings__badge--off"
+                  >Checking…</span
+                >
+              </div>
+              <p id="xa-bot-status" class="xa-users__status" aria-live="polite"></p>
               <div class="xa-accounts__summary" aria-live="polite">
                 <div class="xa-accounts__stat">
-                  <span class="xa-accounts__stat-label">MetaMask</span>
-                  <strong id="xa-live-metamask" class="xa-accounts__stat-value">—</strong>
-                </div>
-                <div class="xa-accounts__stat">
                   <span class="xa-accounts__stat-label">Signer</span>
-                  <strong id="xa-live-signer" class="xa-accounts__stat-value">—</strong>
+                  <strong id="xa-bot-signer" class="xa-accounts__stat-value">—</strong>
                 </div>
                 <div class="xa-accounts__stat">
                   <span class="xa-accounts__stat-label">Polymarket wallet</span>
-                  <strong id="xa-live-wallet" class="xa-accounts__stat-value">—</strong>
+                  <strong id="xa-bot-wallet" class="xa-accounts__stat-value">—</strong>
                 </div>
                 <div class="xa-accounts__stat">
                   <span class="xa-accounts__stat-label">Wallet type</span>
-                  <strong id="xa-live-wallet-type" class="xa-accounts__stat-value">—</strong>
+                  <strong id="xa-bot-wallet-type" class="xa-accounts__stat-value">—</strong>
                 </div>
                 <div class="xa-accounts__stat xa-accounts__stat--balance">
                   <span class="xa-accounts__stat-label">CLOB collateral</span>
-                  <strong id="xa-live-collateral" class="xa-accounts__stat-value xa-accounts__balance"
+                  <strong id="xa-bot-collateral" class="xa-accounts__stat-value xa-accounts__balance"
                     >—</strong
                   >
                 </div>
                 <div class="xa-accounts__stat">
                   <span class="xa-accounts__stat-label">Positions value</span>
-                  <strong id="xa-live-portfolio" class="xa-accounts__stat-value">—</strong>
+                  <strong id="xa-bot-portfolio" class="xa-accounts__stat-value">—</strong>
+                </div>
+                <div class="xa-accounts__stat">
+                  <span class="xa-accounts__stat-label">Next trade stake</span>
+                  <strong id="xa-bot-next-stake" class="xa-accounts__stat-value">—</strong>
                 </div>
                 <div class="xa-accounts__stat">
                   <span class="xa-accounts__stat-label">Updated</span>
-                  <strong id="xa-live-updated" class="xa-accounts__stat-value">—</strong>
+                  <strong id="xa-bot-updated" class="xa-accounts__stat-value">—</strong>
                 </div>
               </div>
-            </div>
-
-            <section class="xa-live__wallet-form" aria-labelledby="xa-live-wallet-title">
-              <h2 id="xa-live-wallet-title" class="xa-polymarket__section-title">
-                Polymarket account wallet (optional)
-              </h2>
-              <p class="xa-templates__lede">
-                If MetaMask alone resolves the wrong wallet, paste the address from
-                <a href="https://polymarket.com" target="_blank" rel="noreferrer">polymarket.com</a>
-                profile (the funder / deposit address). Leave blank to auto-detect via public profile
-                or the SDK deposit wallet.
+              <p id="xa-bot-next-confirm" class="xa-live-settings__confirm" role="status">
+                Next trade stake appears after the bot wallet connects.
               </p>
-              <div class="xa-live__wallet-row">
-                <label class="xa-live__wallet-label" for="xa-live-wallet-override">
-                  Account wallet
-                  <input
-                    id="xa-live-wallet-override"
-                    class="xa-live__wallet-input"
-                    type="text"
-                    spellcheck="false"
-                    autocomplete="off"
-                    placeholder="0x…"
-                  />
-                </label>
-                <button type="button" id="xa-live-apply-wallet" class="xa-sent__ghost">
-                  Apply &amp; reconnect
-                </button>
+              <p class="xa-live-settings__hint">
+                Configure <code>POLYMARKET_PRIVATE_KEY</code> and optionally
+                <code>POLYMARKET_WALLET_ADDRESS</code> in <code>.env.local</code> / Vercel env. Never
+                use a <code>VITE_</code> prefix for the private key.
+              </p>
+            </section>
+
+            <section class="xa-live-settings__section xa-live__browser-section" aria-labelledby="xa-mm-title">
+              <div class="xa-users__header">
+                <div>
+                  <h2 id="xa-mm-title" class="xa-polymarket__section-title">
+                    Browser viewer (optional)
+                  </h2>
+                  <p class="xa-templates__lede">
+                    MetaMask is only for comparing balances in this tab. Leaving or refreshing this
+                    page does <strong>not</strong> stop the always-on bot.
+                  </p>
+                </div>
+                <div class="xa-polymarket__actions">
+                  <button type="button" id="xa-live-refresh" class="xa-sent__ghost" disabled>
+                    Refresh
+                  </button>
+                  <button type="button" id="xa-live-disconnect" class="xa-sent__ghost" disabled>
+                    Disconnect
+                  </button>
+                  <button type="button" id="xa-live-connect" class="xa-sent__ghost">
+                    Connect MetaMask
+                  </button>
+                </div>
+              </div>
+
+              <p id="xa-live-status" class="xa-users__status" aria-live="polite"></p>
+
+              <p id="xa-live-disconnected" class="xa-users__summary">
+                MetaMask not connected in this browser tab.
+              </p>
+
+              <div id="xa-live-connected" hidden>
+                <div class="xa-accounts__summary" aria-live="polite">
+                  <div class="xa-accounts__stat">
+                    <span class="xa-accounts__stat-label">MetaMask</span>
+                    <strong id="xa-live-metamask" class="xa-accounts__stat-value">—</strong>
+                  </div>
+                  <div class="xa-accounts__stat">
+                    <span class="xa-accounts__stat-label">Signer</span>
+                    <strong id="xa-live-signer" class="xa-accounts__stat-value">—</strong>
+                  </div>
+                  <div class="xa-accounts__stat">
+                    <span class="xa-accounts__stat-label">Polymarket wallet</span>
+                    <strong id="xa-live-wallet" class="xa-accounts__stat-value">—</strong>
+                  </div>
+                  <div class="xa-accounts__stat">
+                    <span class="xa-accounts__stat-label">Wallet type</span>
+                    <strong id="xa-live-wallet-type" class="xa-accounts__stat-value">—</strong>
+                  </div>
+                  <div class="xa-accounts__stat xa-accounts__stat--balance">
+                    <span class="xa-accounts__stat-label">CLOB collateral</span>
+                    <strong
+                      id="xa-live-collateral"
+                      class="xa-accounts__stat-value xa-accounts__balance"
+                      >—</strong
+                    >
+                  </div>
+                  <div class="xa-accounts__stat">
+                    <span class="xa-accounts__stat-label">Positions value</span>
+                    <strong id="xa-live-portfolio" class="xa-accounts__stat-value">—</strong>
+                  </div>
+                  <div class="xa-accounts__stat">
+                    <span class="xa-accounts__stat-label">Updated</span>
+                    <strong id="xa-live-updated" class="xa-accounts__stat-value">—</strong>
+                  </div>
+                </div>
+              </div>
+
+              <div class="xa-live__wallet-form">
+                <h3 class="xa-polymarket__section-title">Polymarket account wallet (optional)</h3>
+                <p class="xa-templates__lede">
+                  Browser viewer only. The bot uses <code>POLYMARKET_WALLET_ADDRESS</code> from env.
+                </p>
+                <div class="xa-live__wallet-row">
+                  <label class="xa-live__wallet-label" for="xa-live-wallet-override">
+                    Account wallet
+                    <input
+                      id="xa-live-wallet-override"
+                      class="xa-live__wallet-input"
+                      type="text"
+                      spellcheck="false"
+                      autocomplete="off"
+                      placeholder="0x…"
+                    />
+                  </label>
+                  <button type="button" id="xa-live-apply-wallet" class="xa-sent__ghost">
+                    Apply &amp; reconnect
+                  </button>
+                </div>
               </div>
             </section>
           </div>

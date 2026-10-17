@@ -15,6 +15,7 @@ import { computeCryptoMovingAverages } from "./api/compute-crypto-ma";
 import { computeCryptoMomentum } from "./api/compute-crypto-momentum";
 import { computeCryptoSupportResistance } from "./api/compute-crypto-sr";
 import { computeCryptoPrice } from "./api/compute-crypto-price";
+import { fetchLiveTradingAccount } from "./api/live-trading-account";
 import { articleSeoPlugin } from "./vite/article-seo-plugin";
 import { renderArticlesResponse } from "./api/articles-page";
 
@@ -191,6 +192,27 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
           });
           if (result.success) {
             writeJson(res, 200, { success: true, id: result.id });
+            return;
+          }
+          writeJson(res, result.status ?? 500, { success: false, message: result.message });
+          return;
+        }
+        if (path === "/api/live-trading-account") {
+          if (req.method !== "GET" && req.method !== "POST") {
+            writeJson(res, 405, { success: false, message: "Method not allowed" });
+            return;
+          }
+          const result = await fetchLiveTradingAccount(
+            {
+              SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+              SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY,
+              POLYMARKET_PRIVATE_KEY: env.POLYMARKET_PRIVATE_KEY,
+              POLYMARKET_WALLET_ADDRESS: env.POLYMARKET_WALLET_ADDRESS,
+            },
+            headerValue(req.headers.authorization),
+          );
+          if (result.success) {
+            writeJson(res, 200, { success: true, account: result.account });
             return;
           }
           writeJson(res, result.status ?? 500, { success: false, message: result.message });

@@ -96,6 +96,55 @@ async function ensurePolygon(provider: EthereumProvider) {
   }
 }
 
+async function walletFromProvider(
+  provider: EthereumProvider,
+  rawAddress: string,
+): Promise<{
+  address: Address;
+  walletClient: WalletClient;
+  provider: EthereumProvider;
+}> {
+  try {
+    await ensurePolygon(provider);
+  } catch (error) {
+    throw new Error(formatUnknownError(error, "Unable to switch MetaMask to Polygon."));
+  }
+
+  const address = getAddress(rawAddress);
+  const walletClient = createWalletClient({
+    account: address,
+    chain: polygon,
+    transport: custom(provider),
+  });
+
+  return { address, walletClient, provider };
+}
+
+/**
+ * Resume an already-authorized MetaMask session without a permission popup.
+ * Returns null if MetaMask is locked or this site has no accounts yet.
+ */
+export async function tryResumeMetaMask(): Promise<{
+  address: Address;
+  walletClient: WalletClient;
+  provider: EthereumProvider;
+} | null> {
+  const provider = getEthereumProvider();
+  if (!provider) return null;
+
+  let accounts: string[];
+  try {
+    accounts = (await provider.request({ method: "eth_accounts" })) as string[];
+  } catch {
+    return null;
+  }
+
+  const raw = accounts[0];
+  if (!raw) return null;
+
+  return walletFromProvider(provider, raw);
+}
+
 export async function connectMetaMask(): Promise<{
   address: Address;
   walletClient: WalletClient;
@@ -121,18 +170,5 @@ export async function connectMetaMask(): Promise<{
     throw new Error("No MetaMask account was selected.");
   }
 
-  try {
-    await ensurePolygon(provider);
-  } catch (error) {
-    throw new Error(formatUnknownError(error, "Unable to switch MetaMask to Polygon."));
-  }
-
-  const address = getAddress(raw);
-  const walletClient = createWalletClient({
-    account: address,
-    chain: polygon,
-    transport: custom(provider),
-  });
-
-  return { address, walletClient, provider };
+  return walletFromProvider(provider, raw);
 }

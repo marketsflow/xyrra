@@ -2772,6 +2772,10 @@ body.xa-body {
   color: #1f1b2e;
 }
 
+.xa-live__browser-section {
+  margin-top: 1.5rem;
+}
+
 .xa-live__wallet-form {
   margin-top: 1.75rem;
 }

@@ -119,20 +119,16 @@
               <h2 id="xa-live-roadmap-title" class="xa-polymarket__section-title">Structure</h2>
               <ol class="xa-live__steps">
                 <li>
-                  <strong>Account</strong> — browser MetaMask +
-                  <code>createSecureClient</code> + collateral balance.
+                  <strong>Account</strong> — always-on server wallet (<code>POLYMARKET_PRIVATE_KEY</code>)
+                  for balances + future orders; MetaMask is optional viewing only.
                 </li>
                 <li>
-                  <strong>Settings (now)</strong> — automation on/off, stake, allowed signal rules,
-                  max opens, daily loss kill switch.
+                  <strong>Settings</strong> — automation on/off, % of collateral, signal rules, loss
+                  limits.
                 </li>
                 <li>
                   <strong>Place / View (next)</strong> — same signal flow as Virtual Trades, posting real
-                  CLOB orders through the shared client layer.
-                </li>
-                <li>
-                  <strong>Bot (later)</strong> — server-side signer with a private key / session key; never
-                  expose keys in the browser.
+                  CLOB orders via the server signer (no MetaMask reconnect).
                 </li>
               </ol>
             </section>
