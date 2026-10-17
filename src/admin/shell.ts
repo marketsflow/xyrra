@@ -13,6 +13,7 @@ export type AdminNavId =
   | "polymarket"
   | "polymarket-crypto-prices"
   | "virtual-trades"
+  | "virtual-trades-simulation"
   | "accounts"
   | "live-trades"
   | "live-trades-account"
