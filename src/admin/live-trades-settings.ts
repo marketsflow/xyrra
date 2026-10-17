@@ -1,3 +1,4 @@
+import type { PositionSizingMode } from "../lib/polymarket/position-size";
 import { requireAdminSession, setAdminLoading } from "./auth-guard";
 import { initAdminShell } from "./shell";
 
@@ -7,7 +8,9 @@ const SIGNAL_RULE_MAX = 21;
 type LiveTradeSettings = {
   id: number;
   automation_enabled: boolean;
+  position_sizing_mode: PositionSizingMode;
   position_size_usd: number;
+  position_size_pct: number;
   max_open_trades: number;
   daily_loss_limit_usd: number | null;
   allowed_signal_rules: number[];
@@ -29,6 +32,10 @@ function asString(value: unknown): string | null {
   if (typeof value !== "string") return null;
   const trimmed = value.trim();
   return trimmed ? trimmed : null;
+}
+
+function asSizingMode(value: unknown): PositionSizingMode {
+  return value === "percent_collateral" ? "percent_collateral" : "fixed_usd";
 }
 
 function setStatus(message: string, isError = false) {
@@ -61,7 +68,9 @@ function mapSettings(row: Record<string, unknown>): LiveTradeSettings {
   return {
     id: asNumber(row.id) ?? 1,
     automation_enabled: Boolean(row.automation_enabled),
+    position_sizing_mode: asSizingMode(row.position_sizing_mode),
     position_size_usd: asNumber(row.position_size_usd) ?? 1,
+    position_size_pct: asNumber(row.position_size_pct) ?? 10,
     max_open_trades: asNumber(row.max_open_trades) ?? 1,
     daily_loss_limit_usd: asNumber(row.daily_loss_limit_usd),
     allowed_signal_rules: rules,
@@ -101,9 +110,42 @@ function setAllRules(checked: boolean) {
   });
 }
 
+function readSizingMode(): PositionSizingMode {
+  const checked = document.querySelector<HTMLInputElement>(
+    'input[name="position-sizing-mode"]:checked',
+  );
+  return asSizingMode(checked?.value);
+}
+
+function syncSizingModeUi(mode: PositionSizingMode) {
+  const fixedWrap = $("xa-live-settings-position-wrap");
+  const pctWrap = $("xa-live-settings-pct-wrap");
+  const fixedInput = $("xa-live-settings-position") as HTMLInputElement | null;
+  const pctInput = $("xa-live-settings-pct") as HTMLInputElement | null;
+  const fixedRadio = $("xa-live-settings-mode-fixed") as HTMLInputElement | null;
+  const pctRadio = $("xa-live-settings-mode-pct") as HTMLInputElement | null;
+  const hint = $("xa-live-settings-size-hint");
+
+  if (fixedRadio) fixedRadio.checked = mode === "fixed_usd";
+  if (pctRadio) pctRadio.checked = mode === "percent_collateral";
+
+  const isPct = mode === "percent_collateral";
+  fixedWrap?.toggleAttribute("hidden", isPct);
+  pctWrap?.toggleAttribute("hidden", !isPct);
+  if (fixedInput) fixedInput.required = !isPct;
+  if (pctInput) pctInput.required = isPct;
+
+  if (hint) {
+    hint.textContent = isPct
+      ? "Percent mode stakes position_size_pct of current CLOB collateral at order time (enter 10 for 10% — e.g. $0.47 when collateral is $4.71)."
+      : "Fixed mode stakes the same USD each time. Daily loss limit is a kill switch once the bot is live.";
+  }
+}
+
 function fillForm(settings: LiveTradeSettings) {
   const automation = $("xa-live-settings-automation") as HTMLInputElement | null;
   const position = $("xa-live-settings-position") as HTMLInputElement | null;
+  const pct = $("xa-live-settings-pct") as HTMLInputElement | null;
   const maxOpen = $("xa-live-settings-max-open") as HTMLInputElement | null;
   const dailyLoss = $("xa-live-settings-daily-loss") as HTMLInputElement | null;
   const notes = $("xa-live-settings-notes") as HTMLTextAreaElement | null;
@@ -112,6 +154,7 @@ function fillForm(settings: LiveTradeSettings) {
 
   if (automation) automation.checked = settings.automation_enabled;
   if (position) position.value = String(settings.position_size_usd);
+  if (pct) pct.value = String(settings.position_size_pct);
   if (maxOpen) maxOpen.value = String(settings.max_open_trades);
   if (dailyLoss) {
     dailyLoss.value =
@@ -121,6 +164,7 @@ function fillForm(settings: LiveTradeSettings) {
   if (rulesEl) renderRuleCheckboxes(rulesEl, settings.allowed_signal_rules);
   if (updatedEl) updatedEl.textContent = formatUpdatedAt(settings.updated_at);
 
+  syncSizingModeUi(settings.position_sizing_mode);
   updateAutomationBadge(settings.automation_enabled);
 }
 
@@ -134,7 +178,9 @@ function updateAutomationBadge(enabled: boolean) {
 
 function readForm(): {
   automation_enabled: boolean;
+  position_sizing_mode: PositionSizingMode;
   position_size_usd: number;
+  position_size_pct: number;
   max_open_trades: number;
   daily_loss_limit_usd: number | null;
   allowed_signal_rules: number[];
@@ -142,18 +188,26 @@ function readForm(): {
 } {
   const automation = $("xa-live-settings-automation") as HTMLInputElement | null;
   const positionEl = $("xa-live-settings-position") as HTMLInputElement | null;
+  const pctEl = $("xa-live-settings-pct") as HTMLInputElement | null;
   const maxOpenEl = $("xa-live-settings-max-open") as HTMLInputElement | null;
   const dailyLossEl = $("xa-live-settings-daily-loss") as HTMLInputElement | null;
   const notesEl = $("xa-live-settings-notes") as HTMLTextAreaElement | null;
 
+  const position_sizing_mode = readSizingMode();
   const position_size_usd = asNumber(positionEl?.value);
+  const position_size_pct = asNumber(pctEl?.value);
   const max_open_trades = asNumber(maxOpenEl?.value);
   const dailyRaw = dailyLossEl?.value.trim() ?? "";
   const daily_loss_limit_usd = dailyRaw === "" ? null : asNumber(dailyRaw);
 
-  if (position_size_usd === null || position_size_usd <= 0) {
-    throw new Error("Position size must be a positive dollar amount.");
+  if (position_sizing_mode === "fixed_usd") {
+    if (position_size_usd === null || position_size_usd <= 0) {
+      throw new Error("Position size must be a positive dollar amount.");
+    }
+  } else if (position_size_pct === null || position_size_pct <= 0 || position_size_pct > 100) {
+    throw new Error("Position size percent must be between 0.01 and 100 (e.g. 10 for 10%).");
   }
+
   if (max_open_trades === null || max_open_trades < 1 || max_open_trades > 50) {
     throw new Error("Max open trades must be between 1 and 50.");
   }
@@ -163,13 +217,19 @@ function readForm(): {
 
   return {
     automation_enabled: Boolean(automation?.checked),
-    position_size_usd,
+    position_sizing_mode,
+    // Keep both values so switching modes later restores the last entry.
+    position_size_usd: position_size_usd ?? 1,
+    position_size_pct: position_size_pct ?? 10,
     max_open_trades: Math.floor(max_open_trades),
     daily_loss_limit_usd,
     allowed_signal_rules: readSelectedRules(),
     notes: asString(notesEl?.value ?? ""),
   };
 }
+
+const SETTINGS_SELECT =
+  "id, automation_enabled, position_sizing_mode, position_size_usd, position_size_pct, max_open_trades, daily_loss_limit_usd, allowed_signal_rules, notes, updated_at";
 
 async function init() {
   const session = await requireAdminSession();
@@ -179,20 +239,19 @@ async function init() {
 
   const rulesEl = $("xa-live-settings-rules");
   if (rulesEl) renderRuleCheckboxes(rulesEl, []);
+  syncSizingModeUi("fixed_usd");
 
   setStatus("Loading settings…");
 
   const { data, error } = await session.supabase
     .from("live_trade_settings")
-    .select(
-      "id, automation_enabled, position_size_usd, max_open_trades, daily_loss_limit_usd, allowed_signal_rules, notes, updated_at",
-    )
+    .select(SETTINGS_SELECT)
     .eq("id", 1)
     .maybeSingle();
 
   if (error) {
     setStatus(
-      `Unable to load settings: ${error.message}. Apply migration 20261017120000_live_trade_settings.sql if needed.`,
+      `Unable to load settings: ${error.message}. Apply migrations 20261017120000 and 20261017130000 if needed.`,
       true,
     );
     setAdminLoading(false);
@@ -200,7 +259,7 @@ async function init() {
   }
 
   if (!data) {
-    setStatus("No settings row found. Run the live_trade_settings migration.", true);
+    setStatus("No settings row found. Run the live_trade_settings migrations.", true);
     setAdminLoading(false);
     return;
   }
@@ -218,6 +277,12 @@ async function init() {
   $("xa-live-settings-automation")?.addEventListener("change", (event) => {
     const target = event.target as HTMLInputElement;
     updateAutomationBadge(target.checked);
+  });
+
+  document.querySelectorAll<HTMLInputElement>('input[name="position-sizing-mode"]').forEach((el) => {
+    el.addEventListener("change", () => {
+      syncSizingModeUi(readSizingMode());
+    });
   });
 
   const form = $("xa-live-settings-form") as HTMLFormElement | null;
@@ -239,26 +304,30 @@ async function init() {
           .from("live_trade_settings")
           .update({
             automation_enabled: payload.automation_enabled,
+            position_sizing_mode: payload.position_sizing_mode,
             position_size_usd: payload.position_size_usd,
+            position_size_pct: payload.position_size_pct,
             max_open_trades: payload.max_open_trades,
             daily_loss_limit_usd: payload.daily_loss_limit_usd,
             allowed_signal_rules: payload.allowed_signal_rules,
             notes: payload.notes,
           })
           .eq("id", 1)
-          .select(
-            "id, automation_enabled, position_size_usd, max_open_trades, daily_loss_limit_usd, allowed_signal_rules, notes, updated_at",
-          )
+          .select(SETTINGS_SELECT)
           .maybeSingle();
 
         if (saveError) throw new Error(saveError.message);
         if (!saved) throw new Error("Save succeeded but no row was returned.");
 
         fillForm(mapSettings(saved as Record<string, unknown>));
+        const sizeNote =
+          payload.position_sizing_mode === "percent_collateral"
+            ? `${payload.position_size_pct}% of CLOB collateral`
+            : `$${payload.position_size_usd.toFixed(2)} fixed`;
         setStatus(
           payload.automation_enabled
-            ? "Saved. Automation is ON — live bot will respect these rules once Place/View is wired."
-            : "Saved. Automation is OFF.",
+            ? `Saved. Automation ON · sizing ${sizeNote}.`
+            : `Saved. Automation OFF · sizing ${sizeNote}.`,
         );
       } catch (err) {
         const msg = err instanceof Error ? err.message : "Unable to save settings.";

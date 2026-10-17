@@ -2875,11 +2875,41 @@ body.xa-body {
   line-height: 1.45;
 }
 
+.xa-live-settings__mode {
+  margin: 0.35rem 0 0;
+  padding: 0;
+  border: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem 1.25rem;
+}
+
+.xa-live-settings__mode-legend {
+  width: 100%;
+  margin: 0 0 0.35rem;
+  padding: 0;
+  color: var(--xa-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.xa-live-settings__mode-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #1f1b2e;
+  cursor: pointer;
+}
+
 .xa-live-settings__grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
   gap: 0.85rem;
-  margin-top: 0.5rem;
+  margin-top: 0.85rem;
 }
 
 .xa-live-settings__rules-header {
