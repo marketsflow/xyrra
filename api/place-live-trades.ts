@@ -9,15 +9,12 @@
  * Env: SUPABASE_*, POLYMARKET_PRIVATE_KEY, optional POLYMARKET_WALLET_ADDRESS.
  */
 
-import { AssetType, OrderSide } from "@polymarket/client";
+import { AssetType, createSecureClient, OrderSide } from "@polymarket/client";
 import {
   fetchBalanceAllowance,
   updateBalanceAllowance,
 } from "@polymarket/client/actions";
-import {
-  getServerPolymarketClient,
-  type ServerPolymarketEnv,
-} from "../lib/server-polymarket-client";
+import { privateKey } from "@polymarket/client/viem";
 
 const WINDOW_SEC = 4 * 60 * 60;
 const ANALYSIS_TIMEFRAME = 240;
@@ -26,12 +23,70 @@ const DEFAULT_POSITION_SIZE_PCT = 10;
 const COLLATERAL_SCALE = 10n ** 6n;
 const MIN_STAKE_USD = 0.1;
 
-export type PlaceLiveTradesEnv = ServerPolymarketEnv & {
+export type PlaceLiveTradesEnv = {
   SUPABASE_URL?: string;
   SUPABASE_ANON_KEY?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
   CRON_SECRET?: string;
+  POLYMARKET_PRIVATE_KEY?: string;
+  POLYMARKET_WALLET_ADDRESS?: string;
 };
+
+type SecureClientInstance = Awaited<ReturnType<typeof createSecureClient>>;
+
+let cachedClient: SecureClientInstance | null = null;
+let cachedFingerprint: string | null = null;
+
+/** Self-contained — no relative imports (Vercel ESM + type:module). */
+function normalizePrivateKey(raw: string): string {
+  let value = raw.trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1).trim();
+  }
+  value = value.replace(/\s+/g, "");
+  if (!value) return "";
+  const words = raw.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 12) {
+    throw new Error(
+      "POLYMARKET_PRIVATE_KEY looks like a seed phrase. Use the MetaMask account private key, not the recovery phrase.",
+    );
+  }
+  const hex = value.startsWith("0x") || value.startsWith("0X") ? value.slice(2) : value;
+  if (!/^[0-9a-fA-F]+$/.test(hex)) {
+    throw new Error("POLYMARKET_PRIVATE_KEY must be hex (0-9, a-f).");
+  }
+  if (hex.length !== 64) {
+    throw new Error(
+      `POLYMARKET_PRIVATE_KEY must be 64 hex chars. Got ${hex.length}.`,
+    );
+  }
+  return `0x${hex.toLowerCase()}`;
+}
+
+async function getServerPolymarketClient(
+  env: PlaceLiveTradesEnv,
+): Promise<SecureClientInstance> {
+  const keyRaw = env.POLYMARKET_PRIVATE_KEY?.trim() || "";
+  if (!keyRaw) {
+    throw new Error("POLYMARKET_PRIVATE_KEY is not set.");
+  }
+  const key = normalizePrivateKey(keyRaw);
+  const wallet = env.POLYMARKET_WALLET_ADDRESS?.trim() || "";
+  const fingerprint = `${key.slice(0, 10)}:${key.length}:${wallet.toLowerCase()}`;
+  if (cachedClient && cachedFingerprint === fingerprint) {
+    return cachedClient;
+  }
+  const client = await createSecureClient({
+    signer: privateKey(key),
+    ...(wallet ? { wallet } : {}),
+  });
+  cachedClient = client;
+  cachedFingerprint = fingerprint;
+  return client;
+}
 
 type LiveSettings = {
   automationEnabled: boolean;
