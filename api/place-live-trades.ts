@@ -9,15 +9,15 @@
  * Env: SUPABASE_*, POLYMARKET_PRIVATE_KEY, optional POLYMARKET_WALLET_ADDRESS.
  */
 
-import { AssetType, OrderSide, OrderType } from "@polymarket/client";
+import { AssetType, OrderSide } from "@polymarket/client";
 import {
   fetchBalanceAllowance,
   updateBalanceAllowance,
 } from "@polymarket/client/actions";
 import {
   getServerPolymarketClient,
-  type LiveTradingAccountEnv,
-} from "./live-trading-account";
+  type ServerPolymarketEnv,
+} from "../lib/server-polymarket-client";
 
 const WINDOW_SEC = 4 * 60 * 60;
 const ANALYSIS_TIMEFRAME = 240;
@@ -26,7 +26,9 @@ const DEFAULT_POSITION_SIZE_PCT = 10;
 const COLLATERAL_SCALE = 10n ** 6n;
 const MIN_STAKE_USD = 0.1;
 
-export type PlaceLiveTradesEnv = LiveTradingAccountEnv & {
+export type PlaceLiveTradesEnv = ServerPolymarketEnv & {
+  SUPABASE_URL?: string;
+  SUPABASE_ANON_KEY?: string;
   SUPABASE_SERVICE_ROLE_KEY?: string;
   CRON_SECRET?: string;
 };
@@ -739,11 +741,11 @@ export async function placeLiveTrades(
     }
 
     try {
+      // Default orderType is FAK (fill-and-kill) — partial fills OK on thin books.
       const response = await client.placeMarketOrder({
         assetId: tokenId,
         amount: stakeUsd,
         side: OrderSide.BUY,
-        orderType: OrderType.FAK,
       });
 
       if (!response.ok) {

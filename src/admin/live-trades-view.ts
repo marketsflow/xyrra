@@ -381,11 +381,19 @@ async function init() {
             "Content-Type": "application/json",
           },
         });
-        const body = (await res.json()) as {
+        const raw = await res.text();
+        let body: {
           success?: boolean;
           message?: string;
           action?: string;
-        };
+        } = {};
+        try {
+          body = raw ? (JSON.parse(raw) as typeof body) : {};
+        } catch {
+          throw new Error(
+            raw.trim().slice(0, 240) || `Bot returned non-JSON (${res.status})`,
+          );
+        }
         if (!res.ok || body.success === false) {
           throw new Error(body.message || `Bot returned ${res.status}`);
         }

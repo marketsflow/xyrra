@@ -224,22 +224,28 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
             writeJson(res, 405, { success: false, message: "Method not allowed" });
             return;
           }
-          const result = await placeLiveTrades(
-            {
-              SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
-              SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY,
-              SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
-              CRON_SECRET: env.CRON_SECRET,
-              POLYMARKET_PRIVATE_KEY: env.POLYMARKET_PRIVATE_KEY,
-              POLYMARKET_WALLET_ADDRESS: env.POLYMARKET_WALLET_ADDRESS,
-            },
-            headerValue(req.headers.authorization),
-          );
-          if (result.success) {
-            writeJson(res, 200, result);
-            return;
+          try {
+            const result = await placeLiveTrades(
+              {
+                SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+                SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY,
+                SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+                CRON_SECRET: env.CRON_SECRET,
+                POLYMARKET_PRIVATE_KEY: env.POLYMARKET_PRIVATE_KEY,
+                POLYMARKET_WALLET_ADDRESS: env.POLYMARKET_WALLET_ADDRESS,
+              },
+              headerValue(req.headers.authorization),
+            );
+            if (result.success) {
+              writeJson(res, 200, result);
+              return;
+            }
+            writeJson(res, result.status ?? 500, { success: false, message: result.message });
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : "place-live-trades failed";
+            writeJson(res, 500, { success: false, message });
           }
-          writeJson(res, result.status ?? 500, { success: false, message: result.message });
           return;
         }
         if (path === "/api/ingest-polymarket") {
