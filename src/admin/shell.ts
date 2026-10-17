@@ -13,7 +13,9 @@ export type AdminNavId =
   | "polymarket"
   | "polymarket-crypto-prices"
   | "virtual-trades"
-  | "accounts";
+  | "accounts"
+  | "live-trades"
+  | "live-trades-account";
 
 export function initAdminShell(session: AdminSession, activeNav: AdminNavId) {
   const emailEl = document.getElementById("xa-admin-email");

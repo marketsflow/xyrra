@@ -2751,3 +2751,66 @@ body.xa-body {
   font-size: 1.35rem;
   font-weight: 700;
 }
+
+.xa-live__roadmap {
+  margin-top: 1.75rem;
+}
+
+.xa-live__steps {
+  margin: 0.75rem 0 0;
+  padding-left: 1.25rem;
+  color: var(--xa-muted);
+  font-size: 0.9rem;
+  line-height: 1.55;
+}
+
+.xa-live__steps li + li {
+  margin-top: 0.55rem;
+}
+
+.xa-live__steps strong {
+  color: #1f1b2e;
+}
+
+.xa-live__wallet-form {
+  margin-top: 1.75rem;
+}
+
+.xa-live__wallet-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+  align-items: flex-end;
+  margin-top: 0.85rem;
+}
+
+.xa-live__wallet-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1 1 18rem;
+  color: var(--xa-muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.xa-live__wallet-input {
+  width: 100%;
+  padding: 0.65rem 0.8rem;
+  border: 1px solid #e0deed;
+  border-radius: 0.65rem;
+  background: #fff;
+  color: #1f1b2e;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 0.85rem;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.xa-live__wallet-input:focus {
+  outline: 2px solid rgba(37, 99, 235, 0.35);
+  outline-offset: 1px;
+}

@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#f8f9fd" />
+    <title>Live Account | Admin | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/admin/admin.css" />
+  </head>
+  <body class="xa-body">
+    <div id="xa-admin-loading" class="xa-loading" role="status" aria-live="polite">
+      Checking session…
+    </div>
+
+    <div class="xa-admin" id="xa-admin-app" hidden>
+      <header class="xa-admin__bar">
+        <a class="xa-brand" href="/admin/" aria-label="Xyrra admin home">
+          <img src="/images/new/xyrra-logo.png" alt="" width="954" height="115" decoding="async" />
+        </a>
+        <div class="xa-admin__bar-actions">
+          <div class="xa-admin__meta">
+            <strong id="xa-admin-email">…</strong>
+            <span id="xa-admin-role">…</span>
+          </div>
+          <button type="button" id="xa-admin-signout" class="xa-admin__signout">Sign out</button>
+        </div>
+      </header>
+
+      <div class="xa-admin__layout">
+        <aside class="xa-admin__sidebar" aria-label="Admin navigation">
+          <nav class="xa-admin__nav">
+            <a class="xa-admin__nav-link" data-xa-nav="dashboard" href="/admin/">Dashboard</a>
+            <a class="xa-admin__nav-link" data-xa-nav="users" href="/admin/users/">Users</a>
+            <a class="xa-admin__nav-link" data-xa-nav="articles" href="/admin/articles/">Articles</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-templates" href="/admin/email-templates/">Email Templates</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-lists" href="/admin/email-lists/">Email Lists</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-outreach" href="/admin/email-outreach/">Email Outreach</a>
+            <a class="xa-admin__nav-link" data-xa-nav="emails-sent" href="/admin/emails-sent/">Emails Sent</a>
+            <a class="xa-admin__nav-link" data-xa-nav="stock-prices" href="/admin/stock-prices/">Stock Prices</a>
+            <a class="xa-admin__nav-link" data-xa-nav="polymarket" href="/admin/polymarket/">Polymarket</a>
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="polymarket-crypto-prices"
+              href="/admin/polymarket/crypto-prices/"
+              >Crypto Prices</a
+            >
+            <a class="xa-admin__nav-link" data-xa-nav="virtual-trades" href="/admin/virtual-trades/">Virtual Trades</a>
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="accounts"
+              href="/admin/accounts/"
+              >Accounts</a
+            >
+            <a class="xa-admin__nav-link" data-xa-nav="live-trades" href="/admin/live-trades/">Live Trades</a>
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="live-trades-account"
+              href="/admin/live-trades/account/"
+              >Account</a
+            >
+          </nav>
+        </aside>
+
+        <main class="xa-admin__main">
+          <div class="xa-admin__panel">
+            <div class="xa-users__header">
+              <div>
+                <h1>Live Account</h1>
+                <p class="xa-templates__lede">
+                  Connect MetaMask (Polygon), then authenticate with Polymarket’s SDK to read CLOB
+                  collateral balance for the linked trading wallet.
+                </p>
+              </div>
+              <div class="xa-polymarket__actions">
+                <button type="button" id="xa-live-refresh" class="xa-sent__ghost" disabled>
+                  Refresh
+                </button>
+                <button type="button" id="xa-live-disconnect" class="xa-sent__ghost" disabled>
+                  Disconnect
+                </button>
+                <button type="button" id="xa-live-connect" class="xa-admin__signout">
+                  Connect MetaMask
+                </button>
+              </div>
+            </div>
+
+            <p id="xa-live-status" class="xa-users__status" aria-live="polite"></p>
+
+            <p id="xa-live-disconnected" class="xa-users__summary">
+              Not connected. MetaMask signs CLOB auth; funds sit on your Polymarket account wallet
+              (Safe / proxy / deposit), not necessarily the MetaMask address itself.
+            </p>
+
+            <div id="xa-live-connected" hidden>
+              <div class="xa-accounts__summary" aria-live="polite">
+                <div class="xa-accounts__stat">
+                  <span class="xa-accounts__stat-label">MetaMask</span>
+                  <strong id="xa-live-metamask" class="xa-accounts__stat-value">—</strong>
+                </div>
+                <div class="xa-accounts__stat">
+                  <span class="xa-accounts__stat-label">Signer</span>
+                  <strong id="xa-live-signer" class="xa-accounts__stat-value">—</strong>
+                </div>
+                <div class="xa-accounts__stat">
+                  <span class="xa-accounts__stat-label">Polymarket wallet</span>
+                  <strong id="xa-live-wallet" class="xa-accounts__stat-value">—</strong>
+                </div>
+                <div class="xa-accounts__stat">
+                  <span class="xa-accounts__stat-label">Wallet type</span>
+                  <strong id="xa-live-wallet-type" class="xa-accounts__stat-value">—</strong>
+                </div>
+                <div class="xa-accounts__stat xa-accounts__stat--balance">
+                  <span class="xa-accounts__stat-label">CLOB collateral</span>
+                  <strong id="xa-live-collateral" class="xa-accounts__stat-value xa-accounts__balance"
+                    >—</strong
+                  >
+                </div>
+                <div class="xa-accounts__stat">
+                  <span class="xa-accounts__stat-label">Positions value</span>
+                  <strong id="xa-live-portfolio" class="xa-accounts__stat-value">—</strong>
+                </div>
+                <div class="xa-accounts__stat">
+                  <span class="xa-accounts__stat-label">Updated</span>
+                  <strong id="xa-live-updated" class="xa-accounts__stat-value">—</strong>
+                </div>
+              </div>
+            </div>
+
+            <section class="xa-live__wallet-form" aria-labelledby="xa-live-wallet-title">
+              <h2 id="xa-live-wallet-title" class="xa-polymarket__section-title">
+                Polymarket account wallet (optional)
+              </h2>
+              <p class="xa-templates__lede">
+                If MetaMask alone resolves the wrong wallet, paste the address from
+                <a href="https://polymarket.com" target="_blank" rel="noreferrer">polymarket.com</a>
+                profile (the funder / deposit address). Leave blank to auto-detect via public profile
+                or the SDK deposit wallet.
+              </p>
+              <div class="xa-live__wallet-row">
+                <label class="xa-live__wallet-label" for="xa-live-wallet-override">
+                  Account wallet
+                  <input
+                    id="xa-live-wallet-override"
+                    class="xa-live__wallet-input"
+                    type="text"
+                    spellcheck="false"
+                    autocomplete="off"
+                    placeholder="0x…"
+                  />
+                </label>
+                <button type="button" id="xa-live-apply-wallet" class="xa-sent__ghost">
+                  Apply &amp; reconnect
+                </button>
+              </div>
+            </section>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/src/admin/live-trades-account.ts"></script>
+  </body>
+</html>
