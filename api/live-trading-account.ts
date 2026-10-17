@@ -120,6 +120,11 @@ function normalizePrivateKey(raw: string): string {
     );
   }
   if (hex.length !== 64) {
+    if (hex.length === 40) {
+      throw new Error(
+        "POLYMARKET_PRIVATE_KEY looks like a wallet address (40 hex chars). Put the address in POLYMARKET_WALLET_ADDRESS instead. For the private key: MetaMask → Account details → Show private key (64 hex chars / 0x + 64).",
+      );
+    }
     throw new Error(
       `POLYMARKET_PRIVATE_KEY must be 32 bytes (64 hex chars). Got ${hex.length} hex chars after cleanup — re-copy Show private key from MetaMask.`,
     );

@@ -59,6 +59,11 @@ function normalizePrivateKey(raw: string): string {
     throw new Error("POLYMARKET_PRIVATE_KEY must be hex (0-9, a-f).");
   }
   if (hex.length !== 64) {
+    if (hex.length === 40) {
+      throw new Error(
+        "POLYMARKET_PRIVATE_KEY looks like a wallet address. Use Show private key (64 hex), and put the address in POLYMARKET_WALLET_ADDRESS.",
+      );
+    }
     throw new Error(
       `POLYMARKET_PRIVATE_KEY must be 64 hex chars. Got ${hex.length}.`,
     );
@@ -376,30 +381,44 @@ async function loadExistingTrade(
   return { id, status };
 }
 
-async function countOpenTrades(
+function windowStartSecFromSlug(slug: string): number | null {
+  const match = /^btc-updown-4h-(\d+)$/.exec(slug);
+  if (!match) return null;
+  const sec = Number(match[1]);
+  return Number.isFinite(sec) ? sec : null;
+}
+
+/** True while the Polymarket 4h window is still running (not past end). */
+function isMarketWindowActive(marketSlug: string, nowMs = Date.now()): boolean {
+  const start = windowStartSecFromSlug(marketSlug);
+  if (start === null) return true; // unknown slug — treat as active for safety
+  return (start + WINDOW_SEC) * 1000 > nowMs;
+}
+
+/**
+ * Count OPEN trades whose 4h window is still active.
+ * Prior-period OPEN rows (settlement lag) must NOT block the next window's signal.
+ * One trade per market_slug is still enforced by unique index / already_exists.
+ */
+async function countActiveOpenTrades(
   supabaseUrl: string,
   serviceKey: string,
 ): Promise<number> {
   const res = await fetch(
-    `${supabaseUrl}/rest/v1/live_trades?select=id&status=eq.OPEN`,
-    {
-      headers: {
-        ...restHeaders(serviceKey),
-        Prefer: "count=exact",
-        Range: "0-0",
-      },
-    },
+    `${supabaseUrl}/rest/v1/live_trades?select=id,market_slug&status=eq.OPEN&order=timestamp.desc&limit=50`,
+    { headers: restHeaders(serviceKey) },
   );
   if (!res.ok) {
-    throw new Error(`Failed to count open live_trades: ${(await res.text()).slice(0, 300)}`);
+    throw new Error(`Failed to load open live_trades: ${(await res.text()).slice(0, 300)}`);
   }
-  const range = res.headers.get("content-range");
-  if (range) {
-    const match = /\/(\d+)$/.exec(range);
-    if (match) return Number(match[1]);
+  const rows = (await res.json()) as Array<{ market_slug?: unknown }>;
+  let count = 0;
+  for (const row of rows) {
+    const slug = asString(row.market_slug);
+    if (!slug) continue;
+    if (isMarketWindowActive(slug)) count += 1;
   }
-  const rows = (await res.json()) as unknown[];
-  return Array.isArray(rows) ? rows.length : 0;
+  return count;
 }
 
 async function sumTodayRealizedLossUsd(
@@ -686,12 +705,14 @@ export async function placeLiveTrades(
       };
     }
 
-    const openCount = await countOpenTrades(supabaseUrl, serviceKey);
+    // Only count OPEN trades in still-active windows. A previous 4h trade that
+    // hasn't settled yet (lag) must not block placing the current window.
+    const openCount = await countActiveOpenTrades(supabaseUrl, serviceKey);
     if (openCount >= settings.maxOpenTrades) {
       return {
         success: true,
         action: "risk_blocked",
-        message: `Max open trades reached (${openCount}/${settings.maxOpenTrades}).`,
+        message: `Max active open trades reached (${openCount}/${settings.maxOpenTrades}).`,
         marketSlug,
       };
     }
