@@ -3,6 +3,7 @@
   "buildCommand": "npm run build",
   "outputDirectory": "dist",
   "framework": "vite",
+  "regions": ["dub1"],
   "redirects": [
     { "source": "/new", "destination": "/", "permanent": true },
     { "source": "/new/", "destination": "/", "permanent": true },
@@ -75,7 +76,8 @@
     },
     "api/live-trading-account.ts": {
       "memory": 1024,
-      "maxDuration": 60
+      "maxDuration": 60,
+      "regions": ["dub1"]
     },
     "api/ingest-polymarket.ts": {
       "memory": 256,
@@ -104,7 +106,8 @@
     },
     "api/place-live-trades.ts": {
       "memory": 1024,
-      "maxDuration": 60
+      "maxDuration": 60,
+      "regions": ["dub1"]
     },
     "api/articles-page.ts": {
       "memory": 256,

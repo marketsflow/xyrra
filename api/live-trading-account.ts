@@ -354,8 +354,10 @@ export async function fetchLiveTradingAccount(
   }
 }
 
+/** Polymarket closest non-georestricted Vercel region (eu-west-1 / Ireland). */
 export const config = {
   maxDuration: 60,
+  regions: ["dub1"],
 };
 
 export default {

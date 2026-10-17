@@ -7,6 +7,9 @@
  *
  * Auth: CRON_SECRET or admin Bearer.
  * Env: SUPABASE_*, POLYMARKET_PRIVATE_KEY, optional POLYMARKET_WALLET_ADDRESS.
+ *
+ * Runs in Vercel dub1 (Ireland) — required so CLOB orders are not geoblocked.
+ * Pref lights geoblock + ask-book depth; thin books / geoblock skip without FAILED rows.
  */
 
 import { AssetType, createSecureClient, OrderSide } from "@polymarket/client";
@@ -22,6 +25,12 @@ const BTC_SYMBOL = "BTC";
 const DEFAULT_POSITION_SIZE_PCT = 10;
 const COLLATERAL_SCALE = 10n ** 6n;
 const MIN_STAKE_USD = 0.1;
+/** Polymarket closest non-georestricted Vercel region (eu-west-1 / Ireland). */
+const POLYMARKET_SAFE_REGIONS = ["dub1"] as const;
+const CLOB_BASE = "https://clob.polymarket.com";
+const GEOBLOCK_URL = "https://polymarket.com/api/geoblock";
+/** Require ask notional ≥ stake × buffer before attempting a FAK buy. */
+const ASK_LIQUIDITY_BUFFER = 1.05;
 
 export type PlaceLiveTradesEnv = {
   SUPABASE_URL?: string;
@@ -173,6 +182,112 @@ function asString(value: unknown): string | null {
 
 function roundUsd(value: number) {
   return Math.round(value * 100) / 100;
+}
+
+function isRetryableLiquidityError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("no resting liquidity") ||
+    m.includes("insufficient liquidity") ||
+    m.includes("not enough liquidity")
+  );
+}
+
+function isGeoblockError(message: string): boolean {
+  const m = message.toLowerCase();
+  return (
+    m.includes("trading restricted in your region") ||
+    m.includes("geoblock") ||
+    m.includes("/geoblock")
+  );
+}
+
+/** Liquidity / geoblock: drop the provisional row so cron can retry cleanly. */
+function isRetryableOrderError(message: string): boolean {
+  return isRetryableLiquidityError(message) || isGeoblockError(message);
+}
+
+type GeoblockStatus =
+  | { blocked: false; ip?: string; country?: string; region?: string }
+  | { blocked: true; ip?: string; country?: string; region?: string; detail: string };
+
+async function checkGeoblock(): Promise<GeoblockStatus> {
+  try {
+    const res = await fetch(GEOBLOCK_URL, {
+      headers: { Accept: "application/json" },
+    });
+    if (!res.ok) {
+      // Fail open on geoblock probe errors — order placement will still surface blocks.
+      return { blocked: false };
+    }
+    const data = (await res.json()) as {
+      blocked?: unknown;
+      ip?: unknown;
+      country?: unknown;
+      region?: unknown;
+    };
+    const ip = asString(data.ip) ?? undefined;
+    const country = asString(data.country) ?? undefined;
+    const region = asString(data.region) ?? undefined;
+    if (data.blocked === true) {
+      const where = [country, region].filter(Boolean).join("/") || "unknown region";
+      return {
+        blocked: true,
+        ip,
+        country,
+        region,
+        detail: `Polymarket geoblock active for ${where} (ip ${ip || "unknown"}). Live orders must run from an allowed region (Vercel dub1 / eu-west-1).`,
+      };
+    }
+    return { blocked: false, ip, country, region };
+  } catch {
+    return { blocked: false };
+  }
+}
+
+type BookLevel = { price?: string | number; size?: string | number };
+
+/** USD notional available on the ask side (price × size), best levels first. */
+async function fetchAskNotionalUsd(tokenId: string): Promise<number | null> {
+  try {
+    const res = await fetch(
+      `${CLOB_BASE}/book?token_id=${encodeURIComponent(tokenId)}`,
+      { headers: { Accept: "application/json" } },
+    );
+    if (!res.ok) return null;
+    const book = (await res.json()) as { asks?: BookLevel[] } | null;
+    const asks = book?.asks;
+    if (!asks?.length) return 0;
+    const sorted = [...asks].sort((a, b) => {
+      const pa = Number(a.price);
+      const pb = Number(b.price);
+      if (!Number.isFinite(pa) || !Number.isFinite(pb)) return 0;
+      return pa - pb;
+    });
+    let notional = 0;
+    for (const level of sorted) {
+      const price = Number(level.price);
+      const size = Number(level.size);
+      if (!Number.isFinite(price) || !Number.isFinite(size) || price <= 0 || size <= 0) {
+        continue;
+      }
+      notional += price * size;
+    }
+    return Number(notional.toFixed(6));
+  } catch {
+    return null;
+  }
+}
+
+async function deleteTrade(
+  supabaseUrl: string,
+  serviceKey: string,
+  id: number,
+): Promise<void> {
+  await fetch(`${supabaseUrl}/rest/v1/live_trades?id=eq.${id}`, {
+    method: "DELETE",
+    headers: restHeaders(serviceKey),
+  });
 }
 
 function baseUnitsToNumber(balance: bigint | number | string): number {
@@ -759,6 +874,16 @@ export async function placeLiveTrades(
     );
     const marketTitle = formatPolymarketTitle(startSec, endSec);
 
+    const geo = await checkGeoblock();
+    if (geo.blocked) {
+      return {
+        success: true,
+        action: "skipped",
+        message: geo.detail,
+        marketSlug,
+      };
+    }
+
     const client = await getServerPolymarketClient(env);
     await updateBalanceAllowance(client, { assetType: AssetType.COLLATERAL });
     const collateral = await fetchBalanceAllowance(client, {
@@ -780,6 +905,25 @@ export async function placeLiveTrades(
         success: true,
         action: "risk_blocked",
         message: `Resolved stake $${stakeUsd} is below minimum $${MIN_STAKE_USD}.`,
+        marketSlug,
+      };
+    }
+
+    const askNotional = await fetchAskNotionalUsd(tokenId);
+    const minAskUsd = roundUsd(stakeUsd * ASK_LIQUIDITY_BUFFER);
+    if (askNotional === null) {
+      return {
+        success: true,
+        action: "skipped",
+        message: `Could not load order book for ${marketSlug} — will retry next cron.`,
+        marketSlug,
+      };
+    }
+    if (askNotional < minAskUsd) {
+      return {
+        success: true,
+        action: "skipped",
+        message: `No resting ask liquidity for ${direction} ($${askNotional.toFixed(2)} available, need ~$${minAskUsd}) — will retry next cron.`,
         marketSlug,
       };
     }
@@ -825,9 +969,22 @@ export async function placeLiveTrades(
       });
 
       if (!response.ok) {
+        const rejectMsg = `${response.code}: ${response.message}`;
+        if (isRetryableOrderError(rejectMsg)) {
+          await deleteTrade(supabaseUrl, serviceKey, pending.id);
+          const why = isGeoblockError(rejectMsg)
+            ? `Geoblock rejected order for ${marketSlug} — check function region is dub1.`
+            : `No resting liquidity for ${marketSlug} — will retry next cron.`;
+          return {
+            success: true,
+            action: "skipped",
+            message: why,
+            marketSlug,
+          };
+        }
         await updateTrade(supabaseUrl, serviceKey, pending.id, {
           status: "FAILED",
-          error_message: `${response.code}: ${response.message}`.slice(0, 500),
+          error_message: rejectMsg.slice(0, 500),
           order_status: "rejected",
         });
         return {
@@ -872,6 +1029,18 @@ export async function placeLiveTrades(
     } catch (orderError) {
       const msg =
         orderError instanceof Error ? orderError.message : "placeMarketOrder failed";
+      if (isRetryableOrderError(msg)) {
+        await deleteTrade(supabaseUrl, serviceKey, pending.id);
+        const why = isGeoblockError(msg)
+          ? `Geoblock rejected order for ${marketSlug} — check function region is dub1.`
+          : `No resting liquidity for ${marketSlug} — will retry next cron.`;
+        return {
+          success: true,
+          action: "skipped",
+          message: why,
+          marketSlug,
+        };
+      }
       await updateTrade(supabaseUrl, serviceKey, pending.id, {
         status: "FAILED",
         error_message: msg.slice(0, 500),
@@ -892,6 +1061,7 @@ export async function placeLiveTrades(
 
 export const config = {
   maxDuration: 60,
+  regions: [...POLYMARKET_SAFE_REGIONS],
 };
 
 export default {
