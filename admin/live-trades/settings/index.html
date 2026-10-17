@@ -110,40 +110,9 @@
 
               <section class="xa-live-settings__section" aria-labelledby="xa-live-size-title">
                 <h2 id="xa-live-size-title" class="xa-polymarket__section-title">Sizing &amp; limits</h2>
-                <fieldset class="xa-live-settings__mode">
-                  <legend class="xa-live-settings__mode-legend">Position sizing mode</legend>
-                  <label class="xa-live-settings__mode-option">
-                    <input
-                      type="radio"
-                      name="position-sizing-mode"
-                      value="fixed_usd"
-                      id="xa-live-settings-mode-fixed"
-                    />
-                    <span>Fixed USD</span>
-                  </label>
-                  <label class="xa-live-settings__mode-option">
-                    <input
-                      type="radio"
-                      name="position-sizing-mode"
-                      value="percent_collateral"
-                      id="xa-live-settings-mode-pct"
-                    />
-                    <span>% of CLOB collateral</span>
-                  </label>
-                </fieldset>
                 <div class="xa-live-settings__grid">
-                  <label class="xa-field" id="xa-live-settings-position-wrap">
-                    Position size (USD)
-                    <input
-                      id="xa-live-settings-position"
-                      type="number"
-                      min="0.01"
-                      max="10000"
-                      step="0.01"
-                    />
-                  </label>
-                  <label class="xa-field" id="xa-live-settings-pct-wrap" hidden>
-                    Position size (% of collateral)
+                  <label class="xa-field">
+                    Position size (% of CLOB collateral)
                     <input
                       id="xa-live-settings-pct"
                       type="number"
@@ -151,6 +120,7 @@
                       max="100"
                       step="0.01"
                       placeholder="e.g. 10"
+                      required
                     />
                   </label>
                   <label class="xa-field">
@@ -176,10 +146,10 @@
                     />
                   </label>
                 </div>
-                <p id="xa-live-settings-size-hint" class="xa-live-settings__hint">
-                  Fixed mode stakes the same USD each time. Percent mode recalculates from live CLOB
-                  collateral at order time (e.g. 10% of $4.71 → $0.47). Daily loss limit is a kill
-                  switch once the bot is live.
+                <p class="xa-live-settings__hint">
+                  Stake is always a percent of live CLOB collateral at order time. Enter
+                  <strong>10</strong> for 10% (e.g. $0.47 when collateral is $4.71). Daily loss limit
+                  is a kill switch once the bot is live.
                 </p>
               </section>
 
