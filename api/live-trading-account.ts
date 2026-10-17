@@ -311,10 +311,17 @@ export async function fetchLiveTradingAccount(
       portfolioUsd = null;
     }
 
-    const nextTradeStakeUsd =
-      collateralUsd > 0
-        ? roundUsd(collateralUsd * (settings.positionSizePct / 100))
-        : null;
+    // Match place-live-trades: floor to Polymarket $1 market-buy minimum when funded.
+    const MIN_MARKET_BUY_USD = 1;
+    let nextTradeStakeUsd: number | null = null;
+    if (collateralUsd > 0) {
+      let stake = roundUsd(collateralUsd * (settings.positionSizePct / 100));
+      if (collateralUsd >= MIN_MARKET_BUY_USD && stake < MIN_MARKET_BUY_USD) {
+        stake = MIN_MARKET_BUY_USD;
+      }
+      if (stake > collateralUsd) stake = roundUsd(collateralUsd);
+      nextTradeStakeUsd = stake;
+    }
 
     return {
       success: true,

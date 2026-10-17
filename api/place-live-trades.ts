@@ -24,7 +24,8 @@ const ANALYSIS_TIMEFRAME = 240;
 const BTC_SYMBOL = "BTC";
 const DEFAULT_POSITION_SIZE_PCT = 10;
 const COLLATERAL_SCALE = 10n ** 6n;
-const MIN_STAKE_USD = 0.1;
+/** Polymarket CLOB marketable BUY minimum (see clob error: min size: 1). */
+const MIN_STAKE_USD = 1;
 const CLOB_BASE = "https://clob.polymarket.com";
 const GEOBLOCK_URL = "https://polymarket.com/api/geoblock";
 /** Require ask notional ≥ stake × buffer before attempting a FAK buy. */
@@ -915,14 +916,21 @@ export async function placeLiveTrades(
       };
     }
 
-    const stakeUsd = roundUsd(collateralUsd * (settings.positionSizePct / 100));
-    if (!(stakeUsd >= MIN_STAKE_USD)) {
+    let stakeUsd = roundUsd(collateralUsd * (settings.positionSizePct / 100));
+    if (collateralUsd < MIN_STAKE_USD) {
       return {
         success: true,
         action: "risk_blocked",
-        message: `Resolved stake $${stakeUsd} is below minimum $${MIN_STAKE_USD}.`,
+        message: `CLOB collateral $${collateralUsd} is below Polymarket market-buy minimum $${MIN_STAKE_USD}.`,
         marketSlug,
       };
+    }
+    // Percent may resolve under $1 on small balances — floor to CLOB min when funded.
+    if (stakeUsd < MIN_STAKE_USD) {
+      stakeUsd = MIN_STAKE_USD;
+    }
+    if (stakeUsd > collateralUsd) {
+      stakeUsd = roundUsd(collateralUsd);
     }
 
     const askNotional = await fetchAskNotionalUsd(tokenId);
