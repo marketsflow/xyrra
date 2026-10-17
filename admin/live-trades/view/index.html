@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex, nofollow" />
+    <meta name="theme-color" content="#f8f9fd" />
+    <title>View Live Trades | Admin | Xyrra</title>
+    <link rel="icon" href="/favicon.png" type="image/png" sizes="any" />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Space+Grotesk:wght@500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/src/admin/admin.css" />
+  </head>
+  <body class="xa-body">
+    <div id="xa-admin-loading" class="xa-loading" role="status" aria-live="polite">
+      Checking session…
+    </div>
+
+    <div class="xa-admin" id="xa-admin-app" hidden>
+      <header class="xa-admin__bar">
+        <a class="xa-brand" href="/admin/" aria-label="Xyrra admin home">
+          <img src="/images/new/xyrra-logo.png" alt="" width="954" height="115" decoding="async" />
+        </a>
+        <div class="xa-admin__bar-actions">
+          <div class="xa-admin__meta">
+            <strong id="xa-admin-email">…</strong>
+            <span id="xa-admin-role">…</span>
+          </div>
+          <button type="button" id="xa-admin-signout" class="xa-admin__signout">Sign out</button>
+        </div>
+      </header>
+
+      <div class="xa-admin__layout">
+        <aside class="xa-admin__sidebar" aria-label="Admin navigation">
+          <nav class="xa-admin__nav">
+            <a class="xa-admin__nav-link" data-xa-nav="dashboard" href="/admin/">Dashboard</a>
+            <a class="xa-admin__nav-link" data-xa-nav="users" href="/admin/users/">Users</a>
+            <a class="xa-admin__nav-link" data-xa-nav="articles" href="/admin/articles/">Articles</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-templates" href="/admin/email-templates/">Email Templates</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-lists" href="/admin/email-lists/">Email Lists</a>
+            <a class="xa-admin__nav-link" data-xa-nav="email-outreach" href="/admin/email-outreach/">Email Outreach</a>
+            <a class="xa-admin__nav-link" data-xa-nav="emails-sent" href="/admin/emails-sent/">Emails Sent</a>
+            <a class="xa-admin__nav-link" data-xa-nav="stock-prices" href="/admin/stock-prices/">Stock Prices</a>
+            <a class="xa-admin__nav-link" data-xa-nav="polymarket" href="/admin/polymarket/">Polymarket</a>
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="polymarket-crypto-prices"
+              href="/admin/polymarket/crypto-prices/"
+              >Crypto Prices</a
+            >
+            <a class="xa-admin__nav-link" data-xa-nav="virtual-trades" href="/admin/virtual-trades/">Virtual Trades</a>
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="accounts"
+              href="/admin/accounts/"
+              >Accounts</a
+            >
+            <a class="xa-admin__nav-link" data-xa-nav="live-trades" href="/admin/live-trades/">Live Trades</a>
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="live-trades-account"
+              href="/admin/live-trades/account/"
+              >Account</a
+            >
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="live-trades-settings"
+              href="/admin/live-trades/settings/"
+              >Settings</a
+            >
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="live-trades-view"
+              href="/admin/live-trades/view/"
+              >View</a
+            >
+          </nav>
+        </aside>
+
+        <main class="xa-admin__main">
+          <div class="xa-admin__panel">
+            <div class="xa-users__header">
+              <div>
+                <a class="xa-crypto__back" href="/admin/live-trades/">← Back to Live Trades</a>
+                <h1>View Live trades</h1>
+                <p class="xa-templates__lede">
+                  Real CLOB orders placed automatically when Price Levels shows a Signal for the
+                  current 4h BTC window and automation is on. Closed windows settle by spot vs price
+                  to beat (same as Virtual Trades).
+                </p>
+              </div>
+              <div class="xa-polymarket__actions">
+                <button type="button" id="xa-live-run-bot" class="xa-admin__signout">
+                  Run bot now
+                </button>
+                <a class="xa-templates__create" href="/admin/live-trades/settings/">Settings</a>
+              </div>
+            </div>
+
+            <p id="xa-live-view-status" class="xa-users__status" aria-live="polite"></p>
+            <div id="xa-live-view-empty" class="xa-sent__empty" hidden>
+              <p class="xa-sent__empty-title">No live trades yet</p>
+              <p>
+                Enable automation in Settings, allow at least one signal rule, then wait for a 4h
+                Price Levels signal — or click Run bot now.
+              </p>
+            </div>
+            <div id="xa-live-view-table-wrap" class="xa-users__table-wrap" hidden>
+              <table class="xa-users__table">
+                <thead>
+                  <tr>
+                    <th scope="col">ID</th>
+                    <th scope="col">Entry</th>
+                    <th scope="col">Polymarket</th>
+                    <th scope="col">Signal</th>
+                    <th scope="col">Side</th>
+                    <th scope="col">Rule</th>
+                    <th scope="col">Stake</th>
+                    <th scope="col">Entry poly</th>
+                    <th scope="col">Order</th>
+                    <th scope="col">Result</th>
+                    <th scope="col">P&amp;L</th>
+                    <th scope="col">Closed</th>
+                  </tr>
+                </thead>
+                <tbody id="xa-live-view-body">
+                  <tr>
+                    <td colspan="12" class="xa-users__empty">Loading…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </main>
+      </div>
+    </div>
+
+    <script type="module" src="/src/admin/live-trades-view.ts"></script>
+  </body>
+</html>

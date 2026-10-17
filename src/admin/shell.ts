@@ -16,7 +16,8 @@ export type AdminNavId =
   | "accounts"
   | "live-trades"
   | "live-trades-account"
-  | "live-trades-settings";
+  | "live-trades-settings"
+  | "live-trades-view";
 
 export function initAdminShell(session: AdminSession, activeNav: AdminNavId) {
   const emailEl = document.getElementById("xa-admin-email");

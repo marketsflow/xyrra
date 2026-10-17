@@ -16,6 +16,7 @@ import { computeCryptoMomentum } from "./api/compute-crypto-momentum";
 import { computeCryptoSupportResistance } from "./api/compute-crypto-sr";
 import { computeCryptoPrice } from "./api/compute-crypto-price";
 import { fetchLiveTradingAccount } from "./api/live-trading-account";
+import { placeLiveTrades } from "./api/place-live-trades";
 import { articleSeoPlugin } from "./vite/article-seo-plugin";
 import { renderArticlesResponse } from "./api/articles-page";
 
@@ -213,6 +214,29 @@ function resendApiPlugin(env: Record<string, string>): Plugin {
           );
           if (result.success) {
             writeJson(res, 200, { success: true, account: result.account });
+            return;
+          }
+          writeJson(res, result.status ?? 500, { success: false, message: result.message });
+          return;
+        }
+        if (path === "/api/place-live-trades") {
+          if (req.method !== "GET" && req.method !== "POST") {
+            writeJson(res, 405, { success: false, message: "Method not allowed" });
+            return;
+          }
+          const result = await placeLiveTrades(
+            {
+              SUPABASE_URL: env.SUPABASE_URL || env.VITE_SUPABASE_URL,
+              SUPABASE_ANON_KEY: env.SUPABASE_ANON_KEY || env.VITE_SUPABASE_ANON_KEY,
+              SUPABASE_SERVICE_ROLE_KEY: env.SUPABASE_SERVICE_ROLE_KEY,
+              CRON_SECRET: env.CRON_SECRET,
+              POLYMARKET_PRIVATE_KEY: env.POLYMARKET_PRIVATE_KEY,
+              POLYMARKET_WALLET_ADDRESS: env.POLYMARKET_WALLET_ADDRESS,
+            },
+            headerValue(req.headers.authorization),
+          );
+          if (result.success) {
+            writeJson(res, 200, result);
             return;
           }
           writeJson(res, result.status ?? 500, { success: false, message: result.message });
@@ -696,6 +720,8 @@ function cleanLegalPathPlugin(): Plugin {
         (req as IncomingMessage & { url?: string }).url = "/admin/live-trades/account/" + search;
       } else if (path === "/admin/live-trades/settings") {
         (req as IncomingMessage & { url?: string }).url = "/admin/live-trades/settings/" + search;
+      } else if (path === "/admin/live-trades/view") {
+        (req as IncomingMessage & { url?: string }).url = "/admin/live-trades/view/" + search;
       } else if (path === "/admin/articles") {
         (req as IncomingMessage & { url?: string }).url = "/admin/articles/" + search;
       } else if (path === "/admin/articles/new") {
@@ -844,6 +870,10 @@ export default defineConfig(({ mode }) => {
           adminLiveTradesSettings: resolve(
             __dirname,
             "admin/live-trades/settings/index.html",
+          ),
+          adminLiveTradesView: resolve(
+            __dirname,
+            "admin/live-trades/view/index.html",
           ),
           adminArticles: resolve(__dirname, "admin/articles/index.html"),
           adminArticlesNew: resolve(__dirname, "admin/articles/new/index.html"),

@@ -94,10 +94,41 @@ function roundUsd(value: number) {
   return Math.round(value * 100) / 100;
 }
 
+/**
+ * Normalize MetaMask / .env private keys into `0x` + 64 hex chars.
+ * Common failures: wrapping quotes, spaces, missing 0x, pasting a seed phrase.
+ */
 function normalizePrivateKey(raw: string): string {
-  const trimmed = raw.trim();
-  if (!trimmed) return "";
-  return trimmed.startsWith("0x") ? trimmed : `0x${trimmed}`;
+  let value = raw.trim();
+  if (
+    (value.startsWith('"') && value.endsWith('"')) ||
+    (value.startsWith("'") && value.endsWith("'"))
+  ) {
+    value = value.slice(1, -1).trim();
+  }
+  // Strip accidental whitespace / newlines from copy-paste.
+  value = value.replace(/\s+/g, "");
+  if (!value) return "";
+
+  const words = raw.trim().split(/\s+/).filter(Boolean);
+  if (words.length >= 12) {
+    throw new Error(
+      "POLYMARKET_PRIVATE_KEY looks like a seed phrase. Export the account private key from MetaMask (Account details → Show private key), not the Secret Recovery Phrase.",
+    );
+  }
+
+  const hex = value.startsWith("0x") || value.startsWith("0X") ? value.slice(2) : value;
+  if (!/^[0-9a-fA-F]+$/.test(hex)) {
+    throw new Error(
+      "POLYMARKET_PRIVATE_KEY must be hex (0-9, a-f). Remove quotes/spaces from .env.local and use the MetaMask private key, not an address.",
+    );
+  }
+  if (hex.length !== 64) {
+    throw new Error(
+      `POLYMARKET_PRIVATE_KEY must be 32 bytes (64 hex chars). Got ${hex.length} hex chars after cleanup — re-copy Show private key from MetaMask.`,
+    );
+  }
+  return `0x${hex.toLowerCase()}`;
 }
 
 function configFingerprint(privateKeyValue: string, wallet: string) {

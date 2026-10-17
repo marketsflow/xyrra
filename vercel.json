@@ -102,6 +102,10 @@
       "memory": 1024,
       "maxDuration": 300
     },
+    "api/place-live-trades.ts": {
+      "memory": 512,
+      "maxDuration": 60
+    },
     "api/articles-page.ts": {
       "memory": 256,
       "maxDuration": 30
@@ -130,6 +134,10 @@
     },
     {
       "path": "/api/compute-crypto-price",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/place-live-trades",
       "schedule": "* * * * *"
     }
   ]

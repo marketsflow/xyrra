@@ -72,6 +72,12 @@
               href="/admin/live-trades/settings/"
               >Settings</a
             >
+            <a
+              class="xa-admin__nav-link xa-admin__nav-link--child"
+              data-xa-nav="live-trades-view"
+              href="/admin/live-trades/view/"
+              >View</a
+            >
           </nav>
         </aside>
 
@@ -81,9 +87,9 @@
               <div>
                 <h1>Live Trades</h1>
                 <p class="xa-templates__lede">
-                  Connect your Polymarket account via MetaMask using the official
-                  <code>@polymarket/client</code> SDK. Account balance first — live bot trading comes next,
-                  mirroring Virtual Trades.
+                  When Price Levels shows a Signal for the current BTC 4h window, the bot places the
+                  matching Polymarket Up/Down order — same mapping as Virtual Trades (Above→UP,
+                  Below→DOWN).
                 </p>
               </div>
             </div>
@@ -95,7 +101,7 @@
                   <span class="xa-templates__meta">
                     <span class="xa-templates__name">Account</span>
                     <span class="xa-templates__subject"
-                      >MetaMask → Polymarket CLOB collateral and portfolio value</span
+                      >Always-on bot wallet CLOB collateral and portfolio value</span
                     >
                   </span>
                   <span class="xa-templates__chevron" aria-hidden="true">›</span>
@@ -113,22 +119,35 @@
                   <span class="xa-templates__chevron" aria-hidden="true">›</span>
                 </a>
               </li>
+              <li class="xa-templates__item">
+                <a class="xa-templates__link" href="/admin/live-trades/view/">
+                  <span class="xa-templates__icon" aria-hidden="true">☰</span>
+                  <span class="xa-templates__meta">
+                    <span class="xa-templates__name">View</span>
+                    <span class="xa-templates__subject"
+                      >Live CLOB fills, order ids, and settled P&amp;L</span
+                    >
+                  </span>
+                  <span class="xa-templates__chevron" aria-hidden="true">›</span>
+                </a>
+              </li>
             </ul>
 
             <section class="xa-live__roadmap" aria-labelledby="xa-live-roadmap-title">
-              <h2 id="xa-live-roadmap-title" class="xa-polymarket__section-title">Structure</h2>
+              <h2 id="xa-live-roadmap-title" class="xa-polymarket__section-title">How it fires</h2>
               <ol class="xa-live__steps">
                 <li>
                   <strong>Account</strong> — always-on server wallet (<code>POLYMARKET_PRIVATE_KEY</code>)
-                  for balances + future orders; MetaMask is optional viewing only.
+                  signs CLOB orders; MetaMask is optional viewing only.
                 </li>
                 <li>
-                  <strong>Settings</strong> — automation on/off, % of collateral, signal rules, loss
-                  limits.
+                  <strong>Settings</strong> — turn automation on, pick allowed signal rules (1–21), set
+                  % of collateral.
                 </li>
                 <li>
-                  <strong>Place / View (next)</strong> — same signal flow as Virtual Trades, posting real
-                  CLOB orders via the server signer (no MetaMask reconnect).
+                  <strong>Auto place</strong> — every minute, if the open 4h Price Levels bar has a
+                  Signal whose rule is allowed, the bot buys UP or DOWN on
+                  <code>btc-updown-4h-…</code> (same as Virtual Trades).
                 </li>
               </ol>
             </section>
