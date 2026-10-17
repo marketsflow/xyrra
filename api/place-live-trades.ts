@@ -209,6 +209,20 @@ type GeoblockStatus =
   | { blocked: false; ip?: string; country?: string; region?: string }
   | { blocked: true; ip?: string; country?: string; region?: string; detail: string };
 
+/**
+ * Countries where polymarket.com/api/geoblock often returns blocked=true because
+ * the *frontend* is close-only, but the CLOB API itself is still allowed.
+ * See: https://docs.polymarket.com/api-reference/geoblock
+ * ("Closest Non-Georestricted Region: eu-west-1" = Ireland / Vercel dub1.)
+ */
+const API_ALLOWED_DESPITE_GEOBLOCK = new Set([
+  "IE", // Ireland — our dub1 region
+  "JP", // Japan
+  "NL", // Netherlands
+  "KR", // South Korea
+  "MT", // Malta (sports-only on FE; API not restricted)
+]);
+
 async function checkGeoblock(): Promise<GeoblockStatus> {
   try {
     const res = await fetch(GEOBLOCK_URL, {
@@ -225,16 +239,20 @@ async function checkGeoblock(): Promise<GeoblockStatus> {
       region?: unknown;
     };
     const ip = asString(data.ip) ?? undefined;
-    const country = asString(data.country) ?? undefined;
+    const country = (asString(data.country) ?? undefined)?.toUpperCase();
     const region = asString(data.region) ?? undefined;
     if (data.blocked === true) {
+      // Frontend close-only ≠ API blocked (e.g. IE from dub1).
+      if (country && API_ALLOWED_DESPITE_GEOBLOCK.has(country)) {
+        return { blocked: false, ip, country, region };
+      }
       const where = [country, region].filter(Boolean).join("/") || "unknown region";
       return {
         blocked: true,
         ip,
         country,
         region,
-        detail: `Polymarket geoblock active for ${where} (ip ${ip || "unknown"}). Live orders must run from an allowed region (Vercel dub1 / eu-west-1).`,
+        detail: `Polymarket API geoblock active for ${where} (ip ${ip || "unknown"}). Live orders must run from an allowed region (Vercel dub1 / eu-west-1).`,
       };
     }
     return { blocked: false, ip, country, region };
