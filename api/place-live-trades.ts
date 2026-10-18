@@ -889,6 +889,15 @@ export async function placeLiveTrades(
       startSec,
       tick,
     );
+    // Without a strike we can place but never settle — wait for Polymarket price-to-beat.
+    if (priceToBeat === null || !(priceToBeat > 0)) {
+      return {
+        success: true,
+        action: "skipped",
+        message: `No price-to-beat yet for ${marketSlug} — will retry next cron.`,
+        marketSlug,
+      };
+    }
     const marketTitle = formatPolymarketTitle(startSec, endSec);
 
     const geo = await checkGeoblock();

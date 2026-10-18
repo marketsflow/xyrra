@@ -33,6 +33,9 @@ type Settlement = {
   pnlUsd: number;
   pnlPercent: number;
   closedAt: string;
+  /** Backfilled when the live row was saved without a strike. */
+  strikePrice: number;
+  priceToBeat: number;
 };
 
 function escapeHtml(value: string) {
@@ -168,11 +171,69 @@ async function loadExitSpot(
   return null;
 }
 
-function settleTrade(row: LiveTradeRow, exitSpot: number): Settlement | null {
-  const strike = row.price_to_beat ?? row.strike_price;
+/**
+ * Strike may be missing on early placements (Polymarket price-to-beat lags ~minutes).
+ * Resolve from the live row, then events / ticks / 4h open.
+ */
+async function loadStrike(
+  supabase: SupabaseClient,
+  row: LiveTradeRow,
+  assetId: number | null,
+): Promise<number | null> {
+  const fromRow = row.price_to_beat ?? row.strike_price;
+  if (fromRow !== null) return fromRow;
+
+  const slug = row.market_slug;
+  const event = await supabase
+    .from("polymarket_events")
+    .select("price_to_beat")
+    .eq("slug", slug)
+    .maybeSingle();
+  if (!event.error) {
+    const fromEvent = asNumber(event.data?.price_to_beat);
+    if (fromEvent !== null) return fromEvent;
+  }
+
+  const tick = await supabase
+    .from("polymarket_ticks")
+    .select("price_to_beat")
+    .eq("event_slug", slug)
+    .not("price_to_beat", "is", null)
+    .order("recorded_at", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+  if (!tick.error) {
+    const fromTick = asNumber(tick.data?.price_to_beat);
+    if (fromTick !== null) return fromTick;
+  }
+
+  const startSec = windowStartSecFromSlug(slug);
+  if (startSec !== null && assetId !== null) {
+    const startIso = new Date(startSec * 1000).toISOString();
+    const candle = await supabase
+      .from("crypto_prices")
+      .select("open")
+      .eq("asset_id", assetId)
+      .eq("timeframe", TF_4H)
+      .eq("bucket_start", startIso)
+      .maybeSingle();
+    if (!candle.error) {
+      const open = asNumber(candle.data?.open);
+      if (open !== null) return open;
+    }
+  }
+
+  return null;
+}
+
+function settleTrade(
+  row: LiveTradeRow,
+  exitSpot: number,
+  strike: number,
+): Settlement | null {
   const entry = row.entry_poly_price;
   const stake = row.position_size_usd;
-  if (strike === null || entry === null || stake === null || !(stake > 0)) return null;
+  if (entry === null || stake === null || !(stake > 0) || !(strike > 0)) return null;
 
   const upWon = didLongUpWin(exitSpot, strike);
   const won =
@@ -192,6 +253,8 @@ function settleTrade(row: LiveTradeRow, exitSpot: number): Settlement | null {
     pnlUsd,
     pnlPercent,
     closedAt,
+    strikePrice: Number(strike.toFixed(2)),
+    priceToBeat: Number(strike.toFixed(6)),
   };
 }
 
@@ -208,7 +271,9 @@ async function resolveOpenTrades(
   for (const row of open) {
     const exitSpot = await loadExitSpot(supabase, row.market_slug, assetId);
     if (exitSpot === null) continue;
-    const settlement = settleTrade(row, exitSpot);
+    const strike = await loadStrike(supabase, row, assetId);
+    if (strike === null) continue;
+    const settlement = settleTrade(row, exitSpot, strike);
     if (!settlement) continue;
 
     const { error } = await supabase
@@ -219,6 +284,8 @@ async function resolveOpenTrades(
         pnl_usd: settlement.pnlUsd,
         pnl_percent: settlement.pnlPercent,
         closed_at: settlement.closedAt,
+        strike_price: settlement.strikePrice,
+        price_to_beat: settlement.priceToBeat,
       })
       .eq("id", row.id)
       .eq("status", "OPEN");
@@ -230,6 +297,8 @@ async function resolveOpenTrades(
     row.pnl_usd = settlement.pnlUsd;
     row.pnl_percent = settlement.pnlPercent;
     row.closed_at = settlement.closedAt;
+    row.strike_price = settlement.strikePrice;
+    row.price_to_beat = settlement.priceToBeat;
     settled += 1;
   }
 
