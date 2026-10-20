@@ -7,6 +7,9 @@
  *
  * Incremental (cron, default): latest 4h crypto_prices candle → upsert that bar
  * (includes the open/forming bar so levels exist at Polymarket window open).
+ * The first write of a bucket freezes the signal and the inputs that produced
+ * it (EMA, momentum, %sum, distances, price level). Later minutes only refresh
+ * Polymarket title / price-to-beat. Backfill still recomputes signals.
  * Backfill: walk source candles from crypto_prices (optional DAYS), including the
  * current open bar when present.
  *
@@ -17,7 +20,8 @@
 
  *
  * EMA (0–50): +10 per bullish ema_9_20_factor among 5m/15m/1h/4h/1D,
- *   scored as-of bucket_start (not the live latest MA).
+ *   scored as-of bucket_start on the first write only. The cron does not
+ *   re-read moving averages or re-run signal rules for a bucket that exists.
  * Momentum: crypto_momentum.mom_4h from the previous analysis bucket only
  *   (no other mom_* fallback). Signals fire at timeframe open, so mom generated
  *   for bucket T is stored on the following row T+4h (e.g. mom at 12:00 → 16:00).
@@ -76,7 +80,7 @@
  * BTC only — market_title + price_to_beat from Polymarket for the same 4h window
  *   (slug btc-updown-4h-{unix}). Prefer polymarket_events; fall back to ticks for
  *   price_to_beat. Cron re-upserts the open bar every minute so strike fills in
- *   once ingest has it.
+ *   once ingest has it, without changing the opening signal.
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
@@ -1642,6 +1646,56 @@ async function fetchPriorSignalTrend(
     }));
 }
 
+const STORED_OPEN_BAR_COLUMNS =
+  "asset_id,bucket_start,price_1m,timeframe,distance_from_support,distance_to_resistance,signal,signal_rule,price_level,price_level_pct,ema,momentum,percentage_sum,market_title,price_to_beat";
+
+/**
+ * Opening snapshot for a bucket. Incremental cron keeps this row's signal
+ * inputs and only lets Polymarket fields change on later minutes.
+ */
+async function fetchStoredOpenBar(
+  supabaseUrl: string,
+  serviceKey: string,
+  assetId: number,
+  bucketStart: string,
+): Promise<CryptoPriceRow | null> {
+  const base = supabaseUrl.replace(/\/$/, "");
+  const res = await fetch(
+    `${base}/rest/v1/crypto_price?select=${STORED_OPEN_BAR_COLUMNS}&asset_id=eq.${assetId}&timeframe=eq.${ANALYSIS_TIMEFRAME}&bucket_start=eq.${encodeURIComponent(bucketStart)}&limit=1`,
+    { headers: restHeaders(serviceKey) },
+  );
+  if (!res.ok) {
+    const text = await res.text();
+    throw new Error(`Failed to load stored crypto_price bar: ${text.slice(0, 300)}`);
+  }
+  const rows = (await res.json()) as Array<Record<string, unknown>>;
+  const row = rows[0];
+  if (!row) return null;
+  const price1m = parseNumber(row.price_1m);
+  const priceLevel = parseNumber(row.price_level);
+  const bucket = asTrimmedString(row.bucket_start);
+  if (price1m === null || priceLevel === null || !bucket) return null;
+  const signalRule = parseNumber(row.signal_rule);
+  return {
+    asset_id: assetId,
+    bucket_start: bucket,
+    price_1m: price1m,
+    timeframe: ANALYSIS_TIMEFRAME,
+    distance_from_support: parseNumber(row.distance_from_support),
+    distance_to_resistance: parseNumber(row.distance_to_resistance),
+    signal: asTrimmedString(row.signal),
+    signal_rule: signalRule === null ? null : Math.trunc(signalRule),
+    price_level: priceLevel,
+    price_level_pct: parseNumber(row.price_level_pct),
+    ema: parseNumber(row.ema),
+    momentum: parseNumber(row.momentum),
+    percentage_sum: parseNumber(row.percentage_sum),
+    market_title: asTrimmedString(row.market_title),
+    price_to_beat: parseNumber(row.price_to_beat),
+    updated_at: "",
+  };
+}
+
 async function insertCryptoPriceRows(
   supabaseUrl: string,
   serviceKey: string,
@@ -2034,6 +2088,20 @@ export async function computeCryptoPrice(
       const latest = resolved[0];
       if (!latest) {
         skippedNoPrice += 1;
+        continue;
+      }
+
+      // Opening read is final. Later crons must not re-score EMA or rules.
+      const stored = await fetchStoredOpenBar(
+        supabaseUrl,
+        serviceKey,
+        asset.id,
+        latest.bucket_start,
+      );
+      if (stored) {
+        stored.updated_at = updatedAt;
+        await attachPolymarketFields(supabaseUrl, serviceKey, asset, [stored]);
+        rows.push(stored);
         continue;
       }
 
