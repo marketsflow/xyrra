@@ -1,12 +1,10 @@
-import type { SupabaseClient } from "@supabase/supabase-js";
+import {
+  pnlForVirtualTradeStake,
+  resolveOpenVirtualTrades,
+  VIRTUAL_TRADE_STAKE_USD,
+} from "../lib/virtual-trades/settle";
 import { requireAdminSession, setAdminLoading } from "./auth-guard";
 import { initAdminShell } from "./shell";
-
-const WINDOW_SEC = 4 * 60 * 60;
-/** Stake used for displayed / settled P&L. */
-const STAKE_USD = 10;
-const BTC_SYMBOL = "BTC";
-const TF_4H = 240;
 
 type VirtualTradeRow = {
   id: number;
@@ -28,15 +26,6 @@ type VirtualTradeRow = {
   pnl_percent: number | null;
   closed_at: string | null;
   position_size_usd: number | null;
-};
-
-type Settlement = {
-  status: "WIN" | "LOSS";
-  exitSpot: number;
-  exitPolyPrice: number;
-  pnlUsd: number;
-  pnlPercent: number;
-  closedAt: string;
 };
 
 function escapeHtml(value: string) {
@@ -86,174 +75,16 @@ function formatDateTime(value: string | null) {
   });
 }
 
-function windowStartSecFromSlug(slug: string): number | null {
-  const match = /^btc-updown-4h-(\d+)$/.exec(slug);
-  if (!match) return null;
-  const sec = Number(match[1]);
-  return Number.isFinite(sec) ? sec : null;
-}
-
-function isWindowClosed(slug: string, nowMs = Date.now()): boolean {
-  const start = windowStartSecFromSlug(slug);
-  if (start === null) return false;
-  return (start + WINDOW_SEC) * 1000 <= nowMs;
-}
-
-/**
- * Binary Polymarket Up/Down: $STAKE buys STAKE/entry shares.
- * WIN pays $1/share → profit = STAKE/entry - STAKE; LOSS → -STAKE.
- */
-function pnlForStake(entryPolyPrice: number, won: boolean, stakeUsd = STAKE_USD) {
-  if (!(entryPolyPrice > 0) || entryPolyPrice > 1) {
-    throw new Error(`Invalid entry poly price ${entryPolyPrice}`);
-  }
-  if (won) {
-    const payout = stakeUsd / entryPolyPrice;
-    const pnlUsd = Number((payout - stakeUsd).toFixed(2));
-    const pnlPercent = Number((((payout - stakeUsd) / stakeUsd) * 100).toFixed(4));
-    return { pnlUsd, pnlPercent, exitPolyPrice: 1 };
-  }
-  return {
-    pnlUsd: Number((-stakeUsd).toFixed(2)),
-    pnlPercent: -100,
-    exitPolyPrice: 0,
-  };
-}
-
-function didLongUpWin(exitSpot: number, strike: number): boolean {
-  return exitSpot > strike;
-}
-
-async function loadBtcAssetId(supabase: SupabaseClient): Promise<number | null> {
-  const { data, error } = await supabase
-    .from("crypto_assets")
-    .select("id")
-    .eq("symbol", BTC_SYMBOL)
-    .maybeSingle();
-  if (error || !data) return null;
-  return asNumber(data.id);
-}
-
-async function loadExitSpot(
-  supabase: SupabaseClient,
-  slug: string,
-  assetId: number | null,
-): Promise<number | null> {
-  const startSec = windowStartSecFromSlug(slug);
-  if (startSec === null) return null;
-  const startIso = new Date(startSec * 1000).toISOString();
-  const endIso = new Date((startSec + WINDOW_SEC) * 1000).toISOString();
-
-  // Prefer last Polymarket tick spot in the window.
-  const tick = await supabase
-    .from("polymarket_ticks")
-    .select("spot_price, recorded_at")
-    .eq("event_slug", slug)
-    .not("spot_price", "is", null)
-    .gte("recorded_at", startIso)
-    .lte("recorded_at", endIso)
-    .order("recorded_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!tick.error) {
-    const spot = asNumber(tick.data?.spot_price);
-    if (spot !== null) return spot;
-  }
-
-  // Fallback: 4h candle close for this window (bucket_start = window start).
-  if (assetId !== null) {
-    const candle = await supabase
-      .from("crypto_prices")
-      .select("close")
-      .eq("asset_id", assetId)
-      .eq("timeframe", TF_4H)
-      .eq("bucket_start", startIso)
-      .maybeSingle();
-    if (!candle.error) {
-      const close = asNumber(candle.data?.close);
-      if (close !== null) return close;
-    }
-  }
-
-  return null;
-}
-
-function settleTrade(row: VirtualTradeRow, exitSpot: number): Settlement | null {
-  const strike = row.price_to_beat ?? row.strike_price;
-  const entry = row.entry_poly_price;
-  if (strike === null || entry === null) return null;
-
-  const upWon = didLongUpWin(exitSpot, strike);
-  const won =
-    row.direction === "LONG_UP" ? upWon : row.direction === "LONG_DOWN" ? !upWon : null;
-  if (won === null) return null;
-
-  const startSec = windowStartSecFromSlug(row.market_slug);
-  const closedAt =
-    startSec === null
-      ? new Date().toISOString()
-      : new Date((startSec + WINDOW_SEC) * 1000).toISOString();
-
-  const { pnlUsd, pnlPercent, exitPolyPrice } = pnlForStake(entry, won);
-  return {
-    status: won ? "WIN" : "LOSS",
-    exitSpot,
-    exitPolyPrice,
-    pnlUsd,
-    pnlPercent,
-    closedAt,
-  };
-}
-
-async function resolveOpenTrades(
-  supabase: SupabaseClient,
-  rows: VirtualTradeRow[],
-): Promise<number> {
-  const open = rows.filter((row) => row.status === "OPEN" && isWindowClosed(row.market_slug));
-  if (open.length === 0) return 0;
-
-  const assetId = await loadBtcAssetId(supabase);
-  let settled = 0;
-
-  for (const row of open) {
-    const exitSpot = await loadExitSpot(supabase, row.market_slug, assetId);
-    if (exitSpot === null) continue;
-    const settlement = settleTrade(row, exitSpot);
-    if (!settlement) continue;
-
-    const { error } = await supabase
-      .from("virtual_trades")
-      .update({
-        status: settlement.status,
-        exit_poly_price: settlement.exitPolyPrice,
-        pnl_usd: settlement.pnlUsd,
-        pnl_percent: settlement.pnlPercent,
-        closed_at: settlement.closedAt,
-        position_size_usd: STAKE_USD,
-      })
-      .eq("id", row.id)
-      .eq("status", "OPEN");
-
-    if (error) continue;
-
-    row.status = settlement.status;
-    row.exit_poly_price = settlement.exitPolyPrice;
-    row.pnl_usd = settlement.pnlUsd;
-    row.pnl_percent = settlement.pnlPercent;
-    row.closed_at = settlement.closedAt;
-    row.position_size_usd = STAKE_USD;
-    settled += 1;
-  }
-
-  return settled;
-}
-
 /** Recompute display P&L at $10 when entry price is known (for already-settled rows). */
 function displayPnl(row: VirtualTradeRow): number | null {
   if (row.status !== "WIN" && row.status !== "LOSS") return null;
   if (row.entry_poly_price === null || row.entry_poly_price <= 0) return row.pnl_usd;
   try {
-    return pnlForStake(row.entry_poly_price, row.status === "WIN", STAKE_USD).pnlUsd;
+    return pnlForVirtualTradeStake(
+      row.entry_poly_price,
+      row.status === "WIN",
+      VIRTUAL_TRADE_STAKE_USD,
+    ).pnlUsd;
   } catch {
     return row.pnl_usd;
   }
@@ -373,7 +204,7 @@ async function init() {
 
   let settled = 0;
   try {
-    settled = await resolveOpenTrades(supabase, rows);
+    settled = await resolveOpenVirtualTrades(supabase, rows);
   } catch {
     // Still show rows even if settlement fails.
   }
@@ -457,7 +288,7 @@ async function init() {
     statusEl.textContent =
       `${shown}` +
       ` · ${wins} win / ${losses} loss / ${open} open` +
-      ` · P&L on $${STAKE_USD}/trade: ${formatPnl(totalPnl)}` +
+      ` · P&L on $${VIRTUAL_TRADE_STAKE_USD}/trade: ${formatPnl(totalPnl)}` +
       (settled > 0 ? ` · settled ${settled} just now` : "");
   }
 

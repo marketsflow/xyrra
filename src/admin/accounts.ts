@@ -1,3 +1,4 @@
+import { settleOpenVirtualTrades } from "../lib/virtual-trades/settle";
 import { requireAdminSession, setAdminLoading } from "./auth-guard";
 import { initAdminShell } from "./shell";
 
@@ -104,6 +105,14 @@ async function init() {
 
   statusEl.textContent = "Loading account…";
 
+  // Settle closed OPEN windows first so P&L triggers book into account_transactions.
+  let settledJustNow = 0;
+  try {
+    settledJustNow = await settleOpenVirtualTrades(session.supabase);
+  } catch {
+    // Still show the ledger even if settlement fails.
+  }
+
   const { data: accountData, error: accountError } = await session.supabase
     .from("accounts")
     .select("id, name, starting_balance_usd, balance_usd, updated_at")
@@ -164,7 +173,8 @@ async function init() {
   const pnlTotal = account.balance_usd - account.starting_balance_usd;
   statusEl.textContent =
     `${rows.length} transaction${rows.length === 1 ? "" : "s"}` +
-    ` · net P&L ${formatSignedUsd(pnlTotal)}`;
+    ` · net P&L ${formatSignedUsd(pnlTotal)}` +
+    (settledJustNow > 0 ? ` · settled ${settledJustNow} trade${settledJustNow === 1 ? "" : "s"}` : "");
 
   if (rows.length === 0) {
     emptyEl.hidden = false;
