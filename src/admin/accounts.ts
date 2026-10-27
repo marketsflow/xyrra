@@ -1,6 +1,7 @@
 import { settleOpenVirtualTrades } from "../lib/virtual-trades/settle";
 import { requireAdminSession, setAdminLoading } from "./auth-guard";
 import { initAdminShell } from "./shell";
+import type { SupabaseClient } from "@supabase/supabase-js";
 
 type AccountRow = {
   id: number;
@@ -18,6 +19,17 @@ type TxRow = {
   description: string | null;
   virtual_trade_id: number | null;
   created_at: string;
+};
+
+type AccountsUi = {
+  statusEl: HTMLElement;
+  balanceEl: HTMLElement;
+  startingEl: HTMLElement;
+  updatedEl: HTMLElement;
+  nameEl: HTMLElement;
+  emptyEl: HTMLElement;
+  tableWrap: HTMLElement;
+  bodyEl: HTMLElement;
 };
 
 function escapeHtml(value: string) {
@@ -75,6 +87,103 @@ function kindLabel(kind: string) {
   return kind;
 }
 
+function renderLedger(
+  ui: AccountsUi,
+  account: AccountRow,
+  rows: TxRow[],
+  settledJustNow = 0,
+) {
+  const { statusEl, balanceEl, startingEl, updatedEl, nameEl, emptyEl, tableWrap, bodyEl } = ui;
+
+  nameEl.textContent = account.name;
+  startingEl.textContent = formatUsd(account.starting_balance_usd);
+  balanceEl.textContent = formatUsd(account.balance_usd);
+  balanceEl.classList.toggle("xa-vt__pnl--win", account.balance_usd > account.starting_balance_usd);
+  balanceEl.classList.toggle("xa-vt__pnl--loss", account.balance_usd < account.starting_balance_usd);
+  updatedEl.textContent = formatDateTime(account.updated_at);
+
+  const pnlTotal = account.balance_usd - account.starting_balance_usd;
+  statusEl.classList.remove("xa-users__status--error");
+  statusEl.textContent =
+    `${rows.length} transaction${rows.length === 1 ? "" : "s"}` +
+    ` · net P&L ${formatSignedUsd(pnlTotal)}` +
+    (settledJustNow > 0
+      ? ` · settled ${settledJustNow} trade${settledJustNow === 1 ? "" : "s"}`
+      : "");
+
+  if (rows.length === 0) {
+    emptyEl.hidden = false;
+    tableWrap.hidden = true;
+    bodyEl.innerHTML = "";
+    return;
+  }
+
+  emptyEl.hidden = true;
+  tableWrap.hidden = false;
+  bodyEl.innerHTML = rows
+    .map((row) => {
+      const amountClass =
+        row.amount_usd > 0
+          ? "xa-vt__pnl--win"
+          : row.amount_usd < 0
+            ? "xa-vt__pnl--loss"
+            : "";
+      return `
+      <tr>
+        <td>${escapeHtml(formatDateTime(row.created_at))}</td>
+        <td>${escapeHtml(kindLabel(row.kind))}</td>
+        <td>${escapeHtml(row.description || "—")}</td>
+        <td>${row.virtual_trade_id == null ? "—" : escapeHtml(`#${row.virtual_trade_id}`)}</td>
+        <td class="${amountClass}">${escapeHtml(formatSignedUsd(row.amount_usd))}</td>
+        <td>${escapeHtml(formatUsd(row.balance_after_usd))}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
+async function loadAccountLedger(
+  supabase: SupabaseClient,
+): Promise<{ account: AccountRow; rows: TxRow[] } | { error: string }> {
+  const { data: accountData, error: accountError } = await supabase
+    .from("accounts")
+    .select("id, name, starting_balance_usd, balance_usd, updated_at")
+    .order("id", { ascending: true })
+    .limit(1)
+    .maybeSingle();
+
+  if (accountError) return { error: accountError.message };
+  if (!accountData) return { error: "No account found. Run the accounts migration first." };
+
+  const account: AccountRow = {
+    id: asNumber(accountData.id) ?? 0,
+    name: asString(accountData.name) || "Account",
+    starting_balance_usd: asNumber(accountData.starting_balance_usd) ?? 10,
+    balance_usd: asNumber(accountData.balance_usd) ?? 10,
+    updated_at: asString(accountData.updated_at),
+  };
+
+  const { data: txData, error: txError } = await supabase
+    .from("account_transactions")
+    .select("id, kind, amount_usd, balance_after_usd, description, virtual_trade_id, created_at")
+    .eq("account_id", account.id)
+    .order("created_at", { ascending: false })
+    .limit(200);
+
+  if (txError) return { error: txError.message };
+
+  const rows: TxRow[] = (txData ?? []).map((row) => ({
+    id: asNumber(row.id) ?? 0,
+    kind: asString(row.kind) || "",
+    amount_usd: asNumber(row.amount_usd) ?? 0,
+    balance_after_usd: asNumber(row.balance_after_usd) ?? 0,
+    description: asString(row.description),
+    virtual_trade_id: asNumber(row.virtual_trade_id),
+    created_at: asString(row.created_at) || "",
+  }));
+
+  return { account, rows };
+}
+
 async function init() {
   const session = await requireAdminSession();
   if (!session) return;
@@ -103,106 +212,45 @@ async function init() {
     return;
   }
 
-  statusEl.textContent = "Loading account…";
-
-  // Settle closed OPEN windows first so P&L triggers book into account_transactions.
-  let settledJustNow = 0;
-  try {
-    settledJustNow = await settleOpenVirtualTrades(session.supabase);
-  } catch {
-    // Still show the ledger even if settlement fails.
-  }
-
-  const { data: accountData, error: accountError } = await session.supabase
-    .from("accounts")
-    .select("id, name, starting_balance_usd, balance_usd, updated_at")
-    .order("id", { ascending: true })
-    .limit(1)
-    .maybeSingle();
-
-  if (accountError) {
-    statusEl.textContent = accountError.message;
-    statusEl.classList.add("xa-users__status--error");
-    return;
-  }
-
-  if (!accountData) {
-    statusEl.textContent = "No account found. Run the accounts migration first.";
-    statusEl.classList.add("xa-users__status--error");
-    return;
-  }
-
-  const account: AccountRow = {
-    id: asNumber(accountData.id) ?? 0,
-    name: asString(accountData.name) || "Account",
-    starting_balance_usd: asNumber(accountData.starting_balance_usd) ?? 10,
-    balance_usd: asNumber(accountData.balance_usd) ?? 10,
-    updated_at: asString(accountData.updated_at),
+  const ui: AccountsUi = {
+    statusEl,
+    balanceEl,
+    startingEl,
+    updatedEl,
+    nameEl,
+    emptyEl,
+    tableWrap,
+    bodyEl,
   };
 
-  nameEl.textContent = account.name;
-  startingEl.textContent = formatUsd(account.starting_balance_usd);
-  balanceEl.textContent = formatUsd(account.balance_usd);
-  balanceEl.classList.toggle("xa-vt__pnl--win", account.balance_usd > account.starting_balance_usd);
-  balanceEl.classList.toggle("xa-vt__pnl--loss", account.balance_usd < account.starting_balance_usd);
-  updatedEl.textContent = formatDateTime(account.updated_at);
+  statusEl.textContent = "Loading account…";
 
-  const { data: txData, error: txError } = await session.supabase
-    .from("account_transactions")
-    .select("id, kind, amount_usd, balance_after_usd, description, virtual_trade_id, created_at")
-    .eq("account_id", account.id)
-    .order("created_at", { ascending: false })
-    .limit(200);
-
-  if (txError) {
-    statusEl.textContent = txError.message;
+  // Show ledger immediately — don't wait on settlement.
+  const first = await loadAccountLedger(session.supabase);
+  if ("error" in first) {
+    statusEl.textContent = first.error;
     statusEl.classList.add("xa-users__status--error");
     return;
   }
+  renderLedger(ui, first.account, first.rows);
 
-  const rows: TxRow[] = (txData ?? []).map((row) => ({
-    id: asNumber(row.id) ?? 0,
-    kind: asString(row.kind) || "",
-    amount_usd: asNumber(row.amount_usd) ?? 0,
-    balance_after_usd: asNumber(row.balance_after_usd) ?? 0,
-    description: asString(row.description),
-    virtual_trade_id: asNumber(row.virtual_trade_id),
-    created_at: asString(row.created_at) || "",
-  }));
-
-  const pnlTotal = account.balance_usd - account.starting_balance_usd;
-  statusEl.textContent =
-    `${rows.length} transaction${rows.length === 1 ? "" : "s"}` +
-    ` · net P&L ${formatSignedUsd(pnlTotal)}` +
-    (settledJustNow > 0 ? ` · settled ${settledJustNow} trade${settledJustNow === 1 ? "" : "s"}` : "");
-
-  if (rows.length === 0) {
-    emptyEl.hidden = false;
-    tableWrap.hidden = true;
-    return;
+  // Settle closed OPEN windows in the background, then refresh if anything booked.
+  statusEl.textContent = `${statusEl.textContent} · checking open trades…`;
+  try {
+    const settledJustNow = await settleOpenVirtualTrades(session.supabase);
+    if (settledJustNow <= 0) {
+      renderLedger(ui, first.account, first.rows);
+      return;
+    }
+    const refreshed = await loadAccountLedger(session.supabase);
+    if ("error" in refreshed) {
+      renderLedger(ui, first.account, first.rows, settledJustNow);
+      return;
+    }
+    renderLedger(ui, refreshed.account, refreshed.rows, settledJustNow);
+  } catch {
+    renderLedger(ui, first.account, first.rows);
   }
-
-  emptyEl.hidden = true;
-  tableWrap.hidden = false;
-  bodyEl.innerHTML = rows
-    .map((row) => {
-      const amountClass =
-        row.amount_usd > 0
-          ? "xa-vt__pnl--win"
-          : row.amount_usd < 0
-            ? "xa-vt__pnl--loss"
-            : "";
-      return `
-      <tr>
-        <td>${escapeHtml(formatDateTime(row.created_at))}</td>
-        <td>${escapeHtml(kindLabel(row.kind))}</td>
-        <td>${escapeHtml(row.description || "—")}</td>
-        <td>${row.virtual_trade_id == null ? "—" : escapeHtml(`#${row.virtual_trade_id}`)}</td>
-        <td class="${amountClass}">${escapeHtml(formatSignedUsd(row.amount_usd))}</td>
-        <td>${escapeHtml(formatUsd(row.balance_after_usd))}</td>
-      </tr>`;
-    })
-    .join("");
 }
 
 void init();

@@ -5,6 +5,8 @@ const WINDOW_SEC = 4 * 60 * 60;
 export const VIRTUAL_TRADE_STAKE_USD = 10;
 const BTC_SYMBOL = "BTC";
 const TF_4H = 240;
+/** Max concurrent settle updates / tick fallbacks. */
+const SETTLE_CONCURRENCY = 8;
 
 export type SettledVirtualTradeFields = {
   id: number;
@@ -89,46 +91,99 @@ async function loadBtcAssetId(supabase: SupabaseClient): Promise<number | null> 
   return asNumber(data.id);
 }
 
-async function loadExitSpot(
-  supabase: SupabaseClient,
-  slug: string,
-  assetId: number | null,
-): Promise<number | null> {
-  const startSec = windowStartSecFromSlug(slug);
-  if (startSec === null) return null;
-  const startIso = new Date(startSec * 1000).toISOString();
-  const endIso = new Date((startSec + WINDOW_SEC) * 1000).toISOString();
+async function mapPool<T, R>(
+  items: T[],
+  concurrency: number,
+  fn: (item: T) => Promise<R>,
+): Promise<R[]> {
+  if (items.length === 0) return [];
+  const results = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (next < items.length) {
+      const i = next;
+      next += 1;
+      results[i] = await fn(items[i]!);
+    }
+  });
+  await Promise.all(workers);
+  return results;
+}
 
-  const tick = await supabase
-    .from("polymarket_ticks")
-    .select("spot_price, recorded_at")
-    .eq("event_slug", slug)
-    .not("spot_price", "is", null)
-    .gte("recorded_at", startIso)
-    .lte("recorded_at", endIso)
-    .order("recorded_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-  if (!tick.error) {
-    const spot = asNumber(tick.data?.spot_price);
-    if (spot !== null) return spot;
+/**
+ * Prefer 4h candle closes in one query (fast path). Fall back to last tick
+ * spot only for windows missing a candle.
+ */
+async function loadExitSpotsBySlug(
+  supabase: SupabaseClient,
+  slugs: string[],
+  assetId: number | null,
+): Promise<Map<string, number>> {
+  const unique = [...new Set(slugs.filter(Boolean))];
+  const out = new Map<string, number>();
+  if (unique.length === 0) return out;
+
+  const startBySlug = new Map<string, number>();
+  const bucketStarts: string[] = [];
+  for (const slug of unique) {
+    const startSec = windowStartSecFromSlug(slug);
+    if (startSec === null) continue;
+    startBySlug.set(slug, startSec);
+    bucketStarts.push(new Date(startSec * 1000).toISOString());
   }
 
-  if (assetId !== null) {
-    const candle = await supabase
+  if (assetId !== null && bucketStarts.length > 0) {
+    const { data, error } = await supabase
       .from("crypto_prices")
-      .select("close")
+      .select("bucket_start, close")
       .eq("asset_id", assetId)
       .eq("timeframe", TF_4H)
-      .eq("bucket_start", startIso)
-      .maybeSingle();
-    if (!candle.error) {
-      const close = asNumber(candle.data?.close);
-      if (close !== null) return close;
+      .in("bucket_start", [...new Set(bucketStarts)]);
+
+    if (!error && data) {
+      const closeByBucket = new Map<string, number>();
+      for (const row of data) {
+        const bucket =
+          typeof row.bucket_start === "string"
+            ? row.bucket_start
+            : row.bucket_start instanceof Date
+              ? row.bucket_start.toISOString()
+              : null;
+        const close = asNumber(row.close);
+        if (bucket && close !== null) closeByBucket.set(bucket, close);
+      }
+      for (const [slug, startSec] of startBySlug) {
+        const bucket = new Date(startSec * 1000).toISOString();
+        const close = closeByBucket.get(bucket);
+        if (close !== null && close !== undefined) out.set(slug, close);
+      }
     }
   }
 
-  return null;
+  const missing = unique.filter((slug) => !out.has(slug) && startBySlug.has(slug));
+  if (missing.length === 0) return out;
+
+  await mapPool(missing, SETTLE_CONCURRENCY, async (slug) => {
+    const startSec = startBySlug.get(slug);
+    if (startSec === undefined) return;
+    const startIso = new Date(startSec * 1000).toISOString();
+    const endIso = new Date((startSec + WINDOW_SEC) * 1000).toISOString();
+    const tick = await supabase
+      .from("polymarket_ticks")
+      .select("spot_price")
+      .eq("event_slug", slug)
+      .not("spot_price", "is", null)
+      .gte("recorded_at", startIso)
+      .lte("recorded_at", endIso)
+      .order("recorded_at", { ascending: false })
+      .limit(1)
+      .maybeSingle();
+    if (tick.error) return;
+    const spot = asNumber(tick.data?.spot_price);
+    if (spot !== null) out.set(slug, spot);
+  });
+
+  return out;
 }
 
 export function settleVirtualTrade(
@@ -176,14 +231,23 @@ export async function resolveOpenVirtualTrades(
   if (open.length === 0) return 0;
 
   const assetId = await loadBtcAssetId(supabase);
-  let settled = 0;
+  const exitBySlug = await loadExitSpotsBySlug(
+    supabase,
+    open.map((row) => row.market_slug),
+    assetId,
+  );
 
+  const ready: Array<{ row: SettledVirtualTradeFields; settlement: VirtualTradeSettlement }> = [];
   for (const row of open) {
-    const exitSpot = await loadExitSpot(supabase, row.market_slug, assetId);
-    if (exitSpot === null) continue;
+    const exitSpot = exitBySlug.get(row.market_slug);
+    if (exitSpot === undefined) continue;
     const settlement = settleVirtualTrade(row, exitSpot);
     if (!settlement) continue;
+    ready.push({ row, settlement });
+  }
+  if (ready.length === 0) return 0;
 
+  const outcomes = await mapPool(ready, SETTLE_CONCURRENCY, async ({ row, settlement }) => {
     const { error } = await supabase
       .from("virtual_trades")
       .update({
@@ -197,7 +261,7 @@ export async function resolveOpenVirtualTrades(
       .eq("id", row.id)
       .eq("status", "OPEN");
 
-    if (error) continue;
+    if (error) return false;
 
     row.status = settlement.status;
     row.exit_poly_price = settlement.exitPolyPrice;
@@ -205,10 +269,10 @@ export async function resolveOpenVirtualTrades(
     row.pnl_percent = settlement.pnlPercent;
     row.closed_at = settlement.closedAt;
     row.position_size_usd = VIRTUAL_TRADE_STAKE_USD;
-    settled += 1;
-  }
+    return true;
+  });
 
-  return settled;
+  return outcomes.filter(Boolean).length;
 }
 
 /**
@@ -234,6 +298,9 @@ export async function settleOpenVirtualTrades(supabase: SupabaseClient): Promise
     price_to_beat: asNumber(row.price_to_beat),
     status: typeof row.status === "string" ? row.status : "OPEN",
   }));
+
+  // Cheap client filter: skip network work when nothing is ready to settle.
+  if (!rows.some((row) => isVirtualTradeWindowClosed(row.market_slug))) return 0;
 
   return resolveOpenVirtualTrades(supabase, rows);
 }
