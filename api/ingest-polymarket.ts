@@ -8,8 +8,12 @@
 
 const GAMMA_BASE = "https://gamma-api.polymarket.com";
 const CLOB_BASE = "https://clob.polymarket.com";
+/** Chainlink open for a crypto up/down window. Gamma no longer returns eventMetadata.priceToBeat. */
+const CRYPTO_PRICE_URL = "https://polymarket.com/api/crypto/crypto-price";
 const BINANCE_PRICE_URL = "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT";
 const COINBASE_PRICE_URL = "https://api.coinbase.com/v2/prices/BTC-USD/spot";
+/** BTC 4h slugs are aligned to America/New_York, not UTC. */
+const WINDOW_TZ = "America/New_York";
 const DEFAULT_ASSET = "btc";
 const DEFAULT_SYMBOL = "BTC";
 /** BTC 4-hour up/down windows only (slug: btc-updown-4h-{unix}). */
@@ -116,15 +120,42 @@ function parseJsonArray(value: unknown): string[] {
   return [];
 }
 
+/** Seconds to add to a UTC unix time to get wall-clock time in `timeZone`. */
+function tzOffsetSeconds(unixSec: number, timeZone: string): number {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hourCycle: "h23",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).formatToParts(new Date(unixSec * 1000));
+  const get = (type: string) => Number(parts.find((part) => part.type === type)?.value);
+  const asUtc = Date.UTC(get("year"), get("month") - 1, get("day"), get("hour"), get("minute"), get("second"));
+  return Math.round(asUtc / 1000) - unixSec;
+}
+
+/** Start of the 4h window that contains `nowSec`, on an Eastern Time boundary. */
+function alignedWindowStart(nowSec: number, windowSec: number, timeZone = WINDOW_TZ): number {
+  const offset = tzOffsetSeconds(nowSec, timeZone);
+  const localStart = Math.floor((nowSec + offset) / windowSec) * windowSec;
+  const start = localStart - offset;
+  const offsetAtStart = tzOffsetSeconds(start, timeZone);
+  return offsetAtStart === offset ? start : localStart - offsetAtStart;
+}
+
 function windowSlugs(asset: string, nowSec = Math.floor(Date.now() / 1000)): string[] {
   const slugs: string[] = [];
   for (const minutes of WINDOW_MINUTES) {
     const windowSec = minutes * 60;
-    const start = Math.floor(nowSec / windowSec) * windowSec;
-    // Polymarket 4h BTC markets use "4h", not "240m".
+    const start = alignedWindowStart(nowSec, windowSec);
+    // Polymarket 4h BTC markets use "4h", not "240m", and the unix stamp is the ET open.
     const label = minutes === 240 ? "4h" : `${minutes}m`;
     slugs.push(`${asset}-updown-${label}-${start}`);
-    slugs.push(`${asset}-updown-${label}-${start - windowSec}`);
+    const previous = alignedWindowStart(start - 1, windowSec);
+    if (previous !== start) slugs.push(`${asset}-updown-${label}-${previous}`);
   }
   return slugs;
 }
@@ -181,7 +212,10 @@ function pickActiveMarket(event: GammaEvent): GammaMarket | null {
 
 async function fetchJson(url: string): Promise<unknown> {
   const res = await fetch(url, {
-    headers: { Accept: "application/json" },
+    headers: {
+      Accept: "application/json",
+      "User-Agent": "Mozilla/5.0",
+    },
   });
   const text = await res.text();
   if (!res.ok) {
@@ -238,6 +272,27 @@ function extractPriceToBeat(event: GammaEvent, market: GammaMarket): number | nu
     parseStrikeFromText(market.question) ??
     parseStrikeFromText(event.title)
   );
+}
+
+/** Price to beat is the Chainlink open, published once the window starts. */
+async function fetchOpenPrice(
+  symbol: string,
+  startAt: string | null,
+  endAt: string | null,
+): Promise<number | null> {
+  if (!startAt || !endAt) return null;
+  const variant = "fourhour";
+  const url =
+    `${CRYPTO_PRICE_URL}?symbol=${encodeURIComponent(symbol)}` +
+    `&eventStartTime=${encodeURIComponent(startAt)}` +
+    `&variant=${variant}` +
+    `&endDate=${encodeURIComponent(endAt)}`;
+  try {
+    const data = (await fetchJson(url)) as { openPrice?: unknown } | null;
+    return parseNumber(data?.openPrice);
+  } catch {
+    return null;
+  }
 }
 
 function topDepth(levels: BookLevel[] | undefined, side: "bid" | "ask", n = BOOK_DEPTH_LEVELS) {
@@ -339,16 +394,27 @@ export class PolymarketSupabaseIngestor {
     }
 
     // Fallback: scan recent active events, keep only BTC 4h (never 5m/15m).
+    // Prefer the window that is open now. Newest-by-id is a future market and
+    // has no price to beat yet.
     const recent = (await fetchJson(
       `${GAMMA_BASE}/events?limit=80&active=true&closed=false&order=id&ascending=false`,
     )) as GammaEvent[] | null;
     if (!Array.isArray(recent)) return null;
 
+    const nowMs = Date.now();
+    let future: GammaEvent | null = null;
     for (const event of recent) {
       if (!isBtcFourHourEvent(event, this.asset)) continue;
-      if (pickActiveMarket(event)) return event;
+      const market = pickActiveMarket(event);
+      if (!market) continue;
+      const startMs = Date.parse(market.eventStartTime ?? event.startTime ?? "");
+      const endMs = Date.parse(market.endDate ?? event.endDate ?? "");
+      if (Number.isFinite(startMs) && Number.isFinite(endMs) && startMs <= nowMs && nowMs < endMs) {
+        return event;
+      }
+      if (!future) future = event;
     }
-    return null;
+    return future;
   }
 
   async fetchTick(): Promise<PolymarketTick | null> {
@@ -368,7 +434,7 @@ export class PolymarketSupabaseIngestor {
     const marketEndAt = market.endDate ?? event.endDate ?? null;
     const marketStartAt = market.eventStartTime ?? event.startTime ?? event.startDate ?? null;
 
-    const [upMid, downMid, upBid, upAsk, downBid, downAsk, book, spotPrice] = await Promise.all([
+    const [upMid, downMid, upBid, upAsk, downBid, downAsk, book, spotPrice, openPrice] = await Promise.all([
       fetchMidpoint(upTokenId),
       fetchMidpoint(downTokenId),
       fetchSidePrice(upTokenId, "buy"),
@@ -377,6 +443,7 @@ export class PolymarketSupabaseIngestor {
       fetchSidePrice(downTokenId, "sell"),
       fetchUpBookDepth(upTokenId),
       fetchBtcSpotPrice(),
+      fetchOpenPrice(this.symbol, marketStartAt, marketEndAt),
     ]);
 
     const upPrice = upMid ?? parseNumber(outcomePrices[0]);
@@ -400,7 +467,7 @@ export class PolymarketSupabaseIngestor {
       up_ask: upAsk ?? parseNumber(market.bestAsk),
       down_bid: downBid,
       down_ask: downAsk,
-      price_to_beat: extractPriceToBeat(event, market),
+      price_to_beat: extractPriceToBeat(event, market) ?? openPrice,
       spot_price: spotPrice,
       seconds_remaining: secondsRemaining(marketEndAt, recordedAt.getTime()),
       bid_depth_top5: book.bidDepthTop5,
@@ -413,7 +480,7 @@ export class PolymarketSupabaseIngestor {
   }
 
   async upsertEventFromTick(tick: PolymarketTick): Promise<boolean> {
-    const row = {
+    const row: Record<string, unknown> = {
       id: tick.event_id,
       asset: tick.asset,
       slug: tick.event_slug,
@@ -422,11 +489,12 @@ export class PolymarketSupabaseIngestor {
       condition_id: tick.condition_id,
       up_token_id: tick.up_token_id,
       down_token_id: tick.down_token_id,
-      price_to_beat: tick.price_to_beat,
       start_at: tick.market_start_at,
       end_at: tick.market_end_at,
       updated_at: new Date().toISOString(),
     };
+    // A future window has no open yet. Omit the column so a later strike is not wiped.
+    if (tick.price_to_beat !== null) row.price_to_beat = tick.price_to_beat;
 
     const res = await fetch(`${this.supabaseUrl}/rest/v1/polymarket_events?on_conflict=id`, {
       method: "POST",

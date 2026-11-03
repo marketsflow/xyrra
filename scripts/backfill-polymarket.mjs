@@ -13,6 +13,7 @@
  *   FIDELITY=1 history bucket minutes for new ticks (default 5)
  *   DRY_RUN=1
  *   PATCH_ONLY=1  only fill null spot_price / price_to_beat on existing ticks
+ *   STARTS=unix,unix  backfill only these 4h window starts (Eastern Time opens)
  */
 import { readFileSync, existsSync } from "node:fs";
 import { resolve, dirname } from "node:path";
@@ -20,6 +21,7 @@ import { fileURLToPath } from "node:url";
 
 const GAMMA_BASE = "https://gamma-api.polymarket.com";
 const CLOB_BASE = "https://clob.polymarket.com";
+const CRYPTO_PRICE_URL = "https://polymarket.com/api/crypto/crypto-price";
 const WINDOW_SEC = 4 * 60 * 60;
 const ASSET = "btc";
 const SYMBOL = "BTC";
@@ -85,7 +87,12 @@ async function fetchJson(url, retries = 3) {
   let lastErr;
   for (let i = 0; i < retries; i++) {
     try {
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
+      const res = await fetch(url, {
+        headers: {
+          Accept: "application/json",
+          "User-Agent": "Mozilla/5.0",
+        },
+      });
       const text = await res.text();
       if (!res.ok) {
         throw new Error(`HTTP ${res.status} ${url}: ${text.slice(0, 200)}`);
@@ -131,9 +138,93 @@ function extractPriceToBeat(event, market) {
   return Number.isFinite(value) ? value : null;
 }
 
+function windowFromSlug(slug) {
+  const match = String(slug || "").match(/btc-updown-4h-(\d+)$/);
+  if (!match) return null;
+  const startSec = Number(match[1]);
+  if (!Number.isFinite(startSec)) return null;
+  return {
+    startIso: new Date(startSec * 1000).toISOString(),
+    endIso: new Date((startSec + WINDOW_SEC) * 1000).toISOString(),
+  };
+}
+
+/** Chainlink open for a 4h window. Null until that window has started. */
+async function fetchOpenPrice(startIso, endIso) {
+  if (!startIso || !endIso) return null;
+  const url =
+    `${CRYPTO_PRICE_URL}?symbol=BTC` +
+    `&eventStartTime=${encodeURIComponent(startIso)}` +
+    `&variant=fourhour` +
+    `&endDate=${encodeURIComponent(endIso)}`;
+  const data = await fetchJson(url);
+  const open = parseNumber(data?.openPrice);
+  return open === null ? null : Number(open.toFixed(6));
+}
+
+async function listEventsMissingStrike(url, key) {
+  const rows = [];
+  let offset = 0;
+  const page = 500;
+  for (;;) {
+    const batch = await supabase(
+      url,
+      key,
+      `polymarket_events?select=id,slug,title,start_at,end_at,price_to_beat` +
+        `&asset=eq.btc&price_to_beat=is.null&slug=like.btc-updown-4h-*` +
+        `&order=start_at.asc&limit=${page}&offset=${offset}`,
+    );
+    if (!Array.isArray(batch) || batch.length === 0) break;
+    rows.push(...batch);
+    if (batch.length < page) break;
+    offset += page;
+  }
+  return rows;
+}
+
+/** Fill price_to_beat on events (and their ticks) that now have a Chainlink open. */
+async function patchMissingStrikes(url, key, dryRun) {
+  const events = await listEventsMissingStrike(url, key);
+  console.log(`Events missing price_to_beat: ${events.length}`);
+  let filled = 0;
+  let waiting = 0;
+  for (const event of events) {
+    const fromSlug = windowFromSlug(event.slug);
+    const startIso = fromSlug?.startIso || event.start_at;
+    const endIso = fromSlug?.endIso || event.end_at;
+    const open = await fetchOpenPrice(startIso, endIso);
+    await sleep(80);
+    if (open === null) {
+      waiting += 1;
+      console.log(`  wait  ${event.slug}  ${event.title || ""}`);
+      continue;
+    }
+    console.log(`  fill  ${event.slug}  ${open}`);
+    if (!dryRun) {
+      await supabase(url, key, `polymarket_events?id=eq.${encodeURIComponent(event.id)}`, {
+        method: "PATCH",
+        body: { price_to_beat: open },
+        prefer: "return=minimal",
+      });
+      await supabase(
+        url,
+        key,
+        `polymarket_ticks?event_slug=eq.${encodeURIComponent(event.slug)}&price_to_beat=is.null`,
+        {
+          method: "PATCH",
+          body: { price_to_beat: open },
+          prefer: "return=minimal",
+        },
+      );
+    }
+    filled += 1;
+  }
+  console.log(`Filled ${filled} events. Still waiting on open price: ${waiting}.`);
+}
+
 async function fetchGammaEvent(slug) {
   const data = await fetchJson(
-    `${GAMMA_BASE}/events?slug=${encodeURIComponent(slug)}&closed=true&limit=1`,
+    `${GAMMA_BASE}/events?slug=${encodeURIComponent(slug)}&limit=1`,
   );
   return Array.isArray(data) && data[0] ? data[0] : null;
 }
@@ -351,9 +442,12 @@ async function backfillWindow(url, key, startSec, fidelity, dryRun) {
   const tokenIds = parseJsonArray(market.clobTokenIds);
   if (tokenIds.length < 2) return { slug, status: "missing_tokens" };
   const [upTokenId, downTokenId] = tokenIds;
-  const priceToBeat = extractPriceToBeat(event, market);
-  const marketStartAt = market.eventStartTime ?? startIso;
+  const marketStartAt = market.eventStartTime ?? event.startTime ?? startIso;
   const marketEndAt = market.endDate ?? event.endDate ?? endIso;
+  const histStart = Math.floor(Date.parse(marketStartAt) / 1000);
+  const histEnd = Math.floor(Date.parse(marketEndAt) / 1000);
+  const priceToBeat =
+    extractPriceToBeat(event, market) ?? (await fetchOpenPrice(marketStartAt, marketEndAt));
   const question = market.question ?? event.title ?? null;
 
   const eventRow = {
@@ -371,13 +465,15 @@ async function backfillWindow(url, key, startSec, fidelity, dryRun) {
 
   if (!dryRun) await upsertEvent(url, key, eventRow);
 
-  const existing = dryRun ? null : await hasEntryTick(url, key, slug, startIso, endIso);
+  const existing = dryRun
+    ? null
+    : await hasEntryTick(url, key, slug, new Date(histStart * 1000).toISOString(), new Date(histEnd * 1000).toISOString());
   const needsInsert = !existing || existing.spot_price == null;
 
   const [upHistory, downHistory, spotMap] = await Promise.all([
-    fetchPriceHistory(upTokenId, startSec, endSec, fidelity),
-    fetchPriceHistory(downTokenId, startSec, endSec, fidelity),
-    fetchBtcSpotMap(startSec, endSec),
+    fetchPriceHistory(upTokenId, histStart, histEnd, fidelity),
+    fetchPriceHistory(downTokenId, histStart, histEnd, fidelity),
+    fetchBtcSpotMap(histStart, histEnd),
   ]);
 
   if (upHistory.length === 0) {
@@ -428,7 +524,7 @@ async function backfillWindow(url, key, startSec, fidelity, dryRun) {
       down_ask: null,
       price_to_beat: priceToBeat,
       spot_price: spot === null || spot === undefined ? null : Number(Number(spot).toFixed(6)),
-      seconds_remaining: Math.max(0, endSec - t),
+      seconds_remaining: Math.max(0, histEnd - t),
       bid_depth_top5: null,
       ask_depth_top5: null,
       order_book_imbalance: null,
@@ -500,6 +596,12 @@ async function main() {
   const dryRun = process.env.DRY_RUN === "1" || process.env.DRY_RUN === "true";
   const patchOnly =
     process.env.PATCH_ONLY === "1" || process.env.PATCH_ONLY === "true";
+  const strikesOnly =
+    process.env.STRIKES_ONLY === "1" || process.env.STRIKES_ONLY === "true";
+  const startsEnv = (process.env.STARTS || "")
+    .split(",")
+    .map((part) => Number(part.trim()))
+    .filter((n) => Number.isFinite(n));
 
   const fromMs = Date.parse(fromIso);
   const toMs = Date.parse(toIso);
@@ -512,6 +614,31 @@ async function main() {
     `Polymarket backfill ${fromIso} → ${toIso}` +
       ` fidelity=${fidelity}m dryRun=${dryRun} @ ${url}`,
   );
+
+  if (strikesOnly) {
+    await patchMissingStrikes(url, key, dryRun);
+    return;
+  }
+
+  if (startsEnv.length > 0) {
+    console.log(`Explicit windows: ${startsEnv.length}`);
+    for (const startSec of startsEnv) {
+      try {
+        const result = await backfillWindow(url, key, startSec, fidelity, dryRun);
+        console.log(
+          `${new Date(startSec * 1000).toISOString()} ${result.slug} → ${result.status}` +
+            (result.ticks ? ` (+${result.ticks} ticks)` : ""),
+        );
+      } catch (err) {
+        console.error(
+          `${new Date(startSec * 1000).toISOString()} ERROR`,
+          err instanceof Error ? err.message : err,
+        );
+      }
+      await sleep(150);
+    }
+    return;
+  }
 
   await patchExistingNulls(url, key, dryRun);
   if (patchOnly) return;

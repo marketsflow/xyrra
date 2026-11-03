@@ -19,14 +19,24 @@ type CryptoPriceSignalRow = {
   momentum: number | null;
 };
 
+type PolymarketWindow = {
+  slug: string;
+  title: string | null;
+  startSec: number;
+  endSec: number;
+};
+
 type FourHourPeriod = {
   /** crypto_price.bucket_start (signal candle). */
   signalStartSec: number;
-  /** Polymarket 4h window start (= signalStartSec + 4h). */
+  /** Polymarket 4h window that covers this signal. Falls back to the UTC bar when none does. */
   startSec: number;
   endSec: number;
   startIso: string;
   endIso: string;
+  /** Real btc-updown-4h slug. Null when no Polymarket window covers this UTC bar. */
+  polymarketSlug: string | null;
+  marketTitle: string | null;
   label: string;
   cryptoPrice: CryptoPriceSignalRow;
 };
@@ -141,6 +151,60 @@ function utcDateKey(sec: number) {
 
 function marketSlugForStart(startSec: number) {
   return `btc-updown-4h-${startSec}`;
+}
+
+/**
+ * Polymarket BTC 4h windows follow America/New_York. Before the Nov 1 clock
+ * change that matched UTC 4h bars. After it, each market opens one hour later.
+ * Pair a signal bar with the stored market that covers at least half of it.
+ */
+function bestPolymarketWindow(
+  markets: PolymarketWindow[],
+  barStartSec: number,
+): PolymarketWindow | null {
+  const barEndSec = barStartSec + WINDOW_SEC;
+  let best: { market: PolymarketWindow; overlap: number } | null = null;
+  for (const market of markets) {
+    const overlap = Math.min(market.endSec, barEndSec) - Math.max(market.startSec, barStartSec);
+    if (overlap < WINDOW_SEC / 2) continue;
+    if (!best || overlap > best.overlap) best = { market, overlap };
+  }
+  return best?.market ?? null;
+}
+
+async function loadPolymarketWindows(supabase: SupabaseClient): Promise<PolymarketWindow[]> {
+  const windows: PolymarketWindow[] = [];
+  const pageSize = 1000;
+  let offset = 0;
+
+  while (true) {
+    const { data, error } = await supabase
+      .from("polymarket_events")
+      .select("slug, title, start_at, end_at")
+      .eq("asset", "btc")
+      .like("slug", "btc-updown-4h-%")
+      .order("start_at", { ascending: true })
+      .range(offset, offset + pageSize - 1);
+
+    if (error) throw new Error(error.message);
+    const page = data ?? [];
+    for (const row of page) {
+      const slug = asString(row.slug);
+      const startMs = Date.parse(asString(row.start_at) ?? "");
+      const endMs = Date.parse(asString(row.end_at) ?? "");
+      if (!slug || !Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs) continue;
+      windows.push({
+        slug,
+        title: asString(row.title),
+        startSec: Math.floor(startMs / 1000),
+        endSec: Math.floor(endMs / 1000),
+      });
+    }
+    if (page.length < pageSize) break;
+    offset += pageSize;
+  }
+
+  return windows;
 }
 
 function directionFromSignal(signal: string): "LONG_UP" | "LONG_DOWN" | null {
@@ -278,13 +342,17 @@ async function loadAllRuledCryptoPrices(
 }
 
 /**
- * Pair each signaled crypto_price bar with the Polymarket window of the same start.
+ * Pair each signaled crypto_price bar with the Polymarket 4h market that
+ * covers it. That is the same unix start while ET is UTC-4. After the clocks
+ * fall back, the market opens one hour later and the slug is not the UTC bar.
  * Only rows with a non-null signal are loaded, so create never offers a window
  * that has no signal on crypto_price levels (same bucket_start / tf=4h).
  */
 function groupSignaledPeriods(
   rows: CryptoPriceSignalRow[],
   closedPolyEndSec: number,
+  markets: PolymarketWindow[],
+  nowSec = Math.floor(Date.now() / 1000),
 ): DayGroup[] {
   const byDay = new Map<string, FourHourPeriod[]>();
 
@@ -295,26 +363,29 @@ function groupSignaledPeriods(
     const signalMs = Date.parse(cryptoPrice.bucket_start);
     if (!Number.isFinite(signalMs)) continue;
     const signalStartSec = Math.floor(signalMs / 1000);
-    // Align to canonical 4h unix starts used by Polymarket slugs.
+    // crypto_price 4h bars stay on UTC boundaries.
     if (signalStartSec % WINDOW_SEC !== 0) continue;
 
-    // Same window as the signaled crypto_price bar (matches levels view).
-    const startSec = signalStartSec;
-    const endSec = startSec + WINDOW_SEC;
-    // Only list Polymarket windows that have fully closed.
-    if (endSec > closedPolyEndSec) continue;
+    const market = bestPolymarketWindow(markets, signalStartSec);
+    const startSec = market?.startSec ?? signalStartSec;
+    const endSec = market?.endSec ?? signalStartSec + WINDOW_SEC;
+    // Only list windows that have fully closed.
+    if (market ? endSec > nowSec : endSec > closedPolyEndSec) continue;
 
+    const utcLabel = `${formatUtcTime(signalStartSec)}–${formatUtcTime(signalStartSec + WINDOW_SEC)} UTC`;
     const period: FourHourPeriod = {
       signalStartSec,
       startSec,
       endSec,
       startIso: new Date(startSec * 1000).toISOString(),
       endIso: new Date(endSec * 1000).toISOString(),
-      label: `${formatUtcTime(startSec)}–${formatUtcTime(endSec)} UTC`,
+      polymarketSlug: market?.slug ?? null,
+      marketTitle: market?.title ?? null,
+      label: utcLabel,
       cryptoPrice,
     };
 
-    const key = utcDateKey(startSec);
+    const key = utcDateKey(signalStartSec);
     const list = byDay.get(key);
     if (list) list.push(period);
     else byDay.set(key, [period]);
@@ -333,8 +404,8 @@ function groupSignaledPeriods(
 async function loadEntryTick(
   supabase: SupabaseClient,
   startSec: number,
+  slug = marketSlugForStart(startSec),
 ): Promise<PolymarketTick | null> {
-  const slug = marketSlugForStart(startSec);
   const startIso = new Date(startSec * 1000).toISOString();
   const endIso = new Date((startSec + WINDOW_SEC) * 1000).toISOString();
 
@@ -578,7 +649,7 @@ function renderPreview(
   tick: PolymarketTick | null,
   priceToBeat: number | null,
 ) {
-  const title = formatPolymarketTitle(period.startSec, period.endSec);
+  const title = period.marketTitle ?? formatPolymarketTitle(period.startSec, period.endSec);
   const cryptoAt = formatCryptoPriceAt(period.cryptoPrice.bucket_start);
   const strike = priceToBeat;
   const spot = tick?.spot_price;
@@ -595,7 +666,7 @@ function renderPreview(
       <div><dt>Entry spot</dt><dd>${spot == null ? "Waiting for tick / missing" : escapeHtml(spot.toLocaleString(undefined, { style: "currency", currency: "USD" }))}</dd></div>
       <div><dt>Rule</dt><dd>${period.cryptoPrice.signal_rule == null ? "—" : escapeHtml(String(period.cryptoPrice.signal_rule))}</dd></div>
       <div><dt>Entry tick</dt><dd>${tick ? escapeHtml(new Date(tick.recorded_at).toISOString()) : "No Polymarket tick found for this window"}</dd></div>
-      <div><dt>Market slug</dt><dd><code>${escapeHtml(marketSlugForStart(period.startSec))}</code></dd></div>
+      <div><dt>Market slug</dt><dd><code>${escapeHtml(period.polymarketSlug ?? marketSlugForStart(period.startSec))}</code></dd></div>
     </dl>
   `;
 }
@@ -631,10 +702,16 @@ async function placeVirtualTrade(
     throw new Error("crypto_price.price_level is missing for this period.");
   }
 
-  const tick = await loadEntryTick(supabase, period.startSec);
+  if (!period.polymarketSlug) {
+    throw new Error(
+      `No Polymarket 4h market covers ${period.label}. These markets follow Eastern Time, and this UTC window has none.`,
+    );
+  }
+
+  const tick = await loadEntryTick(supabase, period.startSec, period.polymarketSlug);
   if (!tick) {
     throw new Error(
-      `No Polymarket tick found at/after ${period.startIso} for ${marketSlugForStart(period.startSec)}.`,
+      `No Polymarket tick found at/after ${period.startIso} for ${period.polymarketSlug}.`,
     );
   }
 
@@ -657,8 +734,8 @@ async function placeVirtualTrade(
     throw new Error("Polymarket token_id is missing on the entry tick.");
   }
 
-  const marketTitle = formatPolymarketTitle(period.startSec, period.endSec);
-  const slug = marketSlugForStart(period.startSec);
+  const marketTitle = period.marketTitle ?? formatPolymarketTitle(period.startSec, period.endSec);
+  const slug = period.polymarketSlug ?? marketSlugForStart(period.startSec);
 
   const payload = {
     timestamp: tick.recorded_at,
@@ -830,9 +907,10 @@ async function init() {
         if (assetId === null) {
           assetId = await loadBtcAssetId(supabase);
         }
+        const markets = await loadPolymarketWindows(supabase);
         const closedEndSec = currentClosedWindowEndSec();
         const signaled = await loadAllRuledCryptoPrices(supabase, assetId);
-        ruledDays = groupSignaledPeriods(signaled, closedEndSec);
+        ruledDays = groupSignaledPeriods(signaled, closedEndSec, markets);
         registerPeriods(ruledDays);
         syncRuleFilterOptions(ruledDays);
         return ruledDays;
@@ -1022,7 +1100,8 @@ async function init() {
         range.fromIso,
         range.beforeIso,
       );
-      const days = groupSignaledPeriods(signaled, range.closedEndSec);
+      const markets = await loadPolymarketWindows(supabase);
+      const days = groupSignaledPeriods(signaled, range.closedEndSec, markets);
       registerPeriods(days);
       if (ruledDays) registerPeriods(ruledDays);
 
