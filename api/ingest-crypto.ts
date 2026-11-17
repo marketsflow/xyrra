@@ -7,6 +7,8 @@
  * Vite: imports named `ingestCryptoPrices` for the dev middleware.
  */
 
+import { dropKeys, isCronRequest } from "./cron-response.js";
+
 /** Primary + fallbacks: api.binance.com is often geo-blocked from Vercel US (iad1). */
 const BINANCE_KLINES_URLS = [
   "https://api.binance.com/api/v3/klines",
@@ -480,12 +482,15 @@ export default {
         CRYPTO_INGEST_QUOTE: process.env.CRYPTO_INGEST_QUOTE,
       };
 
-      const result = await ingestCryptoPrices(env, request.headers.get("authorization"));
+      const authHeader = request.headers.get("authorization");
+      const cron = isCronRequest(authHeader, env.CRON_SECRET);
+      const result = await ingestCryptoPrices(env, authHeader);
       if (result.success === true) {
-        return Response.json(
-          { success: true, pair: result.pair, row: result.row },
-          { status: 200, headers: jsonHeaders() },
-        );
+        const body = { success: true as const, pair: result.pair, row: result.row };
+        return Response.json(cron ? dropKeys(body, ["row"]) : body, {
+          status: 200,
+          headers: jsonHeaders(),
+        });
       }
       console.error("[ingest-crypto] failed", result.status, result.message);
       return Response.json(

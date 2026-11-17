@@ -24,6 +24,8 @@
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
 
+import { dropKeys, isCronRequest } from "./cron-response.js";
+
 const TIMEFRAMES = [5, 15, 60, 240, 1440] as const;
 const LOOKBACK = 30;
 /** Ignore closes within this percent of a level for cycle rollover. */
@@ -864,29 +866,28 @@ export default {
         CRON_SECRET: process.env.CRON_SECRET,
       };
 
-      const result = await computeCryptoSupportResistance(
-        env,
-        request.headers.get("authorization"),
-        {
-          backfill,
-          timeframes,
-          bandPct: Number.isFinite(bandPct) ? bandPct : undefined,
-        },
-      );
+      const authHeader = request.headers.get("authorization");
+      const cron = isCronRequest(authHeader, env.CRON_SECRET);
+      const result = await computeCryptoSupportResistance(env, authHeader, {
+        backfill,
+        timeframes,
+        bandPct: Number.isFinite(bandPct) ? bandPct : undefined,
+      });
 
       if (result.success === true) {
-        return Response.json(
-          {
-            success: true,
-            mode: result.mode,
-            assets: result.assets,
-            cyclesOpened: result.cyclesOpened,
-            cyclesBreached: result.cyclesBreached,
-            hoversRecorded: result.hoversRecorded,
-            rows: result.rows,
-          },
-          { status: 200, headers: jsonHeaders() },
-        );
+        const body = {
+          success: true as const,
+          mode: result.mode,
+          assets: result.assets,
+          cyclesOpened: result.cyclesOpened,
+          cyclesBreached: result.cyclesBreached,
+          hoversRecorded: result.hoversRecorded,
+          rows: result.rows,
+        };
+        return Response.json(cron ? dropKeys(body, ["rows"]) : body, {
+          status: 200,
+          headers: jsonHeaders(),
+        });
       }
       console.error("[compute-crypto-sr] failed", result.status, result.message);
       return Response.json(

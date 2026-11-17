@@ -6,6 +6,8 @@
  * Vite: imports named `ingestPolymarketTick` for the dev middleware.
  */
 
+import { dropKeys, isCronRequest } from "./cron-response.js";
+
 const GAMMA_BASE = "https://gamma-api.polymarket.com";
 const CLOB_BASE = "https://clob.polymarket.com";
 /** Chainlink open for a crypto up/down window. Gamma no longer returns eventMetadata.priceToBeat. */
@@ -644,12 +646,19 @@ export default {
         POLYMARKET_SYMBOL: process.env.POLYMARKET_SYMBOL,
       };
 
-      const result = await ingestPolymarketTick(env, request.headers.get("authorization"));
+      const authHeader = request.headers.get("authorization");
+      const cron = isCronRequest(authHeader, env.CRON_SECRET);
+      const result = await ingestPolymarketTick(env, authHeader);
       if (result.success) {
-        return Response.json(
-          { success: true, tick: result.tick, eventUpserted: result.eventUpserted },
-          { status: 200, headers: jsonHeaders() },
-        );
+        const body = {
+          success: true as const,
+          tick: result.tick,
+          eventUpserted: result.eventUpserted,
+        };
+        return Response.json(cron ? dropKeys(body, ["tick"]) : body, {
+          status: 200,
+          headers: jsonHeaders(),
+        });
       }
       return Response.json(
         { success: false, message: result.message },

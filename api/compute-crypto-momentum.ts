@@ -19,6 +19,8 @@
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
 
+import { dropKeys, isCronRequest } from "./cron-response.js";
+
 const TIMEFRAMES = [1, 5, 15, 60, 240, 1440] as const;
 const LOOKBACK_1M = 10;
 const LOOKBACK_OTHER = 5;
@@ -693,7 +695,9 @@ export default {
         CRON_SECRET: process.env.CRON_SECRET,
       };
 
-      const result = await computeCryptoMomentum(env, request.headers.get("authorization"), {
+      const authHeader = request.headers.get("authorization");
+      const cron = isCronRequest(authHeader, env.CRON_SECRET);
+      const result = await computeCryptoMomentum(env, authHeader, {
         backfill,
         timeframes,
         configId: url.searchParams.get("config_id") || undefined,
@@ -702,17 +706,18 @@ export default {
       });
 
       if (result.success === true) {
-        return Response.json(
-          {
-            success: true,
-            mode: result.mode,
-            assets: result.assets,
-            rowsUpserted: result.rowsUpserted,
-            anomaliesDetected: result.anomaliesDetected,
-            rows: result.rows,
-          },
-          { status: 200, headers: jsonHeaders() },
-        );
+        const body = {
+          success: true as const,
+          mode: result.mode,
+          assets: result.assets,
+          rowsUpserted: result.rowsUpserted,
+          anomaliesDetected: result.anomaliesDetected,
+          rows: result.rows,
+        };
+        return Response.json(cron ? dropKeys(body, ["rows"]) : body, {
+          status: 200,
+          headers: jsonHeaders(),
+        });
       }
       console.error("[compute-crypto-momentum] failed", result.status, result.message);
       return Response.json(

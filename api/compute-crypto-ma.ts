@@ -1,3 +1,5 @@
+import { dropKeys, isCronRequest } from "./cron-response.js";
+
 /**
  * Vercel Cron + admin-triggered crypto SMA/EMA + bar-characteristics +
  * price-action compute.
@@ -1282,25 +1284,24 @@ export default {
         CRON_SECRET: process.env.CRON_SECRET,
       };
 
-      const result = await computeCryptoMovingAverages(
-        env,
-        request.headers.get("authorization"),
-        { backfill },
-      );
+      const authHeader = request.headers.get("authorization");
+      const cron = isCronRequest(authHeader, env.CRON_SECRET);
+      const result = await computeCryptoMovingAverages(env, authHeader, { backfill });
       if (result.success === true) {
-        return Response.json(
-          {
-            success: true,
-            mode: result.mode,
-            assets: result.assets,
-            rowsUpserted: result.rowsUpserted,
-            priceRowsUpserted: result.priceRowsUpserted,
-            characteristicRowsUpserted: result.characteristicRowsUpserted,
-            priceActionRowsUpserted: result.priceActionRowsUpserted,
-            rows: result.rows,
-          },
-          { status: 200, headers: jsonHeaders() },
-        );
+        const body = {
+          success: true as const,
+          mode: result.mode,
+          assets: result.assets,
+          rowsUpserted: result.rowsUpserted,
+          priceRowsUpserted: result.priceRowsUpserted,
+          characteristicRowsUpserted: result.characteristicRowsUpserted,
+          priceActionRowsUpserted: result.priceActionRowsUpserted,
+          rows: result.rows,
+        };
+        return Response.json(cron ? dropKeys(body, ["rows"]) : body, {
+          status: 200,
+          headers: jsonHeaders(),
+        });
       }
       console.error("[compute-crypto-ma] failed", result.status, result.message);
       return Response.json(

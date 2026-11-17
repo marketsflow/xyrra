@@ -78,12 +78,15 @@
  * crypto_price.price_1m for that bucket if present; otherwise skip the bar.
  *
  * BTC only — market_title + price_to_beat from Polymarket for the same 4h window
+ *
  *   (slug btc-updown-4h-{unix}). Prefer polymarket_events; fall back to ticks for
  *   price_to_beat. Cron re-upserts the open bar every minute so strike fills in
  *   once ingest has it, without changing the opening signal.
  *
  * Self-contained (no ./lib imports) so Vercel Node ESM can resolve the route.
  */
+
+import { dropKeys, isCronRequest } from "./cron-response.js";
 
 /** Persisted crypto_price.timeframe + S/R cycle timeframe. */
 const ANALYSIS_TIMEFRAME = 240;
@@ -2220,28 +2223,31 @@ export default {
         CRON_SECRET: process.env.CRON_SECRET,
       };
 
-      const result = await computeCryptoPrice(env, request.headers.get("authorization"), {
+      const authHeader = request.headers.get("authorization");
+      const cron = isCronRequest(authHeader, env.CRON_SECRET);
+      const result = await computeCryptoPrice(env, authHeader, {
         backfill,
         ...(Number.isFinite(days) ? { days } : {}),
         ...(sourceTimeframe !== null ? { sourceTimeframe } : {}),
       });
 
       if (result.success === true) {
-        return Response.json(
-          {
-            success: true,
-            mode: result.mode,
-            sourceTimeframe: result.sourceTimeframe,
-            analysisTimeframe: result.analysisTimeframe,
-            assets: result.assets,
-            rowsInserted: result.rowsInserted,
-            skippedNoPrice: result.skippedNoPrice,
-            skippedNoCycle: result.skippedNoCycle,
-            skippedNo1m: result.skippedNo1m,
-            rows: result.rows,
-          },
-          { status: 200, headers: jsonHeaders() },
-        );
+        const body = {
+          success: true as const,
+          mode: result.mode,
+          sourceTimeframe: result.sourceTimeframe,
+          analysisTimeframe: result.analysisTimeframe,
+          assets: result.assets,
+          rowsInserted: result.rowsInserted,
+          skippedNoPrice: result.skippedNoPrice,
+          skippedNoCycle: result.skippedNoCycle,
+          skippedNo1m: result.skippedNo1m,
+          rows: result.rows,
+        };
+        return Response.json(cron ? dropKeys(body, ["rows"]) : body, {
+          status: 200,
+          headers: jsonHeaders(),
+        });
       }
       console.error("[compute-crypto-price] failed", result.status, result.message);
       return Response.json(
